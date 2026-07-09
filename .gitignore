@@ -1,0 +1,31 @@
+# Built artifacts
+build/
+**/build/
+*.apk
+*.ap_
+*.aab
+
+# Android Studio / IntelliJ IDEA
+.idea/
+*.iml
+*.ipr
+*.iws
+
+# Gradle
+.gradle/
+local.properties
+
+# Kotlin
+.kotlin/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Captures / external builds
+/captures/
+.externalNativeBuild/
+.cxx/
+
+# Google Services / Sensitive Info
+/app/google-services.json

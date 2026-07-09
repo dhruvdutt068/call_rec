@@ -1,0 +1,227 @@
+package com.example.callog.presentation.screens.logs
+
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.filled.CallEnd
+import androidx.compose.material.icons.filled.FilterList
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import com.example.callog.presentation.components.CallCard
+import com.example.callog.presentation.components.EmptyStateView
+import com.example.callog.presentation.components.SearchBarField
+import com.example.callog.presentation.theme.*
+import com.example.callog.presentation.viewmodel.CallViewModel
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun CallLogsScreen(
+    viewModel: CallViewModel,
+    onCallClick: (Long) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val callLogs by viewModel.callLogs.collectAsState()
+    val searchQuery by viewModel.searchQuery.collectAsState()
+    val activeFilter by viewModel.callTypeFilter.collectAsState()
+    val activeSort by viewModel.sortBy.collectAsState()
+    val isSyncing by viewModel.isSyncing.collectAsState()
+
+    var showSortMenu by remember { mutableStateOf(false) }
+
+    val filterOptions = listOf(
+        "ALL" to "All",
+        "INCOMING" to "Incoming",
+        "OUTGOING" to "Outgoing",
+        "MISSED" to "Missed",
+        "REJECTED" to "Rejected",
+        "RECORDED" to "Recorded"
+    )
+
+    val sortOptions = listOf(
+        "NEWEST" to "Newest First",
+        "OLDEST" to "Oldest First",
+        "LONGEST" to "Longest Duration",
+        "SHORTEST" to "Shortest Duration"
+    )
+
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .padding(horizontal = 16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        // Search & Sync Header
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 12.dp)
+        ) {
+            SearchBarField(
+                query = searchQuery,
+                onQueryChange = { viewModel.setSearchQuery(it) },
+                placeholder = "Search name, number, notes, tags...",
+                modifier = Modifier.weight(1f)
+            )
+            
+            Spacer(modifier = Modifier.width(8.dp))
+            
+            IconButton(
+                onClick = { viewModel.syncLogs() },
+                enabled = !isSyncing,
+                modifier = Modifier
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(Slate800)
+            ) {
+                if (isSyncing) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(20.dp),
+                        strokeWidth = 2.dp,
+                        color = Teal300
+                    )
+                } else {
+                    Icon(
+                        imageVector = Icons.Default.Refresh,
+                        contentDescription = "Sync Logs",
+                        tint = Teal300
+                    )
+                }
+            }
+        }
+
+        // Filter chips and Sort button row
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // Horizontal scrolling filters
+            LazyRow(
+                modifier = Modifier.weight(1f),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                contentPadding = PaddingValues(end = 8.dp)
+            ) {
+                items(filterOptions) { (key, label) ->
+                    val isSelected = activeFilter == key
+                    FilterChip(
+                        selected = isSelected,
+                        onClick = { viewModel.setCallTypeFilter(key) },
+                        label = { Text(label) },
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = Teal500,
+                            selectedLabelColor = Slate50,
+                            containerColor = Slate800,
+                            labelColor = Slate400
+                        ),
+                        border = FilterChipDefaults.filterChipBorder(
+                            borderColor = if (isSelected) Teal300 else Slate700,
+                            enabled = true,
+                            selected = isSelected
+                        )
+                    )
+                }
+            }
+
+            // Sort Selector Trigger
+            Box {
+                Row(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(Slate800)
+                        .clickable { showSortMenu = true }
+                        .padding(horizontal = 8.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.FilterList,
+                        contentDescription = "Sort",
+                        tint = Teal300,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        text = sortOptions.firstOrNull { it.first == activeSort }?.second?.split(" ")?.first() ?: "Sort",
+                        style = MaterialTheme.typography.bodySmall,
+                        fontWeight = FontWeight.Bold,
+                        color = Slate50
+                    )
+                    Icon(
+                        imageVector = Icons.Default.ArrowDropDown,
+                        contentDescription = null,
+                        tint = Slate400,
+                        modifier = Modifier.size(16.dp)
+                    )
+                }
+
+                DropdownMenu(
+                    expanded = showSortMenu,
+                    onDismissRequest = { showSortMenu = false },
+                    modifier = Modifier.background(Slate800)
+                ) {
+                    sortOptions.forEach { (key, label) ->
+                        DropdownMenuItem(
+                            text = { 
+                                Text(
+                                    text = label, 
+                                    color = if (activeSort == key) Teal300 else Slate50,
+                                    fontWeight = if (activeSort == key) FontWeight.Bold else FontWeight.Normal
+                                ) 
+                            },
+                            onClick = {
+                                viewModel.setSortBy(key)
+                                showSortMenu = false
+                            }
+                        )
+                    }
+                }
+            }
+        }
+
+        // Logs list
+        if (callLogs.isEmpty()) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f),
+                contentAlignment = Alignment.Center
+            ) {
+                EmptyStateView(
+                    title = "No call logs match",
+                    description = "Try adjusting your search terms or filters, or click the Sync button to refresh logs from your device.",
+                    icon = Icons.Default.CallEnd
+                )
+            }
+        } else {
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+                contentPadding = PaddingValues(bottom = 16.dp)
+            ) {
+                items(
+                    items = callLogs,
+                    key = { it.id }
+                ) { call ->
+                    CallCard(
+                        call = call,
+                        onClick = { onCallClick(call.id) },
+                        onFavoriteToggle = { viewModel.toggleFavorite(call.id) }
+                    )
+                }
+            }
+        }
+    }
+}
