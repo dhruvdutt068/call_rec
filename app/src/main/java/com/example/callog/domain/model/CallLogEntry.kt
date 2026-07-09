@@ -21,7 +21,11 @@ data class CallLogEntry(
     val recordingLocalPath: String? = null,
     val recordingCloudPath: String? = null,
     val recordingUploadStatus: String = "PENDING",
-    val recordingUploadedAt: Long? = null
+    val recordingUploadedAt: Long? = null,
+    val retryCount: Int = 0,
+    val uploadedAt: Long? = null,
+    val syncError: String? = null,
+    val lastAttempt: Long? = null
 ) {
     // Helper to get initials or placeholder name
     val displayName: String

@@ -17,10 +17,44 @@ import com.example.callog.presentation.navigation.NavGraph
 import com.example.callog.presentation.theme.CallogTheme
 import dagger.hilt.android.AndroidEntryPoint
 
+import androidx.lifecycle.lifecycleScope
+import com.example.callog.domain.service.SyncManager
+import com.example.callog.core.utils.ConnectivityService
+import com.example.callog.core.utils.ConnectionState
+import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.launch
+import javax.inject.Inject
+
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
+
+    @Inject
+    lateinit var syncManager: SyncManager
+
+    @Inject
+    lateinit var connectivityService: ConnectivityService
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        
+        // Cancel any previously scheduled background periodic sync to prevent running in background
+        syncManager.cancelPeriodicSync()
+
+        // Trigger an immediate sync on app launch
+        syncManager.startSync()
+
+        // Automatically trigger sync when connectivity is restored
+        lifecycleScope.launch {
+            var previousState: ConnectionState? = null
+            connectivityService.connectionStateFlow.collect { state ->
+                if (previousState == ConnectionState.OFFLINE && state != ConnectionState.OFFLINE) {
+                    android.util.Log.i("MainActivity", "Network connection restored. Running sync.")
+                    syncManager.startSync()
+                }
+                previousState = state
+            }
+        }
+
         enableEdgeToEdge()
         setContent {
             val context = androidx.compose.ui.platform.LocalContext.current

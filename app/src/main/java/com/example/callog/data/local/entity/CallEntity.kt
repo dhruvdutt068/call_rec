@@ -27,5 +27,9 @@ data class CallEntity(
     val recordingCloudPath: String? = null,
     val recordingUploadStatus: String = "PENDING", // PENDING, UPLOADING, SUCCESS, FAILED
     val recordingUploadedAt: Long? = null,
-    val recordingUrl: String? = null
+    val recordingUrl: String? = null,
+    val retryCount: Int = 0,
+    val uploadedAt: Long? = null,
+    val syncError: String? = null,
+    val lastAttempt: Long? = null
 )

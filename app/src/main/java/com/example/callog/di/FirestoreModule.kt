@@ -25,4 +25,10 @@ abstract class FirestoreModule {
     abstract fun bindRecordingRepository(
         recordingRepositoryImpl: RecordingRepositoryImpl
     ): RecordingRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindSyncRepository(
+        syncRepositoryImpl: com.example.callog.data.repository.SyncRepositoryImpl
+    ): com.example.callog.domain.repository.SyncRepository
 }

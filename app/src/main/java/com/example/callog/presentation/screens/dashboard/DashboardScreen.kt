@@ -39,6 +39,8 @@ fun DashboardScreen(
     val analyticsState by analyticsViewModel.uiState.collectAsState()
     val isSyncing by callViewModel.isSyncing.collectAsState()
 
+    val syncProgress by callViewModel.syncProgress.collectAsState()
+
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     var previousSyncingState by remember { mutableStateOf(false) }
@@ -111,7 +113,7 @@ fun DashboardScreen(
                 }
                 Spacer(modifier = Modifier.width(6.dp))
                 Text(
-                    text = if (isSyncing) "Syncing..." else "Sync Cloud",
+                    text = if (isSyncing) (syncProgress ?: "Syncing...") else "Sync Cloud",
                     style = MaterialTheme.typography.bodySmall,
                     fontWeight = FontWeight.Bold
                 )

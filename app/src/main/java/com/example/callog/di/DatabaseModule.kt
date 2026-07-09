@@ -13,9 +13,21 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
 import javax.inject.Singleton
 
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
+
 @Module
 @InstallIn(SingletonComponent::class)
 object DatabaseModule {
+
+    private val MIGRATION_5_6 = object : Migration(5, 6) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("ALTER TABLE calls ADD COLUMN retryCount INTEGER NOT NULL DEFAULT 0")
+            db.execSQL("ALTER TABLE calls ADD COLUMN uploadedAt INTEGER")
+            db.execSQL("ALTER TABLE calls ADD COLUMN syncError TEXT")
+            db.execSQL("ALTER TABLE calls ADD COLUMN lastAttempt INTEGER")
+        }
+    }
 
     @Provides
     @Singleton
@@ -26,7 +38,8 @@ object DatabaseModule {
             context,
             CallVaultDatabase::class.java,
             Constants.DATABASE_NAME
-        ).fallbackToDestructiveMigration()
+        ).addMigrations(MIGRATION_5_6)
+         .fallbackToDestructiveMigration()
          .build()
     }
 

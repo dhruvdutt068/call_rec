@@ -16,6 +16,8 @@ import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
+import com.example.callog.domain.service.SyncManager
+
 @HiltViewModel
 class CallViewModel @Inject constructor(
     private val getCallLogsUseCase: GetCallLogsUseCase,
@@ -32,7 +34,8 @@ class CallViewModel @Inject constructor(
     private val clearAllDataUseCase: ClearAllDataUseCase,
     private val repository: CallRepository, // For direct contacts lookup
     private val firestoreRepository: FirestoreRepository,
-    private val recordingRepository: com.example.callog.domain.repository.RecordingRepository
+    private val recordingRepository: com.example.callog.domain.repository.RecordingRepository,
+    private val syncManager: SyncManager
 ) : ViewModel() {
 
     private val _searchQuery = MutableStateFlow("")
@@ -44,8 +47,11 @@ class CallViewModel @Inject constructor(
     private val _sortBy = MutableStateFlow("NEWEST") // "NEWEST", "OLDEST", "LONGEST", "SHORTEST"
     val sortBy = _sortBy.asStateFlow()
 
-    private val _isSyncing = MutableStateFlow(false)
-    val isSyncing = _isSyncing.asStateFlow()
+    val isSyncing: StateFlow<Boolean> = syncManager.isSyncing
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
+
+    val syncProgress: StateFlow<String?> = syncManager.syncProgress
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
     private val _contacts = MutableStateFlow<List<ContactDto>>(emptyList())
     val contacts = _contacts.asStateFlow()
@@ -139,23 +145,15 @@ class CallViewModel @Inject constructor(
 
     fun syncLogs() {
         viewModelScope.launch {
-            _isSyncing.value = true
             loadContacts()
-            syncCallLogsUseCase()
-            syncPendingCallsUseCase()
-            recordingRepository.retryFailedUploads()
-            _isSyncing.value = false
+            syncManager.startSync()
         }
     }
 
     fun forceReSync() {
         viewModelScope.launch {
-            _isSyncing.value = true
-            firestoreRepository.resetAllSyncStatus()
             loadContacts()
-            syncCallLogsUseCase()
-            syncPendingCallsUseCase()
-            _isSyncing.value = false
+            syncManager.forceResetAndSync()
         }
     }
 

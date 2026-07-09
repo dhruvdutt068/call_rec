@@ -212,7 +212,11 @@ class CallRepositoryImpl @Inject constructor(
             recordingLocalPath = call.recordingLocalPath,
             recordingCloudPath = call.recordingCloudPath,
             recordingUploadStatus = call.recordingUploadStatus,
-            recordingUploadedAt = call.recordingUploadedAt
+            recordingUploadedAt = call.recordingUploadedAt,
+            retryCount = call.retryCount,
+            uploadedAt = call.uploadedAt,
+            syncError = call.syncError,
+            lastAttempt = call.lastAttempt
         )
     }
 
