@@ -11,9 +11,12 @@ import com.example.callog.data.provider.CallLogProvider
 import com.example.callog.data.provider.ContactDto
 import com.example.callog.data.provider.ContactsProvider
 import com.example.callog.data.provider.RecordingScanner
+import com.example.callog.data.provider.SimManager
 import com.example.callog.domain.model.CallLogEntry
 import com.example.callog.domain.repository.CallRepository
 import com.example.callog.domain.repository.FirestoreRepository
+import com.example.callog.core.diagnostics.DeveloperLogger
+import android.telephony.SubscriptionManager
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
@@ -34,6 +37,7 @@ class CallRepositoryImpl @Inject constructor(
     private val callLogProvider: CallLogProvider,
     private val contactsProvider: ContactsProvider,
     private val recordingScanner: RecordingScanner,
+    private val simManager: SimManager,
     private val firestoreRepository: Provider<FirestoreRepository>,
     private val recordingRepository: Provider<com.example.callog.domain.repository.RecordingRepository>
 ) : CallRepository {
@@ -45,8 +49,9 @@ class CallRepositoryImpl @Inject constructor(
         }.flowOn(Dispatchers.IO)
 
         return combine(callsFlow, contactsFlow) { calls, contacts ->
+            val contactsMap = buildContactsMap(contacts)
             calls.map { call ->
-                mapToCallLogEntry(call, contacts)
+                mapToCallLogEntry(call, contactsMap)
             }
         }.flowOn(Dispatchers.Default)
     }
@@ -58,8 +63,9 @@ class CallRepositoryImpl @Inject constructor(
         }.flowOn(Dispatchers.IO)
 
         return combine(callsFlow, contactsFlow) { calls, contacts ->
+            val contactsMap = buildContactsMap(contacts)
             calls.map { call ->
-                mapToCallLogEntry(call, contacts)
+                mapToCallLogEntry(call, contactsMap)
             }
         }.flowOn(Dispatchers.Default)
     }
@@ -71,8 +77,9 @@ class CallRepositoryImpl @Inject constructor(
         }.flowOn(Dispatchers.IO)
 
         return combine(callsFlow, contactsFlow) { calls, contacts ->
+            val contactsMap = buildContactsMap(contacts)
             calls.map { call ->
-                mapToCallLogEntry(call, contacts)
+                mapToCallLogEntry(call, contactsMap)
             }
         }.flowOn(Dispatchers.Default)
     }
@@ -84,23 +91,65 @@ class CallRepositoryImpl @Inject constructor(
         }.flowOn(Dispatchers.IO)
 
         return combine(callFlow, contactsFlow) { call, contacts ->
-            call?.let { mapToCallLogEntry(it, contacts) }
+            val contactsMap = buildContactsMap(contacts)
+            call?.let { mapToCallLogEntry(it, contactsMap) }
         }.flowOn(Dispatchers.Default)
     }
 
     override suspend fun syncCallLogs() { withContext(Dispatchers.IO) {
         try {
+            // Check SIM configuration states
+            if (simManager.isSyncSuspendedDueToSimChange()) {
+                DeveloperLogger.warning("SYNC_SUSPENDED", "Sync is suspended because SIM card configuration mismatch. Please reconfigure.")
+                return@withContext
+            }
+
+            val activeSims = simManager.getActiveSims()
+            if (activeSims.isEmpty() && simManager.hasPermission()) {
+                DeveloperLogger.warning("SYNC_SUSPENDED", "No active SIM card found on the device. Sync suspended.")
+                return@withContext
+            }
+
             val systemCalls = callLogProvider.fetchCallLogs()
             if (systemCalls.isNotEmpty()) {
-                // Sync each call log into local DB if not already existing
-                // Since _ID from system call log isn't unique across app installs/reinstalls, 
-                // we can match by timestamp + number to avoid duplicates
                 val existingCalls = callDao.getAllCalls()
                 val existingKeys = existingCalls.map { "${it.timestamp}_${it.number}" }.toSet()
                 
-                val newCalls = systemCalls.filter {
-                    val key = "${it.timestamp}_${it.number}"
-                    !existingKeys.contains(key)
+                val selectedSubId = simManager.getSelectedSubscriptionId()
+                if (selectedSubId == SubscriptionManager.INVALID_SUBSCRIPTION_ID) {
+                    DeveloperLogger.warning("SYNC_SUSPENDED", "No Business SIM card configured. Sync suspended.")
+                    return@withContext
+                }
+
+                val newCalls = systemCalls.filter { call ->
+                    val key = "${call.timestamp}_${call.number}"
+                    if (existingKeys.contains(key)) {
+                        return@filter false
+                    }
+
+                    // Perform strict SIM filtering (only allow selected SIM calls)
+                    val callSubId = simManager.getSubscriptionIdFromHandle(call.phoneAccountId, call.phoneAccountComponentName)
+                    if (callSubId == selectedSubId) {
+                        DeveloperLogger.info(
+                            "SIM_FILTER_MATCH",
+                            "Call from ${call.number} matched Business SIM ($selectedSubId). Importing."
+                        )
+                        true
+                    } else if (callSubId == SubscriptionManager.INVALID_SUBSCRIPTION_ID) {
+                        // Fallback: If platform doesn't associate SIM info with the call log, import it to prevent losing calls, but warn
+                        DeveloperLogger.warning(
+                            "SIM_FILTER_UNKNOWN",
+                            "Call from ${call.number} has unknown SIM origin. Importing call to prevent data loss."
+                        )
+                        true
+                    } else {
+                        // Skip calls that explicitly belong to a different SIM
+                        DeveloperLogger.info(
+                            "SIM_FILTER_MISMATCH",
+                            "Call from ${call.number} came from SIM $callSubId. Business SIM is $selectedSubId. Skipping."
+                        )
+                        false
+                    }
                 }
 
                 if (newCalls.isNotEmpty()) {
@@ -121,6 +170,10 @@ class CallRepositoryImpl @Inject constructor(
 
     override suspend fun getContacts(): List<ContactDto> = withContext(Dispatchers.IO) {
         return@withContext contactsProvider.fetchContacts()
+    }
+
+    override suspend fun getAllCallsSnapshot(): List<CallEntity> = withContext(Dispatchers.IO) {
+        return@withContext callDao.getAllCalls()
     }
 
     override suspend fun updateNotes(callId: Long, notes: String?) {
@@ -189,8 +242,28 @@ class CallRepositoryImpl @Inject constructor(
 
 
 
-    private fun mapToCallLogEntry(call: CallEntity, contacts: List<ContactDto>): CallLogEntry {
-        val matchedContact = matchContact(call.number, contacts)
+    private fun buildContactsMap(contacts: List<ContactDto>): Map<String, ContactDto> {
+        val contactsMap = mutableMapOf<String, ContactDto>()
+        contacts.forEach { contact ->
+            contact.phoneNumbers.forEach { phone ->
+                val clean = phone.filter { it.isDigit() }
+                if (clean.length >= 7) {
+                    contactsMap[clean.takeLast(7)] = contact
+                } else if (clean.isNotEmpty()) {
+                    contactsMap[clean] = contact
+                }
+            }
+        }
+        return contactsMap
+    }
+
+    private fun mapToCallLogEntry(call: CallEntity, contactsMap: Map<String, ContactDto>): CallLogEntry {
+        val cleanNumber = call.number.filter { it.isDigit() }
+        val matchedContact = if (cleanNumber.length >= 7) {
+            contactsMap[cleanNumber.takeLast(7)]
+        } else {
+            contactsMap[cleanNumber]
+        }
         val tagsList = call.tags?.split(",")?.filter { it.isNotEmpty() } ?: emptyList()
         
         return CallLogEntry(
@@ -218,22 +291,6 @@ class CallRepositoryImpl @Inject constructor(
             syncError = call.syncError,
             lastAttempt = call.lastAttempt
         )
-    }
-
-    private fun matchContact(callNumber: String, contacts: List<ContactDto>): ContactDto? {
-        val cleanCallNum = callNumber.replace(Regex("[^0-9]"), "")
-        if (cleanCallNum.isEmpty()) return null
-        
-        return contacts.firstOrNull { contact ->
-            contact.phoneNumbers.any { phone ->
-                val cleanPhone = phone.replace(Regex("[^0-9]"), "")
-                cleanPhone.isNotEmpty() && (
-                    cleanPhone == cleanCallNum ||
-                    (cleanCallNum.length >= 7 && cleanPhone.endsWith(cleanCallNum.takeLast(7))) ||
-                    (cleanPhone.length >= 7 && cleanCallNum.endsWith(cleanPhone.takeLast(7)))
-                )
-            }
-        }
     }
 
 

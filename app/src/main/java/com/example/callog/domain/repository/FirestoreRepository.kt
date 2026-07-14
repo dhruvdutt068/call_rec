@@ -18,4 +18,10 @@ interface FirestoreRepository {
 
     fun getDevicePhoneNumber(): String
     fun saveDevicePhoneNumber(number: String)
+
+    fun getDeviceOwnerName(): String
+    fun saveDeviceOwnerName(name: String)
+    
+    fun getCustomRecordingPath(): String
+    fun saveCustomRecordingPath(path: String)
 }

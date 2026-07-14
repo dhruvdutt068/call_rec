@@ -1,3 +1,4 @@
+
 package com.example.callog.data.service
 
 import android.content.Context
@@ -21,6 +22,8 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.withContext
 import java.io.File
+import com.example.callog.data.local.dao.TracebackDao
+import com.example.callog.data.local.entity.TracebackEntity
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -32,7 +35,8 @@ import javax.inject.Singleton
 class UploadServiceImpl @Inject constructor(
     @ApplicationContext private val context: Context,
     private val firestoreService: FirestoreService,
-    private val contactsProvider: ContactsProvider
+    private val contactsProvider: ContactsProvider,
+    private val tracebackDao: TracebackDao
 ) : UploadService {
 
     private val TAG = "UploadServiceImpl"
@@ -56,12 +60,13 @@ class UploadServiceImpl @Inject constructor(
             } else {
                 if (FirebaseApp.getApps(context).isEmpty()) {
                     val options = FirebaseOptions.Builder()
-                        .setApplicationId("1:666477971024:android:4cbefd56ddee708ab07355")
-                        .setProjectId("restaurant-manager-185bd")
+                        .setApplicationId("1:799427430422:android:e0f5737f12b8b9cbb20d37")
+                        .setProjectId("allset-491218")
+                        .setApiKey("AIzaSyBtlY7EoO6PgPUCMjNR55K88H2v665qQgQ")
                         .build()
                     FirebaseApp.initializeApp(context, options)
                 }
-                FirebaseStorage.getInstance()
+                FirebaseStorage.getInstance("gs://allset_calllogs_bucket")
             }
         } catch (e: Exception) {
             Log.e(TAG, "Failed to initialize Firebase Storage", e)
@@ -90,14 +95,37 @@ class UploadServiceImpl @Inject constructor(
             return@callbackFlow
         }
 
+        // Check if recording already exists in Firestore metadata to avoid duplicate upload
+        val devicePhone = firestoreService.getDevicePhoneNumber().ifEmpty { "unknown_device" }
+        val normalizedDevicePhone = FirestoreRepositoryImpl.normalizePhoneNumber(devicePhone)
+        val normalizedNumber = FirestoreRepositoryImpl.normalizePhoneNumber(call.number)
+        val firestoreType = FirestoreRepositoryImpl.getFirestoreCallType(call.callType)
+        
+        try {
+            val remoteMetadata = firestoreService.getCallMetadata(normalizedNumber, firestoreType, call.id.toString())
+            if (remoteMetadata != null) {
+                val hasRec = remoteMetadata["hasRecording"] as? Boolean ?: false
+                val remoteRecUrl = remoteMetadata["recordingUrl"] as? String ?: ""
+                val remoteRecPath = remoteMetadata["recordingPath"] as? String ?: ""
+                
+                if (hasRec && remoteRecUrl.isNotEmpty() && remoteRecPath.isNotEmpty()) {
+                    Log.i(TAG, "Recording already exists in Firestore for call ${call.id}. Skipping upload and reusing URL: $remoteRecUrl")
+                    trySend(UploadProgressState.Success(remoteRecUrl, remoteRecPath))
+                    close()
+                    return@callbackFlow
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error checking remote metadata in uploadRecording", e)
+        }
+
         val date = Date(call.timestamp)
         val year = SimpleDateFormat("yyyy", Locale.US).format(date)
         val month = SimpleDateFormat("MM", Locale.US).format(date)
+        val day = SimpleDateFormat("dd", Locale.US).format(date)
 
-        val devicePhone = firestoreService.getDevicePhoneNumber().ifEmpty { "unknown_device" }
-        val normalizedDevicePhone = FirestoreRepositoryImpl.normalizePhoneNumber(devicePhone)
         val extension = file.extension.ifEmpty { "mp3" }
-        val remotePath = "users/$normalizedDevicePhone/recordings/$year/$month/${call.id}.$extension"
+        val remotePath = "users/$normalizedDevicePhone/recordings/$year/$month/$day/call_${call.id}.$extension"
 
         Log.i(TAG, "Starting Cloud Storage upload to path: $remotePath")
         val ref = storageInstance.reference.child(remotePath)
@@ -152,6 +180,7 @@ class UploadServiceImpl @Inject constructor(
             val contactName = matchedContact?.name ?: call.name ?: ""
 
             val nowIso = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSSXXX", Locale.US).format(Date())
+            val callTimeIso = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSSXXX", Locale.US).format(Date(call.timestamp))
             val hasRec = call.recordingPath != null || !recordingUrl.isNullOrEmpty()
             val recUrl = recordingUrl ?: call.recordingUrl ?: ""
 
@@ -171,16 +200,23 @@ class UploadServiceImpl @Inject constructor(
                 "updatedAt" to nowIso
             )
 
+            if (call.callType.equals("OUTGOING", ignoreCase = true)) {
+                metadata["callMadeAt"] = callTimeIso
+            } else {
+                metadata["callReceivedAt"] = callTimeIso
+            }
+
             if (hasRec) {
                 val date = Date(call.timestamp)
                 val year = SimpleDateFormat("yyyy", Locale.US).format(date)
                 val month = SimpleDateFormat("MM", Locale.US).format(date)
+                val day = SimpleDateFormat("dd", Locale.US).format(date)
                 val devicePhone = firestoreService.getDevicePhoneNumber().ifEmpty { "unknown_device" }
                 val normalizedDevicePhone = FirestoreRepositoryImpl.normalizePhoneNumber(devicePhone)
                 
                 val localPath = call.recordingLocalPath ?: call.recordingPath ?: ""
                 val extension = if (localPath.isNotEmpty()) File(localPath).extension.ifEmpty { "mp3" } else "mp3"
-                val remotePath = "users/$normalizedDevicePhone/recordings/$year/$month/${call.id}.$extension"
+                val remotePath = "users/$normalizedDevicePhone/recordings/$year/$month/$day/call_${call.id}.$extension"
                 
                 metadata["recordingPath"] = remotePath
                 metadata["uploadedAt"] = nowIso
@@ -204,6 +240,7 @@ class UploadServiceImpl @Inject constructor(
             }
 
             if (success) {
+                insertTraceback(call, contactName, recUrl)
                 Result.success(Unit)
             } else {
                 Result.failure(Exception("Firestore write metadata failed"))
@@ -231,6 +268,27 @@ class UploadServiceImpl @Inject constructor(
                     (cleanPhone.length >= 7 && cleanCallNum.endsWith(cleanPhone.takeLast(7)))
                 )
             }
+        }
+    }
+
+    private suspend fun insertTraceback(call: CallEntity, contactName: String, recordingUrl: String) {
+        try {
+            val ownerPhone = firestoreService.getDevicePhoneNumber()
+            val ownerName = firestoreService.getDeviceOwnerName()
+            val traceback = TracebackEntity(
+                ownerPhone = ownerPhone,
+                ownerName = ownerName,
+                callerType = call.callType,
+                phoneNumber = call.number,
+                callerName = contactName,
+                hasRecording = (call.recordingPath != null || recordingUrl.isNotEmpty()),
+                callLogId = call.id,
+                recordingUrl = recordingUrl
+            )
+            tracebackDao.insertTraceback(traceback)
+            Log.d(TAG, "Successfully logged traceback entry for call ${call.id} in SQL database.")
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to log traceback for call ${call.id}", e)
         }
     }
 }

@@ -1,6 +1,7 @@
 package com.example.callog.presentation.navigation
 
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.Box
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Settings
@@ -20,9 +21,13 @@ import com.example.callog.presentation.screens.permission.PermissionScreen
 import com.example.callog.presentation.screens.recordings.RecordingManagerScreen
 import com.example.callog.presentation.screens.settings.SettingsScreen
 import com.example.callog.presentation.screens.splash.SplashScreen
+import com.example.callog.presentation.screens.developer.DeveloperDashboardScreen
+import com.example.callog.presentation.screens.developer.SyncLogsScreen
 import com.example.callog.presentation.theme.*
 import com.example.callog.presentation.viewmodel.AnalyticsViewModel
 import com.example.callog.presentation.viewmodel.CallViewModel
+
+import com.example.callog.presentation.screens.onboarding.OnboardingScreen
 
 @Composable
 fun NavGraph(
@@ -40,8 +45,17 @@ fun NavGraph(
             SplashScreen(
                 onNavigateNext = { isPermissionGranted ->
                     if (isPermissionGranted) {
-                        navController.navigate(Screen.Main.route) {
-                            popUpTo(Screen.Splash.route) { inclusive = true }
+                        callViewModel.loadSimConfigurations()
+                        val hasPhone = callViewModel.devicePhoneNumber.value.isNotEmpty()
+                        val hasOwner = callViewModel.deviceOwnerName.value.isNotEmpty()
+                        if (hasPhone && hasOwner) {
+                            navController.navigate(Screen.Main.route) {
+                                popUpTo(Screen.Splash.route) { inclusive = true }
+                            }
+                        } else {
+                            navController.navigate(Screen.Onboarding.route) {
+                                popUpTo(Screen.Splash.route) { inclusive = true }
+                            }
                         }
                     } else {
                         navController.navigate(Screen.Permission.route) {
@@ -55,25 +69,66 @@ fun NavGraph(
         composable(Screen.Permission.route) {
             PermissionScreen(
                 onPermissionsGranted = {
+                    callViewModel.loadSimConfigurations()
                     callViewModel.syncLogs()
+                    val hasPhone = callViewModel.devicePhoneNumber.value.isNotEmpty()
+                    val hasOwner = callViewModel.deviceOwnerName.value.isNotEmpty()
+                    if (hasPhone && hasOwner) {
+                        navController.navigate(Screen.Main.route) {
+                            popUpTo(Screen.Permission.route) { inclusive = true }
+                        }
+                    } else {
+                        navController.navigate(Screen.Onboarding.route) {
+                            popUpTo(Screen.Permission.route) { inclusive = true }
+                        }
+                    }
+                }
+            )
+        }
+
+        composable(Screen.Onboarding.route) {
+            OnboardingScreen(
+                viewModel = callViewModel,
+                onSetupComplete = {
+                    callViewModel.loadSimConfigurations()
                     navController.navigate(Screen.Main.route) {
-                        popUpTo(Screen.Permission.route) { inclusive = true }
+                        popUpTo(Screen.Onboarding.route) { inclusive = true }
                     }
                 }
             )
         }
 
         composable(Screen.Main.route) {
-            MainScreen(
-                callViewModel = callViewModel,
-                analyticsViewModel = analyticsViewModel,
-                onCallClick = { callId ->
-                    navController.navigate(Screen.CallDetails.createRoute(callId))
-                },
-                onSettingsClick = {
-                    navController.navigate(Screen.Settings.route)
+            val isSimChangeRequired by callViewModel.isSimChangeRequired.collectAsState()
+            val activeSims by callViewModel.activeSims.collectAsState()
+            val selectedSubId by callViewModel.selectedSimId.collectAsState()
+            val isSuspendedDueToChange = activeSims.isNotEmpty() && selectedSubId != android.telephony.SubscriptionManager.INVALID_SUBSCRIPTION_ID
+
+            Box {
+                MainScreen(
+                    callViewModel = callViewModel,
+                    analyticsViewModel = analyticsViewModel,
+                    onCallClick = { callId ->
+                        navController.navigate(Screen.CallDetails.createRoute(callId))
+                    },
+                    onSettingsClick = {
+                        navController.navigate(Screen.Settings.route)
+                    }
+                )
+
+                if (isSimChangeRequired) {
+                    com.example.callog.presentation.components.BusinessSimWizardDialog(
+                        activeSims = activeSims,
+                        onSelectSim = { sim ->
+                            callViewModel.saveBusinessSim(sim)
+                        },
+                        onSelectSyncAll = {
+                            callViewModel.saveSyncAll()
+                        },
+                        isSuspendedDueToChange = isSuspendedDueToChange
+                    )
                 }
-            )
+            }
         }
 
         composable(
@@ -102,9 +157,27 @@ fun NavGraph(
                     viewModel = callViewModel,
                     darkTheme = darkTheme,
                     onDarkThemeChange = onDarkThemeChange,
+                    onNavigateToDeveloperDashboard = {
+                        navController.navigate(Screen.DeveloperDashboard.route)
+                    },
                     modifier = Modifier.padding(innerPadding)
                 )
             }
+        }
+
+        composable(Screen.DeveloperDashboard.route) {
+            DeveloperDashboardScreen(
+                viewModel = callViewModel,
+                onBackClick = { navController.popBackStack() },
+                onNavigateToLogs = { navController.navigate(Screen.DeveloperLogs.route) }
+            )
+        }
+
+        composable(Screen.DeveloperLogs.route) {
+            SyncLogsScreen(
+                viewModel = callViewModel,
+                onBackClick = { navController.popBackStack() }
+            )
         }
     }
 }

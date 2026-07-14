@@ -17,6 +17,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.runtime.saveable.rememberSaveable
 import com.example.callog.core.extensions.toDateString
 import com.example.callog.core.extensions.toDurationString
 import com.example.callog.domain.model.CallLogEntry
@@ -39,6 +40,21 @@ fun RecordingManagerScreen(
     val recordings = remember(callLogs) {
         callLogs.filter { it.recordingPath != null }
     }
+
+    // Group recordings by phone number
+    val groupedRecordings = remember(recordings) {
+        recordings.groupBy { it.number }
+    }
+
+    // Sort grouped keys by the latest recording's timestamp
+    val sortedGroupedKeys = remember(groupedRecordings) {
+        groupedRecordings.keys.sortedByDescending { number ->
+            groupedRecordings[number]?.maxOfOrNull { it.timestamp } ?: 0L
+        }
+    }
+
+    // Track expanded phone number groups
+    var expandedNumbers by rememberSaveable { mutableStateOf(setOf<String>()) }
 
     var activePlayCallId by remember { mutableStateOf<Long?>(null) }
     var isPlaying by remember { mutableStateOf(false) }
@@ -145,28 +161,55 @@ fun RecordingManagerScreen(
                 verticalArrangement = Arrangement.spacedBy(12.dp),
                 contentPadding = PaddingValues(bottom = 16.dp)
             ) {
-                items(
-                    items = recordings,
-                    key = { it.id }
-                ) { call ->
-                    val isActive = activePlayCallId == call.id
+                sortedGroupedKeys.forEach { number ->
+                    val groupRecordings = groupedRecordings[number] ?: emptyList()
+                    val isExpanded = expandedNumbers.contains(number)
                     
-                    RecordingCard(
-                        call = call,
-                        isPlaying = isActive && isPlaying,
-                        playProgress = if (isActive) playProgress else 0f,
-                        activeDuration = if (isActive) activeDuration else null,
-                        onPlayPauseClick = {
-                            if (isActive) {
-                                isPlaying = !isPlaying
-                            } else {
-                                activePlayCallId = call.id
-                                isPlaying = true
-                                playProgress = 0f
+                    item(key = "header_$number") {
+                        val representativeCall = groupRecordings.first()
+                        GroupHeaderCard(
+                            displayName = representativeCall.displayName,
+                            number = number,
+                            recordingCount = groupRecordings.size,
+                            initials = representativeCall.initials,
+                            photoUri = representativeCall.contactPhotoUri,
+                            isExpanded = isExpanded,
+                            onToggleExpand = {
+                                expandedNumbers = if (isExpanded) {
+                                    expandedNumbers - number
+                                } else {
+                                    expandedNumbers + number
+                                }
                             }
-                        },
-                        onCardClick = { onCallClick(call.id) }
-                    )
+                        )
+                    }
+
+                    if (isExpanded) {
+                        items(
+                            items = groupRecordings,
+                            key = { "rec_${it.id}" }
+                        ) { call ->
+                            val isActive = activePlayCallId == call.id
+                            
+                            RecordingCard(
+                                call = call,
+                                isPlaying = isActive && isPlaying,
+                                playProgress = if (isActive) playProgress else 0f,
+                                activeDuration = if (isActive) activeDuration else null,
+                                onPlayPauseClick = {
+                                    if (isActive) {
+                                        isPlaying = !isPlaying
+                                    } else {
+                                        activePlayCallId = call.id
+                                        isPlaying = true
+                                        playProgress = 0f
+                                    }
+                                },
+                                onCardClick = { onCallClick(call.id) },
+                                modifier = Modifier.padding(start = 16.dp)
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -321,3 +364,69 @@ private fun RecordingCard(
         }
     }
 }
+
+@Composable
+private fun GroupHeaderCard(
+    displayName: String,
+    number: String,
+    recordingCount: Int,
+    initials: String,
+    photoUri: String?,
+    isExpanded: Boolean,
+    onToggleExpand: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    GlassyCard(
+        modifier = modifier,
+        onClick = onToggleExpand
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            ContactAvatar(
+                name = displayName,
+                initials = initials,
+                photoUri = photoUri,
+                modifier = Modifier.size(44.dp)
+            )
+
+            Spacer(modifier = Modifier.width(16.dp))
+
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = displayName,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = Slate50,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                if (displayName != number) {
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = number,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Slate400
+                    )
+                }
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = "$recordingCount recording${if (recordingCount > 1) "s" else ""}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Teal300,
+                    fontWeight = FontWeight.SemiBold
+                )
+            }
+
+            IconButton(onClick = onToggleExpand) {
+                Icon(
+                    imageVector = if (isExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                    contentDescription = if (isExpanded) "Collapse" else "Expand",
+                    tint = Slate400
+                )
+            }
+        }
+    }
+}
+

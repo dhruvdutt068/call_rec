@@ -9,11 +9,14 @@ import androidx.compose.ui.graphics.vector.ImageVector
 sealed class Screen(val route: String) {
     object Splash : Screen("splash")
     object Permission : Screen("permission")
+    object Onboarding : Screen("onboarding")
     object Main : Screen("main")
     object CallDetails : Screen("call_details/{callId}") {
         fun createRoute(callId: Long) = "call_details/$callId"
     }
     object Settings : Screen("settings")
+    object DeveloperDashboard : Screen("developer_dashboard")
+    object DeveloperLogs : Screen("developer_logs")
 
     // Tabs for Bottom Navigation under Main Screen
     sealed class Tab(val tabRoute: String, val title: String, val icon: ImageVector) {

@@ -3,6 +3,7 @@ package com.example.callog.data.remote
 import android.content.Context
 import android.util.Log
 import com.example.callog.domain.model.FirebaseConfig
+import com.example.callog.core.diagnostics.DeveloperLogger
 import com.google.firebase.Firebase
 import com.google.firebase.FirebaseApp
 import com.google.firebase.FirebaseOptions
@@ -66,6 +67,26 @@ class FirestoreService @Inject constructor(
         prefs.edit().putString("device_phone_number", phoneNumber).apply()
     }
 
+    fun getDeviceOwnerName(): String {
+        val prefs = context.getSharedPreferences("firebase_config_prefs", Context.MODE_PRIVATE)
+        return prefs.getString("device_owner_name", "") ?: ""
+    }
+
+    fun saveDeviceOwnerName(name: String) {
+        val prefs = context.getSharedPreferences("firebase_config_prefs", Context.MODE_PRIVATE)
+        prefs.edit().putString("device_owner_name", name).apply()
+    }
+
+    fun getCustomRecordingPath(): String {
+        val prefs = context.getSharedPreferences("firebase_config_prefs", Context.MODE_PRIVATE)
+        return prefs.getString("custom_recording_path", "") ?: ""
+    }
+
+    fun saveCustomRecordingPath(path: String) {
+        val prefs = context.getSharedPreferences("firebase_config_prefs", Context.MODE_PRIVATE)
+        prefs.edit().putString("custom_recording_path", path).apply()
+    }
+
     private fun getNormalizedDevicePhoneNumber(): String {
         val raw = getDevicePhoneNumber()
         if (raw.isEmpty()) return "unknown_device"
@@ -86,6 +107,8 @@ class FirestoreService @Inject constructor(
         }
     }
 
+
+
     suspend fun testFirebaseConnection(config: FirebaseConfig?): Result<Unit> = withContext(Dispatchers.IO) {
         try {
             val firestore = if (config != null) {
@@ -105,15 +128,15 @@ class FirestoreService @Inject constructor(
             } else {
                 // Use default FirebaseApp (which evaluates google-services.json)
                 if (FirebaseApp.getApps(context).isEmpty()) {
-                    Log.w(TAG, "Firebase not initialized. Initializing default app programmatically with placeholder credentials.")
+                    Log.w(TAG, "Firebase not initialized. Initializing default app programmatically with project credentials.")
                     val options = FirebaseOptions.Builder()
-                        .setApplicationId("1:123456789012:android:abcdef0123456789")
-                        .setProjectId("callvault-placeholder-id")
-                        .setApiKey("placeholder-api-key")
+                        .setApplicationId("1:799427430422:android:e0f5737f12b8b9cbb20d37")
+                        .setProjectId("allset-491218")
+                        .setApiKey("AIzaSyBtlY7EoO6PgPUCMjNR55K88H2v665qQgQ")
                         .build()
                     FirebaseApp.initializeApp(context, options)
                 }
-                Firebase.firestore
+                FirebaseFirestore.getInstance("call-logs")
             }
 
             // Write a test document that stays in Firestore for inspection
@@ -148,15 +171,15 @@ class FirestoreService @Inject constructor(
                     FirebaseFirestore.getInstance(customApp)
                 } else {
                     if (FirebaseApp.getApps(context).isEmpty()) {
-                        Log.w(TAG, "Firebase not initialized. Initializing programmatically with placeholder credentials.")
+                        Log.w(TAG, "Firebase not initialized. Initializing programmatically with project credentials.")
                         val options = FirebaseOptions.Builder()
-                            .setApplicationId("1:123456789012:android:abcdef0123456789")
-                            .setProjectId("callvault-placeholder-id")
-                            .setApiKey("placeholder-api-key")
+                            .setApplicationId("1:799427430422:android:e0f5737f12b8b9cbb20d37")
+                            .setProjectId("allset-491218")
+                            .setApiKey("AIzaSyBtlY7EoO6PgPUCMjNR55K88H2v665qQgQ")
                             .build()
                         FirebaseApp.initializeApp(context, options)
                     }
-                    Firebase.firestore
+                    FirebaseFirestore.getInstance("call-logs")
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to initialize Firebase Firestore", e)
@@ -209,6 +232,14 @@ class FirestoreService @Inject constructor(
         } ?: return false
         val devicePhone = getNormalizedDevicePhoneNumber()
         return try {
+            DeveloperLogger.info("FIRESTORE_METADATA_UPLOAD_STARTED", "Uploading call $callId to Firestore")
+            Log.d("SYNC", "Uploading call to Firestore:")
+            Log.d("SYNC", "Salesperson Name = ${metadata["salesperson_name"]}")
+            Log.d("SYNC", "Salesperson Phone = ${metadata["salesperson_phone"]}")
+            Log.d("SYNC", "Buyer Name = ${metadata["buyer_name"]}")
+            Log.d("SYNC", "Buyer Phone = ${metadata["buyer_phone"]}")
+            Log.d("SYNC", "Payload Map = $metadata")
+
             firestore.collection("users")
                 .document(devicePhone)
                 .collection("phonelogs")
@@ -217,11 +248,13 @@ class FirestoreService @Inject constructor(
                 .document("call_$callId")
                 .set(metadata)
                 .await()
-            Log.i(TAG, "Successfully uploaded metadata for call: $callId")
+            Log.d("FIRESTORE", "Upload Successful for call: $callId")
+            DeveloperLogger.success("FIRESTORE_METADATA_UPLOAD_SUCCESS", "Successfully uploaded call $callId metadata to Firestore")
             _lastUploadError.value = null
             true
         } catch (e: Exception) {
-            Log.e(TAG, "Error uploading call metadata: $callId under $devicePhone/$phoneNumber/$callType", e)
+            Log.e("FIRESTORE", "Upload Failed for call: $callId", e)
+            DeveloperLogger.error("FIRESTORE_METADATA_UPLOAD_FAILED", "Failed uploading call $callId to Firestore", e)
             _lastUploadError.value = e.message ?: e.toString()
             false
         }
@@ -234,6 +267,14 @@ class FirestoreService @Inject constructor(
         } ?: return false
         val devicePhone = getNormalizedDevicePhoneNumber()
         return try {
+            DeveloperLogger.info("FIRESTORE_RECORDING_URL_UPDATE", "Updating call $callId in Firestore")
+            Log.d("SYNC", "Updating call in Firestore:")
+            Log.d("SYNC", "Salesperson Name = ${metadata["salesperson_name"]}")
+            Log.d("SYNC", "Salesperson Phone = ${metadata["salesperson_phone"]}")
+            Log.d("SYNC", "Buyer Name = ${metadata["buyer_name"]}")
+            Log.d("SYNC", "Buyer Phone = ${metadata["buyer_phone"]}")
+            Log.d("SYNC", "Payload Map = $metadata")
+
             firestore.collection("users")
                 .document(devicePhone)
                 .collection("phonelogs")
@@ -242,11 +283,13 @@ class FirestoreService @Inject constructor(
                 .document("call_$callId")
                 .set(metadata, com.google.firebase.firestore.SetOptions.merge())
                 .await()
-            Log.i(TAG, "Successfully updated metadata for call: $callId")
+            Log.d("FIRESTORE", "Upload Successful for call: $callId")
+            DeveloperLogger.success("FIRESTORE_RECORDING_URL_UPDATE", "Successfully updated call $callId recording URL / metadata in Firestore")
             _lastUploadError.value = null
             true
         } catch (e: Exception) {
-            Log.e(TAG, "Error updating call metadata: $callId under $devicePhone/$phoneNumber/$callType", e)
+            Log.e("FIRESTORE", "Upload Failed for call: $callId", e)
+            DeveloperLogger.error("FIRESTORE_RECORDING_URL_UPDATE", "Failed updating call $callId recording URL in Firestore", e)
             _lastUploadError.value = e.message ?: e.toString()
             false
         }

@@ -22,7 +22,19 @@ data class ContactDto(
 class ContactsProvider @Inject constructor(
     @ApplicationContext private val context: Context
 ) {
+    private var cachedContacts: List<ContactDto>? = null
+    private var lastFetchTime = 0L
+    private val cacheDuration = 60_000L // 60 seconds cache duration
+
+    @Synchronized
     fun fetchContacts(): List<ContactDto> {
+        val now = System.currentTimeMillis()
+        cachedContacts?.let {
+            if (now - lastFetchTime < cacheDuration) {
+                return it
+            }
+        }
+
         if (ContextCompat.checkSelfPermission(
                 context,
                 Manifest.permission.READ_CONTACTS
@@ -108,7 +120,7 @@ class ContactsProvider @Inject constructor(
             }
         }
 
-        return contactsMap.values.map {
+        val result = contactsMap.values.map {
             ContactDto(
                 contactId = it.contactId,
                 name = it.name,
@@ -118,6 +130,10 @@ class ContactsProvider @Inject constructor(
                 isFavorite = it.isFavorite
             )
         }
+        
+        cachedContacts = result
+        lastFetchTime = now
+        return result
     }
 
     private data class TempContact(

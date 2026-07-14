@@ -38,8 +38,13 @@ fun DashboardScreen(
     val pendingReminders by callViewModel.pendingReminders.collectAsState()
     val analyticsState by analyticsViewModel.uiState.collectAsState()
     val isSyncing by callViewModel.isSyncing.collectAsState()
-
     val syncProgress by callViewModel.syncProgress.collectAsState()
+    val deviceOwnerName by callViewModel.deviceOwnerName.collectAsState()
+    
+    val selectedSimId by callViewModel.selectedSimId.collectAsState()
+    val selectedSimCarrier by callViewModel.selectedSimCarrier.collectAsState()
+    val selectedSimDisplayName by callViewModel.selectedSimDisplayName.collectAsState()
+    val selectedSimPhoneNumber by callViewModel.selectedSimPhoneNumber.collectAsState()
 
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
@@ -56,7 +61,18 @@ fun DashboardScreen(
         }
         previousSyncingState = isSyncing
     }
-    
+
+    val activeFilter by callViewModel.callTypeFilter.collectAsState()
+
+    val filterOptions = listOf(
+        "ALL" to "All",
+        "INCOMING" to "Incoming",
+        "OUTGOING" to "Outgoing",
+        "MISSED" to "Missed",
+        "REJECTED" to "Rejected",
+        "RECORDED" to "Recorded"
+    )
+
     val recentCalls = callLogs.take(3)
     
     // Find unique favorite contacts (group by number)
@@ -78,15 +94,24 @@ fun DashboardScreen(
         ) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = "Call Intelligence",
+                    text = if (deviceOwnerName.isNotEmpty()) "Hello, $deviceOwnerName" else "Call Intelligence",
                     style = MaterialTheme.typography.headlineMedium,
                     fontWeight = FontWeight.Bold,
                     color = Slate50
                 )
+                
+                val simLabel = if (selectedSimDisplayName.isNotEmpty()) selectedSimDisplayName else selectedSimCarrier
+                val simDetailText = if (selectedSimId != android.telephony.SubscriptionManager.INVALID_SUBSCRIPTION_ID) {
+                    "Business SIM: $simLabel ($selectedSimPhoneNumber)"
+                } else {
+                    "SIM Config required - Sync suspended"
+                }
+                
                 Text(
-                    text = "Welcome to CallVault Dashboard",
+                    text = simDetailText,
                     style = MaterialTheme.typography.bodyMedium,
-                    color = Slate400
+                    color = if (selectedSimId != android.telephony.SubscriptionManager.INVALID_SUBSCRIPTION_ID) Teal300 else Red500,
+                    fontWeight = FontWeight.Medium
                 )
             }
             Spacer(modifier = Modifier.width(8.dp))
@@ -229,6 +254,34 @@ fun DashboardScreen(
                     color = Teal300,
                     modifier = Modifier.clickable { onViewAllLogsClick() }
                 )
+            }
+
+            // Filter chips row
+            LazyRow(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                contentPadding = PaddingValues(vertical = 4.dp)
+            ) {
+                items(filterOptions) { (key, label) ->
+                    val isSelected = activeFilter == key
+                    @OptIn(ExperimentalMaterial3Api::class)
+                    FilterChip(
+                        selected = isSelected,
+                        onClick = { callViewModel.setCallTypeFilter(key) },
+                        label = { Text(label) },
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = MaterialTheme.colorScheme.primary,
+                            selectedLabelColor = MaterialTheme.colorScheme.onPrimary,
+                            containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                            labelColor = MaterialTheme.colorScheme.onSurfaceVariant
+                        ),
+                        border = FilterChipDefaults.filterChipBorder(
+                            borderColor = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
+                            enabled = true,
+                            selected = isSelected
+                        )
+                    )
+                }
             }
 
             if (recentCalls.isEmpty()) {

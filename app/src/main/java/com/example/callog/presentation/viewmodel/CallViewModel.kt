@@ -3,7 +3,9 @@ package com.example.callog.presentation.viewmodel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.callog.data.local.dao.ReminderWithCall
+import com.example.callog.data.local.dao.SalesCallDao
 import com.example.callog.data.local.entity.ReminderEntity
+import com.example.callog.data.local.entity.SalesCallEntity
 import com.example.callog.data.provider.ContactDto
 import com.example.callog.domain.model.CallLogEntry
 import com.example.callog.domain.model.FirebaseConfig
@@ -16,6 +18,8 @@ import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
+import com.example.callog.data.local.dao.SyncLogDao
+import com.example.callog.data.local.entity.SyncLogEntity
 import com.example.callog.domain.service.SyncManager
 
 @HiltViewModel
@@ -35,8 +39,31 @@ class CallViewModel @Inject constructor(
     private val repository: CallRepository, // For direct contacts lookup
     private val firestoreRepository: FirestoreRepository,
     private val recordingRepository: com.example.callog.domain.repository.RecordingRepository,
-    private val syncManager: SyncManager
+    private val syncManager: SyncManager,
+    private val salesCallDao: SalesCallDao,
+    private val syncLogDao: SyncLogDao,
+    private val simManager: com.example.callog.data.provider.SimManager
 ) : ViewModel() {
+
+    val syncLogs: StateFlow<List<SyncLogEntity>> = syncLogDao.getAllLogsFlow()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val allSalesCalls: StateFlow<List<SalesCallEntity>> = salesCallDao.getAllSalesCalls()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    fun clearSyncLogs() {
+        viewModelScope.launch {
+            syncLogDao.clearLogs()
+        }
+    }
+
+    fun forceLogsCleanup() {
+        viewModelScope.launch {
+            val cutoff = System.currentTimeMillis() - (30L * 24 * 60 * 60 * 1000)
+            syncLogDao.deleteLogsOlderThan(cutoff)
+            syncLogDao.trimLogs(5000)
+        }
+    }
 
     private val _searchQuery = MutableStateFlow("")
     val searchQuery = _searchQuery.asStateFlow()
@@ -61,6 +88,12 @@ class CallViewModel @Inject constructor(
 
     private val _devicePhoneNumber = MutableStateFlow("")
     val devicePhoneNumber = _devicePhoneNumber.asStateFlow()
+
+    private val _deviceOwnerName = MutableStateFlow("")
+    val deviceOwnerName = _deviceOwnerName.asStateFlow()
+
+    private val _customRecordingPath = MutableStateFlow("")
+    val customRecordingPath = _customRecordingPath.asStateFlow()
 
     private val _connectionStatus = MutableStateFlow<String?>(null) // null/idle, "TESTING", "SUCCESS", "FAILED:<error>"
     val connectionStatus = _connectionStatus.asStateFlow()
@@ -93,15 +126,145 @@ class CallViewModel @Inject constructor(
     val pendingReminders: StateFlow<List<ReminderWithCall>> = getPendingRemindersUseCase()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    // SIM State Flows
+    private val _activeSims = MutableStateFlow<List<com.example.callog.data.provider.SimInfo>>(emptyList())
+    val activeSims = _activeSims.asStateFlow()
+
+    private val _selectedSimId = MutableStateFlow(android.telephony.SubscriptionManager.INVALID_SUBSCRIPTION_ID)
+    val selectedSimId = _selectedSimId.asStateFlow()
+
+    private val _selectedSimSlot = MutableStateFlow(-1)
+    val selectedSimSlot = _selectedSimSlot.asStateFlow()
+
+    private val _selectedSimCarrier = MutableStateFlow("")
+    val selectedSimCarrier = _selectedSimCarrier.asStateFlow()
+
+    private val _selectedSimDisplayName = MutableStateFlow("")
+    val selectedSimDisplayName = _selectedSimDisplayName.asStateFlow()
+
+    private val _selectedSimPhoneNumber = MutableStateFlow("")
+    val selectedSimPhoneNumber = _selectedSimPhoneNumber.asStateFlow()
+
+    private val _detectionMethod = MutableStateFlow("MANUAL")
+    val detectionMethod = _detectionMethod.asStateFlow()
+
+    private val _isSimChangeRequired = MutableStateFlow(false)
+    val isSimChangeRequired = _isSimChangeRequired.asStateFlow()
+
+    private val _isMappingSupported = MutableStateFlow(false)
+    val isMappingSupported = _isMappingSupported.asStateFlow()
+
     init {
         loadContacts()
         loadFirebaseConfig()
         syncLogs()
+        populateSalesCalls()
+        loadSimConfigurations()
+    }
+
+    fun loadSimConfigurations() {
+        viewModelScope.launch {
+            if (simManager.hasPermission()) {
+                simManager.checkSimChanges()
+                simManager.checkPhoneAccountMappingSupport()
+                
+                _activeSims.value = simManager.getActiveSims()
+                _selectedSimId.value = simManager.getSelectedSubscriptionId()
+                _selectedSimSlot.value = simManager.getSelectedSlotIndex()
+                _selectedSimCarrier.value = simManager.getSelectedCarrierName()
+                _selectedSimDisplayName.value = simManager.getSelectedDisplayName()
+                _selectedSimPhoneNumber.value = simManager.getSelectedPhoneNumber()
+                _detectionMethod.value = simManager.getDetectionMethod()
+                _isMappingSupported.value = simManager.isMappingSupported()
+
+                val hasSims = _activeSims.value.isNotEmpty()
+                val isNotConfigured = _selectedSimId.value == android.telephony.SubscriptionManager.INVALID_SUBSCRIPTION_ID
+                val isSuspended = simManager.isSyncSuspendedDueToSimChange()
+                
+                // The setup wizard is mandatory if there is any SIM card present and it is not configured yet
+                _isSimChangeRequired.value = isSuspended || (hasSims && isNotConfigured)
+            } else {
+                _isSimChangeRequired.value = false
+            }
+        }
+    }
+
+    fun saveBusinessSim(sim: com.example.callog.data.provider.SimInfo) {
+        simManager.saveSelectedSim(sim)
+        _selectedSimId.value = sim.subscriptionId
+        _selectedSimSlot.value = sim.slotIndex
+        _selectedSimCarrier.value = sim.carrierName
+        _selectedSimDisplayName.value = sim.displayName
+        _selectedSimPhoneNumber.value = sim.phoneNumber
+        _isSimChangeRequired.value = false
+        // Trigger immediate sync
+        syncLogs()
+    }
+
+    fun saveSyncAll() {
+        simManager.setDetectionMethod("SYNC_ALL")
+        simManager.clearSimChangeSuspension()
+        _detectionMethod.value = "SYNC_ALL"
+        _isSimChangeRequired.value = false
+        syncLogs()
+    }
+
+    fun saveDetectionMethod(method: String) {
+        simManager.setDetectionMethod(method)
+        _detectionMethod.value = method
+        loadSimConfigurations()
+    }
+
+    fun dismissSimChangeRequired() {
+        simManager.clearSimChangeSuspension()
+        _isSimChangeRequired.value = false
+    }
+
+    fun triggerSimCapabilityCheck() {
+        viewModelScope.launch {
+            val supported = simManager.checkPhoneAccountMappingSupport()
+            _isMappingSupported.value = supported
+        }
     }
 
     private fun loadFirebaseConfig() {
         _firebaseConfig.value = firestoreRepository.getFirebaseConfig()
         _devicePhoneNumber.value = firestoreRepository.getDevicePhoneNumber()
+        _deviceOwnerName.value = firestoreRepository.getDeviceOwnerName()
+        _customRecordingPath.value = firestoreRepository.getCustomRecordingPath()
+    }
+
+    /**
+     * Populates the sales_calls table from the existing local calls DB.
+     * Runs immediately on ViewModel init — no network required.
+     * Only inserts rows that don't already exist (checked by callId uniqueness).
+     */
+    fun populateSalesCalls() {
+        viewModelScope.launch {
+            val salespersonPhoneRaw = firestoreRepository.getDevicePhoneNumber()
+            val salespersonName  = firestoreRepository.getDeviceOwnerName()
+            if (salespersonPhoneRaw.isEmpty()) return@launch  // device not configured yet
+
+            val salespersonPhone = com.example.callog.data.repository.FirestoreRepositoryImpl.normalizePhoneNumber(salespersonPhoneRaw)
+            val allCalls = repository.getAllCallsSnapshot()
+            for (call in allCalls) {
+                val existing = salesCallDao.getSalesCallByCallId(call.id)
+                if (existing == null) {
+                    salesCallDao.insertSalesCall(
+                        SalesCallEntity(
+                            salespersonPhone = salespersonPhone,
+                            salespersonName  = salespersonName,
+                            buyerPhone       = call.number,
+                            buyerName        = call.name,
+                            callType         = call.callType,
+                            callId           = call.id,
+                            duration         = call.duration,
+                            createdAt        = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.getDefault()).format(java.util.Date(call.timestamp))
+                        )
+                    )
+                }
+            }
+        }
     }
 
     fun saveFirebaseConfig(config: FirebaseConfig?) {
@@ -113,6 +276,17 @@ class CallViewModel @Inject constructor(
     fun saveDevicePhoneNumber(number: String) {
         firestoreRepository.saveDevicePhoneNumber(number)
         _devicePhoneNumber.value = number
+        populateSalesCalls()  // backfill existing calls now that device is identified
+    }
+
+    fun saveDeviceOwnerName(name: String) {
+        firestoreRepository.saveDeviceOwnerName(name)
+        _deviceOwnerName.value = name
+    }
+
+    fun saveCustomRecordingPath(path: String) {
+        firestoreRepository.saveCustomRecordingPath(path)
+        _customRecordingPath.value = path
     }
 
     fun testAndSaveFirebaseConfig(config: FirebaseConfig) {
@@ -153,6 +327,7 @@ class CallViewModel @Inject constructor(
     fun forceReSync() {
         viewModelScope.launch {
             loadContacts()
+            salesCallDao.resetSyncStatus()
             syncManager.forceResetAndSync()
         }
     }
@@ -237,6 +412,14 @@ class CallViewModel @Inject constructor(
     }
 
     // GCS Recording Uploads
+    fun associateAndUploadRecording(callId: Long, localPath: String, onResult: (Result<String>) -> Unit) {
+        viewModelScope.launch {
+            recordingRepository.associateRecording(callId, localPath)
+            val result = recordingRepository.uploadRecording(callId)
+            onResult(result)
+        }
+    }
+
     fun uploadRecording(callId: Long, onResult: (Result<String>) -> Unit) {
         viewModelScope.launch {
             val result = recordingRepository.uploadRecording(callId)

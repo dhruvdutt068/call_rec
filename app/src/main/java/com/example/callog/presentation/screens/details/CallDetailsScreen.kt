@@ -26,6 +26,8 @@ import com.example.callog.core.extensions.toDurationString
 import com.example.callog.presentation.components.*
 import com.example.callog.presentation.theme.*
 import com.example.callog.presentation.viewmodel.CallViewModel
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -120,6 +122,35 @@ fun CallDetailsScreen(
         // State for scheduling reminder dialog
         var showReminderDialog by remember { mutableStateOf(false) }
         var reminderNote by remember { mutableStateOf("") }
+
+        var isUploadingManual by remember { mutableStateOf(false) }
+        val audioPickerLauncher = rememberLauncherForActivityResult(
+            contract = ActivityResultContracts.GetContent()
+        ) { uri ->
+            if (uri != null) {
+                isUploadingManual = true
+                coroutineScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+                    try {
+                        val cacheFile = java.io.File(
+                            context.cacheDir,
+                            "manual_rec_${call.id}_${System.currentTimeMillis()}.mp3"
+                        )
+                        context.contentResolver.openInputStream(uri)?.use { input ->
+                            cacheFile.outputStream().use { output ->
+                                input.copyTo(output)
+                            }
+                        }
+                        
+                        viewModel.associateAndUploadRecording(call.id, cacheFile.absolutePath) { result ->
+                            isUploadingManual = false
+                        }
+                    } catch (e: Exception) {
+                        android.util.Log.e("CallDetailsScreen", "Failed to copy picked audio file", e)
+                        isUploadingManual = false
+                    }
+                }
+            }
+        }
 
         Scaffold(
             topBar = {
@@ -460,7 +491,7 @@ fun CallDetailsScreen(
                                                     isActionInProgress = true
                                                     viewModel.deleteRecording(call.id) {
                                                         isActionInProgress = false
-                                                    }
+                                                     }
                                                 },
                                                 enabled = !isActionInProgress,
                                                 modifier = Modifier
@@ -538,6 +569,61 @@ fun CallDetailsScreen(
                             }
                         }
                     }
+                } else {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text(
+                            text = "Call Recording",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = Slate50
+                        )
+                        
+                        GlassyCard(modifier = Modifier.fillMaxWidth()) {
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                modifier = Modifier.padding(16.dp),
+                                verticalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                Text(
+                                    text = "No recording file associated with this call log.",
+                                    color = Slate400,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    textAlign = TextAlign.Center
+                                )
+                                
+                                Button(
+                                    onClick = {
+                                        if (!isUploadingManual) {
+                                            audioPickerLauncher.launch("audio/*")
+                                        }
+                                    },
+                                    enabled = !isUploadingManual,
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = Teal500,
+                                        contentColor = Slate50
+                                    )
+                                ) {
+                                    if (isUploadingManual) {
+                                        CircularProgressIndicator(
+                                            modifier = Modifier.size(20.dp),
+                                            strokeWidth = 2.dp,
+                                            color = Slate50
+                                        )
+                                    } else {
+                                        Icon(
+                                            imageVector = Icons.Default.CloudUpload,
+                                            contentDescription = null
+                                        )
+                                    }
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(
+                                        text = if (isUploadingManual) "Uploading..." else "Upload Recording",
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                            }
+                        }
+                    }
                 }
 
                 // Notes input field
@@ -606,7 +692,7 @@ fun CallDetailsScreen(
                         text = "Call Tags",
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
-                        color = Slate50
+                        color = MaterialTheme.colorScheme.onBackground
                     )
 
                     // Current tags layout
@@ -619,16 +705,16 @@ fun CallDetailsScreen(
                             Row(
                                 modifier = Modifier
                                     .clip(RoundedCornerShape(6.dp))
-                                    .background(Teal500.copy(alpha = 0.2f))
+                                    .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.15f))
                                     .padding(horizontal = 8.dp, vertical = 4.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Text(tag, color = Teal300, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
+                                Text(tag, color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
                                 Spacer(modifier = Modifier.width(4.dp))
                                 Icon(
                                     imageVector = Icons.Default.Close,
                                     contentDescription = "Delete",
-                                    tint = Teal300,
+                                    tint = MaterialTheme.colorScheme.primary,
                                     modifier = Modifier
                                         .size(14.dp)
                                         .clickable {
@@ -643,7 +729,7 @@ fun CallDetailsScreen(
                     Spacer(modifier = Modifier.height(4.dp))
 
                     // Preset quick selection tags
-                    Text("Pre-set Categories", color = Slate400, style = MaterialTheme.typography.bodySmall)
+                    Text("Pre-set Categories", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
                     FlowRow(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -654,8 +740,8 @@ fun CallDetailsScreen(
                             Box(
                                 modifier = Modifier
                                     .clip(RoundedCornerShape(8.dp))
-                                    .background(if (isAdded) Teal500 else Slate800)
-                                    .border(1.dp, if (isAdded) Teal300 else Slate700, RoundedCornerShape(8.dp))
+                                    .background(if (isAdded) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant)
+                                    .border(1.dp, if (isAdded) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline, RoundedCornerShape(8.dp))
                                     .clickable {
                                         if (isAdded) {
                                             currentTags.remove(tag)
@@ -668,7 +754,7 @@ fun CallDetailsScreen(
                             ) {
                                 Text(
                                     text = tag,
-                                    color = if (isAdded) Slate50 else Slate400,
+                                    color = if (isAdded) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
                                     style = MaterialTheme.typography.bodySmall,
                                     fontWeight = FontWeight.Medium
                                 )
@@ -686,15 +772,15 @@ fun CallDetailsScreen(
                         OutlinedTextField(
                             value = customTagInput,
                             onValueChange = { customTagInput = it },
-                            placeholder = { Text("Add custom tag...", color = Slate400) },
+                            placeholder = { Text("Add custom tag...", color = MaterialTheme.colorScheme.onSurfaceVariant) },
                             singleLine = true,
                             colors = OutlinedTextFieldDefaults.colors(
-                                focusedContainerColor = Slate800,
-                                unfocusedContainerColor = Slate800,
-                                focusedBorderColor = Teal500,
-                                unfocusedBorderColor = Slate700,
-                                focusedTextColor = Slate50,
-                                unfocusedTextColor = Slate50
+                                focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
+                                unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
+                                focusedBorderColor = MaterialTheme.colorScheme.primary,
+                                unfocusedBorderColor = MaterialTheme.colorScheme.outline,
+                                focusedTextColor = MaterialTheme.colorScheme.onSurface,
+                                unfocusedTextColor = MaterialTheme.colorScheme.onSurface
                             ),
                             shape = RoundedCornerShape(8.dp),
                             modifier = Modifier.weight(1f)
@@ -711,9 +797,9 @@ fun CallDetailsScreen(
                             },
                             modifier = Modifier
                                 .clip(RoundedCornerShape(8.dp))
-                                .background(Teal500)
+                                .background(MaterialTheme.colorScheme.primary)
                         ) {
-                            Icon(Icons.Default.Add, contentDescription = "Add Tag", tint = Slate50)
+                            Icon(Icons.Default.Add, contentDescription = "Add Tag", tint = MaterialTheme.colorScheme.onPrimary)
                         }
                     }
                 }
@@ -725,34 +811,40 @@ fun CallDetailsScreen(
         if (showReminderDialog) {
             AlertDialog(
                 onDismissRequest = { showReminderDialog = false },
-                title = { Text("Schedule Callback Reminder", color = Slate50, fontWeight = FontWeight.Bold) },
+                title = {
+                    Text(
+                        "Schedule Callback Reminder",
+                        color = MaterialTheme.colorScheme.onSurface,
+                        fontWeight = FontWeight.Bold
+                    )
+                },
                 text = {
                     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
                         Text(
                             text = "Set a callback alert for ${call.displayName}. When the timer fires, you will receive a local notification.",
                             style = MaterialTheme.typography.bodyMedium,
-                            color = Slate400
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
 
                         OutlinedTextField(
                             value = reminderNote,
                             onValueChange = { reminderNote = it },
-                            placeholder = { Text("e.g. Discuss contract pricing details...", color = Slate400) },
+                            placeholder = { Text("e.g. Discuss contract pricing details...", color = MaterialTheme.colorScheme.onSurfaceVariant) },
                             singleLine = true,
-                            label = { Text("Reminder Notes", color = Teal300) },
+                            label = { Text("Reminder Notes", color = MaterialTheme.colorScheme.primary) },
                             colors = OutlinedTextFieldDefaults.colors(
-                                focusedContainerColor = Slate800,
-                                unfocusedContainerColor = Slate800,
-                                focusedBorderColor = Teal500,
-                                unfocusedBorderColor = Slate700,
-                                focusedTextColor = Slate50,
-                                unfocusedTextColor = Slate50
+                                focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
+                                unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
+                                focusedBorderColor = MaterialTheme.colorScheme.primary,
+                                unfocusedBorderColor = MaterialTheme.colorScheme.outline,
+                                focusedTextColor = MaterialTheme.colorScheme.onSurface,
+                                unfocusedTextColor = MaterialTheme.colorScheme.onSurface
                             ),
                             shape = RoundedCornerShape(8.dp),
                             modifier = Modifier.fillMaxWidth()
                         )
 
-                        Text("Select Time Delay", color = Slate400, style = MaterialTheme.typography.bodySmall)
+                        Text("Select Time Delay", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
 
                         val presetTimes = listOf(
                             "In 1 min" to 1 * 60 * 1000L,
@@ -774,10 +866,13 @@ fun CallDetailsScreen(
                                         showReminderDialog = false
                                         reminderNote = ""
                                     },
-                                    colors = ButtonDefaults.buttonColors(containerColor = Slate800),
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                                        contentColor = MaterialTheme.colorScheme.primary
+                                    ),
                                     shape = RoundedCornerShape(8.dp)
                                 ) {
-                                    Text(label, color = Teal300, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
+                                    Text(label, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
                                 }
                             }
                         }
@@ -786,10 +881,13 @@ fun CallDetailsScreen(
                 confirmButton = { },
                 dismissButton = {
                     TextButton(onClick = { showReminderDialog = false }) {
-                        Text("Cancel", color = Slate400)
+                        Text("Cancel", color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 },
-                containerColor = Slate800
+                containerColor = MaterialTheme.colorScheme.surface,
+                titleContentColor = MaterialTheme.colorScheme.onSurface,
+                textContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                tonalElevation = 6.dp
             )
         }
     }

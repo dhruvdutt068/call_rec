@@ -12,33 +12,39 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 
 private val DarkColorScheme = darkColorScheme(
-    primary = Color(0xFFF0A878),        // Light warm sienna for readability
-    secondary = Color(0xFFCEC6BE),      // Warm grey secondary
-    tertiary = Color(0xFFE8A0A0),       // Soft dusty rose
-    background = Color(0xFF1E1714),     // Warm dark background
-    surface = Color(0xFF2A201A),        // Warm dark card surface
-    onPrimary = Color(0xFF1E1714),
+    primary = AllSetLavender,           // Soft lavender for dark theme readability
+    secondary = AllSetBlue,
+    tertiary = AllSetTeal,
+    background = AllSetDarkBg,          // #1F1F1F page background
+    surface = Color(0xFF2A2A2E),        // Card surface — slightly lighter than background
+    onPrimary = AllSetDarkBg,
     onSecondary = Color.White,
-    onBackground = Color(0xFFFAF5EE),
-    onSurface = Color(0xFFFAF5EE),
-    surfaceVariant = Color(0xFF3A2E26),
-    onSurfaceVariant = Color(0xFFCEC6BE),
-    outline = Color(0xFF504840)
+    onTertiary = AllSetDarkBg,
+    onBackground = AllSetLightBg,       // Near-white text on dark background
+    onSurface = AllSetLightBg,
+    surfaceVariant = Color(0xFF313135), // Elevated chip/field surface
+    onSurfaceVariant = Color(0xFFBBBBCC), // Muted grey-lavender — readable on dark cards
+    outline = Color(0xFF48484E),
+    secondaryContainer = Color(0xFF3A3A4E), // Subtle tinted container for secondary buttons
+    onSecondaryContainer = AllSetLavender
 )
 
 private val LightColorScheme = lightColorScheme(
-    primary = SaharaBurntSienna,
-    secondary = SaharaWarmGray,
-    tertiary = SaharaDustyRose,
-    background = SaharaWarmLinen,
-    surface = SaharaWarmLinen,
+    primary = AllSetBlue,
+    secondary = AllSetLavender,
+    tertiary = AllSetTeal,
+    background = AllSetLightBg,         // #F6F7FB page background
+    surface = Color(0xFFFFFFFF),        // White card surface — visible against background
     onPrimary = Color.White,
-    onSecondary = Color.White,
-    onBackground = SaharaWarmGrayDark,
-    onSurface = SaharaWarmGrayDark,
-    surfaceVariant = SaharaWarmGrayMedium,
-    onSurfaceVariant = SaharaWarmGray,
-    outline = SaharaBorder
+    onSecondary = AllSetDarkBg,
+    onTertiary = Color.White,
+    onBackground = AllSetDarkBg,        // Near-black text on light background
+    onSurface = AllSetDarkBg,
+    surfaceVariant = Color(0xFFE8EAF2), // Slightly tinted chip/field surface
+    onSurfaceVariant = Color(0xFF5E607E), // Medium grey text on light variant
+    outline = AllSetBorder,
+    secondaryContainer = Color(0xFFE8EAFF), // Light blue-purple tinted container
+    onSecondaryContainer = AllSetBlue
 )
 
 @Composable

@@ -8,4 +8,5 @@ interface RecordingRepository {
     suspend fun retryFailedUploads()
     suspend fun updateFirestore(callId: Long, cloudPath: String, downloadUrl: String = ""): Boolean
     suspend fun deleteRecording(callId: Long): Boolean
+    suspend fun associateRecording(callId: Long, localPath: String)
 }

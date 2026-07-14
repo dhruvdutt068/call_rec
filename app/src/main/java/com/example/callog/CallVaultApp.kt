@@ -4,12 +4,20 @@ import android.app.Application
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.os.Build
+import com.example.callog.core.diagnostics.DeveloperLogger
+import com.example.callog.data.local.dao.SyncLogDao
 import dagger.hilt.android.HiltAndroidApp
+import javax.inject.Inject
 
 @HiltAndroidApp
 class CallVaultApp : Application() {
+
+    @Inject
+    lateinit var syncLogDao: SyncLogDao
+
     override fun onCreate() {
         super.onCreate()
+        DeveloperLogger.init(syncLogDao, this)
         createNotificationChannels()
     }
 

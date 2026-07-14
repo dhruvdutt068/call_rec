@@ -1,6 +1,7 @@
 package com.example.callog.domain.repository
 
 import com.example.callog.data.local.dao.ReminderWithCall
+import com.example.callog.data.local.entity.CallEntity
 import com.example.callog.data.local.entity.ReminderEntity
 import com.example.callog.data.provider.ContactDto
 import com.example.callog.domain.model.CallLogEntry
@@ -13,6 +14,7 @@ interface CallRepository {
     fun getCallLogByIdFlow(id: Long): Flow<CallLogEntry?>
     
     suspend fun syncCallLogs()
+    suspend fun getAllCallsSnapshot(): List<CallEntity>
     suspend fun getContacts(): List<ContactDto>
     
     suspend fun updateNotes(callId: Long, notes: String?)

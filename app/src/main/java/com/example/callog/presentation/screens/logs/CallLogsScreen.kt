@@ -84,19 +84,19 @@ fun CallLogsScreen(
                 enabled = !isSyncing,
                 modifier = Modifier
                     .clip(RoundedCornerShape(12.dp))
-                    .background(Slate800)
+                    .background(MaterialTheme.colorScheme.surfaceVariant)
             ) {
                 if (isSyncing) {
                     CircularProgressIndicator(
                         modifier = Modifier.size(20.dp),
                         strokeWidth = 2.dp,
-                        color = Teal300
+                        color = MaterialTheme.colorScheme.primary
                     )
                 } else {
                     Icon(
                         imageVector = Icons.Default.Refresh,
                         contentDescription = "Sync Logs",
-                        tint = Teal300
+                        tint = MaterialTheme.colorScheme.primary
                     )
                 }
             }
@@ -120,13 +120,13 @@ fun CallLogsScreen(
                         onClick = { viewModel.setCallTypeFilter(key) },
                         label = { Text(label) },
                         colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = Teal500,
-                            selectedLabelColor = Slate50,
-                            containerColor = Slate800,
-                            labelColor = Slate400
+                            selectedContainerColor = MaterialTheme.colorScheme.primary,
+                            selectedLabelColor = MaterialTheme.colorScheme.onPrimary,
+                            containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                            labelColor = MaterialTheme.colorScheme.onSurfaceVariant
                         ),
                         border = FilterChipDefaults.filterChipBorder(
-                            borderColor = if (isSelected) Teal300 else Slate700,
+                            borderColor = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
                             enabled = true,
                             selected = isSelected
                         )
@@ -139,7 +139,7 @@ fun CallLogsScreen(
                 Row(
                     modifier = Modifier
                         .clip(RoundedCornerShape(8.dp))
-                        .background(Slate800)
+                        .background(MaterialTheme.colorScheme.surfaceVariant)
                         .clickable { showSortMenu = true }
                         .padding(horizontal = 8.dp, vertical = 6.dp),
                     verticalAlignment = Alignment.CenterVertically
@@ -147,7 +147,7 @@ fun CallLogsScreen(
                     Icon(
                         imageVector = Icons.Default.FilterList,
                         contentDescription = "Sort",
-                        tint = Teal300,
+                        tint = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.size(16.dp)
                     )
                     Spacer(modifier = Modifier.width(4.dp))
@@ -155,12 +155,12 @@ fun CallLogsScreen(
                         text = sortOptions.firstOrNull { it.first == activeSort }?.second?.split(" ")?.first() ?: "Sort",
                         style = MaterialTheme.typography.bodySmall,
                         fontWeight = FontWeight.Bold,
-                        color = Slate50
+                        color = MaterialTheme.colorScheme.onSurface
                     )
                     Icon(
                         imageVector = Icons.Default.ArrowDropDown,
                         contentDescription = null,
-                        tint = Slate400,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.size(16.dp)
                     )
                 }
@@ -168,14 +168,14 @@ fun CallLogsScreen(
                 DropdownMenu(
                     expanded = showSortMenu,
                     onDismissRequest = { showSortMenu = false },
-                    modifier = Modifier.background(Slate800)
+                    modifier = Modifier.background(MaterialTheme.colorScheme.surfaceVariant)
                 ) {
                     sortOptions.forEach { (key, label) ->
                         DropdownMenuItem(
                             text = { 
                                 Text(
                                     text = label, 
-                                    color = if (activeSort == key) Teal300 else Slate50,
+                                    color = if (activeSort == key) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
                                     fontWeight = if (activeSort == key) FontWeight.Bold else FontWeight.Normal
                                 ) 
                             },

@@ -274,6 +274,10 @@ fun WeeklyBarChart(
     val days = listOf("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
     val maxVal = (data.values.maxOrNull() ?: 1).coerceAtLeast(1)
 
+    // Resolve composable color getters outside canvas draw scope
+    val colorTeal500 = Teal500
+    val colorTeal300 = Teal300
+
     Canvas(modifier = modifier) {
         val textHeight = 24.dp.toPx()
         val canvasHeight = size.height - textHeight
@@ -290,7 +294,7 @@ fun WeeklyBarChart(
 
             // Draw bar
             drawRoundRect(
-                color = Teal500,
+                color = colorTeal500,
                 topLeft = Offset(x, y),
                 size = Size(barWidth, barHeight),
                 cornerRadius = androidx.compose.ui.geometry.CornerRadius(4.dp.toPx(), 4.dp.toPx())
@@ -301,7 +305,7 @@ fun WeeklyBarChart(
             // As a nice fallback, we'll draw a small dot under the bar if count > 0, indicating value presence
             if (count > 0) {
                 drawCircle(
-                    color = Teal300,
+                    color = colorTeal300,
                     radius = 3.dp.toPx(),
                     center = Offset(x + barWidth / 2, y - 6.dp.toPx())
                 )
@@ -354,6 +358,12 @@ fun HourlyActivityLineChart(
     }
     
     val maxVal = blockValues.maxOrNull()?.coerceAtLeast(1) ?: 1
+    
+    // Resolve dynamic colors outside Canvas drawing scope
+    val colorTeal500 = Teal500
+    val colorTeal300 = Teal300
+    val colorAmber500 = Amber500
+    val colorSlate800 = Slate800
 
     Canvas(modifier = modifier) {
         val points: List<Offset> = blockValues.mapIndexed { index: Int, value: Int ->
@@ -389,26 +399,26 @@ fun HourlyActivityLineChart(
         drawPath(
             path = fillPath,
             brush = Brush.verticalGradient(
-                colors = listOf(Teal500.copy(alpha = 0.35f), Color.Transparent)
+                colors = listOf(colorTeal500.copy(alpha = 0.35f), Color.Transparent)
             )
         )
 
         // Draw Line path
         drawPath(
             path = path,
-            color = Teal300,
+            color = colorTeal300,
             style = Stroke(width = 3.dp.toPx())
         )
 
         // Draw points
         points.forEach { point: Offset ->
             drawCircle(
-                color = Amber500,
+                color = colorAmber500,
                 radius = 5.dp.toPx(),
                 center = point
             )
             drawCircle(
-                color = Slate800,
+                color = colorSlate800,
                 radius = 3.dp.toPx(),
                 center = point
             )

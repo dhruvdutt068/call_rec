@@ -50,12 +50,13 @@ class RecordingRepositoryImpl @Inject constructor(
             } else {
                 if (FirebaseApp.getApps(context).isEmpty()) {
                     val options = FirebaseOptions.Builder()
-                        .setApplicationId("1:666477971024:android:4cbefd56ddee708ab07355")
-                        .setProjectId("restaurant-manager-185bd")
+                        .setApplicationId("1:799427430422:android:e0f5737f12b8b9cbb20d37")
+                        .setProjectId("allset-491218")
+                        .setApiKey("AIzaSyBtlY7EoO6PgPUCMjNR55K88H2v665qQgQ")
                         .build()
                     FirebaseApp.initializeApp(context, options)
                 }
-                FirebaseStorage.getInstance()
+                FirebaseStorage.getInstance("gs://allset_calllogs_bucket")
             }
         } catch (e: Exception) {
             Log.e(TAG, "Failed to initialize Firebase Storage", e)
@@ -65,7 +66,7 @@ class RecordingRepositoryImpl @Inject constructor(
 
     override suspend fun scanRecordings() = withContext(Dispatchers.IO) {
         try {
-            val recordings = recordingScanner.scanRecordings()
+            val recordings = recordingScanner.scanRecordings().toMutableList()
             if (recordings.isEmpty()) return@withContext
 
             val dbCalls = callDao.getAllCalls()
@@ -100,12 +101,13 @@ class RecordingRepositoryImpl @Inject constructor(
                             )
                         }
                         val durationMs = call.duration * 1000L
-                        val timeMatch = rec.timestamp >= (call.timestamp - 3600000L) && 
-                                        rec.timestamp <= (call.timestamp + durationMs + 3600000L)
+                        val timeMatch = rec.timestamp >= (call.timestamp - 300000L) && 
+                                        rec.timestamp <= (call.timestamp + durationMs + 300000L)
                         match && timeMatch
                     }
 
                     if (matchingRec != null) {
+                        recordings.remove(matchingRec)
                         callDao.updateCall(
                             call.copy(
                                 recordingPath = matchingRec.filePath,
@@ -131,6 +133,33 @@ class RecordingRepositoryImpl @Inject constructor(
             return@withContext Result.success(call.recordingCloudPath)
         }
 
+        // Check if recording already exists in Firestore metadata to avoid duplicate upload
+        try {
+            val cleanNumber = FirestoreRepositoryImpl.normalizePhoneNumber(call.number)
+            val firestoreType = FirestoreRepositoryImpl.getFirestoreCallType(call.callType)
+            val remoteMetadata = firestoreService.getCallMetadata(cleanNumber, firestoreType, callId.toString())
+            if (remoteMetadata != null) {
+                val hasRec = remoteMetadata["hasRecording"] as? Boolean ?: false
+                val remoteRecUrl = remoteMetadata["recordingUrl"] as? String ?: ""
+                val remoteRecPath = remoteMetadata["recordingPath"] as? String ?: ""
+                
+                if (hasRec && remoteRecUrl.isNotEmpty() && remoteRecPath.isNotEmpty()) {
+                    Log.i(TAG, "Recording already exists in Firestore for call $callId. Skipping upload and reusing: $remoteRecPath")
+                    callDao.updateCall(
+                        call.copy(
+                            recordingCloudPath = remoteRecPath,
+                            recordingUrl = remoteRecUrl,
+                            recordingUploadStatus = "SUCCESS",
+                            recordingUploadedAt = System.currentTimeMillis()
+                        )
+                    )
+                    return@withContext Result.success(remoteRecPath)
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error checking remote metadata in uploadRecording", e)
+        }
+
         val localPath = call.recordingLocalPath ?: call.recordingPath
         if (localPath.isNullOrEmpty()) {
             return@withContext Result.failure(Exception("No local recording path found for call: $callId"))
@@ -153,12 +182,11 @@ class RecordingRepositoryImpl @Inject constructor(
             val month = SimpleDateFormat("MM", Locale.US).format(date)
             val day = SimpleDateFormat("dd", Locale.US).format(date)
 
-            val androidId = android.provider.Settings.Secure.getString(context.contentResolver, android.provider.Settings.Secure.ANDROID_ID) ?: "unknown_device"
-            val rawDeviceId = "${android.os.Build.MANUFACTURER}_${android.os.Build.MODEL}_$androidId"
-            val deviceId = rawDeviceId.lowercase().replace(Regex("[^a-z0-9_]"), "_")
+            val devicePhone = firestoreService.getDevicePhoneNumber().ifEmpty { "unknown_device" }
+            val normalizedDevicePhone = FirestoreRepositoryImpl.normalizePhoneNumber(devicePhone)
 
             val extension = file.extension.ifEmpty { "mp3" }
-            val remotePath = "devices/$deviceId/$year/$month/$day/call_$callId.$extension"
+            val remotePath = "users/$normalizedDevicePhone/recordings/$year/$month/$day/call_$callId.$extension"
 
             Log.i(TAG, "Starting GCS upload to path: $remotePath")
             val ref = storageInstance.reference.child(remotePath)
@@ -262,6 +290,22 @@ class RecordingRepositoryImpl @Inject constructor(
         } catch (e: Exception) {
             Log.e(TAG, "Error deleting call recording $callId from GCS", e)
             false
+        }
+    }
+
+    override suspend fun associateRecording(callId: Long, localPath: String) {
+        withContext(Dispatchers.IO) {
+            val call = callDao.getCallById(callId)
+            if (call != null) {
+                callDao.updateCall(
+                    call.copy(
+                        recordingPath = localPath,
+                        recordingLocalPath = localPath,
+                        recordingUploadStatus = "PENDING"
+                    )
+                )
+                Log.i(TAG, "Manually associated recording file $localPath with call $callId")
+            }
         }
     }
 

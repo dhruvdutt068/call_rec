@@ -5,6 +5,9 @@ import androidx.room.Room
 import com.example.callog.core.constants.Constants
 import com.example.callog.data.local.dao.CallDao
 import com.example.callog.data.local.dao.ReminderDao
+import com.example.callog.data.local.dao.SalesCallDao
+import com.example.callog.data.local.dao.TracebackDao
+import com.example.callog.data.local.dao.SyncLogDao
 import com.example.callog.data.local.database.CallVaultDatabase
 import dagger.Module
 import dagger.Provides
@@ -41,7 +44,7 @@ object DatabaseModule {
         ).addMigrations(MIGRATION_5_6)
          .fallbackToDestructiveMigration()
          .build()
-    }
+     }
 
     @Provides
     fun provideCallDao(db: CallVaultDatabase): CallDao {
@@ -51,5 +54,20 @@ object DatabaseModule {
     @Provides
     fun provideReminderDao(db: CallVaultDatabase): ReminderDao {
         return db.reminderDao()
+    }
+
+    @Provides
+    fun provideTracebackDao(db: CallVaultDatabase): TracebackDao {
+        return db.tracebackDao()
+    }
+
+    @Provides
+    fun provideSalesCallDao(db: CallVaultDatabase): SalesCallDao {
+        return db.salesCallDao()
+    }
+
+    @Provides
+    fun provideSyncLogDao(db: CallVaultDatabase): SyncLogDao {
+        return db.syncLogDao()
     }
 }

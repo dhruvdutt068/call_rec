@@ -37,8 +37,8 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         
-        // Cancel any previously scheduled background periodic sync to prevent running in background
-        syncManager.cancelPeriodicSync()
+        // Schedule periodic background sync to run every 15 minutes in the background
+        syncManager.schedulePeriodicSync(15)
 
         // Trigger an immediate sync on app launch
         syncManager.startSync()

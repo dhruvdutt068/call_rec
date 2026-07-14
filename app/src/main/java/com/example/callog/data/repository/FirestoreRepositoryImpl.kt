@@ -2,7 +2,9 @@ package com.example.callog.data.repository
 
 import android.util.Log
 import com.example.callog.data.local.dao.CallDao
+import com.example.callog.data.local.dao.TracebackDao
 import com.example.callog.data.local.entity.CallEntity
+import com.example.callog.data.local.entity.TracebackEntity
 import com.example.callog.data.provider.ContactDto
 import com.example.callog.data.provider.ContactsProvider
 import com.example.callog.data.remote.FirestoreService
@@ -21,7 +23,8 @@ import javax.inject.Singleton
 class FirestoreRepositoryImpl @Inject constructor(
     private val callDao: CallDao,
     private val firestoreService: FirestoreService,
-    private val contactsProvider: ContactsProvider
+    private val contactsProvider: ContactsProvider,
+    private val tracebackDao: TracebackDao
 ) : FirestoreRepository {
 
     private val TAG = "FirestoreRepository"
@@ -57,6 +60,7 @@ class FirestoreRepositoryImpl @Inject constructor(
         val success = firestoreService.uploadCallMetadata(normalizedNumber, firestoreType, call.id.toString(), metadata)
         if (success) {
             callDao.updateSyncStatus(call.id, "SYNCED")
+            insertTraceback(call, contactName)
         } else {
             callDao.updateSyncStatus(call.id, "FAILED")
         }
@@ -74,6 +78,7 @@ class FirestoreRepositoryImpl @Inject constructor(
         val success = firestoreService.updateCallMetadata(normalizedNumber, firestoreType, call.id.toString(), metadata)
         if (success) {
             callDao.updateSyncStatus(call.id, "SYNCED")
+            insertTraceback(call, contactName)
         } else {
             callDao.updateSyncStatus(call.id, "FAILED")
         }
@@ -140,18 +145,21 @@ class FirestoreRepositoryImpl @Inject constructor(
                             val success = firestoreService.uploadCallMetadata(normalizedNumber, firestoreType, call.id.toString(), updatedMetadata)
                             if (success) {
                                 callDao.updateSyncStatus(call.id, "SYNCED")
+                                insertTraceback(call, contactName)
                             } else {
                                 callDao.updateSyncStatus(call.id, "FAILED")
                             }
                         } else {
                             Log.i(TAG, "Metadata for call ${call.id} is already identical in Firestore. Skipping upload.")
                             callDao.updateSyncStatus(call.id, "SYNCED")
+                            insertTraceback(call, contactName)
                         }
                     } else {
                         // Error fetching metadata, retry upload
                         val success = firestoreService.uploadCallMetadata(normalizedNumber, firestoreType, call.id.toString(), buildMetadataMap(call, contactName))
                         if (success) {
                             callDao.updateSyncStatus(call.id, "SYNCED")
+                            insertTraceback(call, contactName)
                         } else {
                             callDao.updateSyncStatus(call.id, "FAILED")
                         }
@@ -161,6 +169,7 @@ class FirestoreRepositoryImpl @Inject constructor(
                     val success = firestoreService.uploadCallMetadata(normalizedNumber, firestoreType, call.id.toString(), buildMetadataMap(call, contactName))
                     if (success) {
                         callDao.updateSyncStatus(call.id, "SYNCED")
+                        insertTraceback(call, contactName)
                     } else {
                         callDao.updateSyncStatus(call.id, "FAILED")
                     }
@@ -177,7 +186,13 @@ class FirestoreRepositoryImpl @Inject constructor(
 
     private fun buildMetadataMap(call: CallEntity, contactName: String): Map<String, Any> {
         val nowIso = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSSXXX", Locale.US).format(Date())
-        return mapOf(
+        val callTimeIso = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSSXXX", Locale.US).format(Date(call.timestamp))
+        
+        val salespersonPhoneRaw = firestoreService.getDevicePhoneNumber()
+        val salespersonPhone = normalizePhoneNumber(salespersonPhoneRaw)
+        val salespersonName = firestoreService.getDeviceOwnerName()
+
+        val metadata = mutableMapOf<String, Any>(
             "callId" to call.id.toString(),
             "contactName" to contactName,
             "phoneNumber" to call.number,
@@ -190,8 +205,20 @@ class FirestoreRepositoryImpl @Inject constructor(
             "recordingUrl" to (call.recordingUrl ?: ""),
             "syncStatus" to "SYNCED",
             "createdAt" to nowIso,
-            "updatedAt" to nowIso
-        )   
+            "updatedAt" to nowIso,
+            
+            // Salesperson & Buyer fields
+            "salesperson_name" to salespersonName,
+            "salesperson_phone" to salespersonPhone,
+            "buyer_name" to contactName,
+            "buyer_phone" to call.number
+        )
+        if (call.callType.equals("OUTGOING", ignoreCase = true)) {
+            metadata["callMadeAt"] = callTimeIso
+        } else {
+            metadata["callReceivedAt"] = callTimeIso
+        }
+        return metadata
     }
 
     private fun matchContact(callNumber: String, contacts: List<ContactDto>): ContactDto? {
@@ -232,5 +259,42 @@ class FirestoreRepositoryImpl @Inject constructor(
 
     override fun saveDevicePhoneNumber(number: String) {
         firestoreService.saveDevicePhoneNumber(number)
+    }
+
+    override fun getDeviceOwnerName(): String {
+        return firestoreService.getDeviceOwnerName()
+    }
+
+    override fun saveDeviceOwnerName(name: String) {
+        firestoreService.saveDeviceOwnerName(name)
+    }
+
+    override fun getCustomRecordingPath(): String {
+        return firestoreService.getCustomRecordingPath()
+    }
+
+    override fun saveCustomRecordingPath(path: String) {
+        firestoreService.saveCustomRecordingPath(path)
+    }
+
+    private suspend fun insertTraceback(call: CallEntity, contactName: String) {
+        try {
+            val ownerPhone = firestoreService.getDevicePhoneNumber()
+            val ownerName = firestoreService.getDeviceOwnerName()
+            val traceback = TracebackEntity(
+                ownerPhone = ownerPhone,
+                ownerName = ownerName,
+                callerType = call.callType,
+                phoneNumber = call.number,
+                callerName = contactName,
+                hasRecording = (call.recordingPath != null),
+                callLogId = call.id,
+                recordingUrl = call.recordingUrl ?: ""
+            )
+            tracebackDao.insertTraceback(traceback)
+            Log.d(TAG, "Successfully logged traceback entry for call ${call.id} in SQL database.")
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to log traceback for call ${call.id}", e)
+        }
     }
 }

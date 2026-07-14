@@ -31,7 +31,9 @@ class CallLogProvider @Inject constructor(
             CallLog.Calls.CACHED_NAME,
             CallLog.Calls.DATE,
             CallLog.Calls.DURATION,
-            CallLog.Calls.TYPE
+            CallLog.Calls.TYPE,
+            CallLog.Calls.PHONE_ACCOUNT_ID,
+            CallLog.Calls.PHONE_ACCOUNT_COMPONENT_NAME
         )
 
         // Query the content provider
@@ -50,6 +52,8 @@ class CallLogProvider @Inject constructor(
             val dateIdx = c.getColumnIndex(CallLog.Calls.DATE)
             val durationIdx = c.getColumnIndex(CallLog.Calls.DURATION)
             val typeIdx = c.getColumnIndex(CallLog.Calls.TYPE)
+            val phoneAccountIdIdx = c.getColumnIndex(CallLog.Calls.PHONE_ACCOUNT_ID)
+            val phoneAccountComponentIdx = c.getColumnIndex(CallLog.Calls.PHONE_ACCOUNT_COMPONENT_NAME)
 
             var count = 0
             while (c.moveToNext() && count < 500) {
@@ -59,6 +63,8 @@ class CallLogProvider @Inject constructor(
                 val timestamp = if (dateIdx != -1) c.getLong(dateIdx) else 0L
                 val duration = if (durationIdx != -1) c.getInt(durationIdx) else 0
                 val systemType = if (typeIdx != -1) c.getInt(typeIdx) else -1
+                val phoneAccountId = if (phoneAccountIdIdx != -1) c.getString(phoneAccountIdIdx) else null
+                val phoneAccountComponent = if (phoneAccountComponentIdx != -1) c.getString(phoneAccountComponentIdx) else null
                 
                 val callType = when (systemType) {
                     CallLog.Calls.INCOMING_TYPE -> "INCOMING"
@@ -79,6 +85,8 @@ class CallLogProvider @Inject constructor(
                             duration = duration,
                             timestamp = timestamp,
                             callType = callType,
+                            phoneAccountId = phoneAccountId,
+                            phoneAccountComponentName = phoneAccountComponent,
                             recordingPath = null // Resolved later
                         )
                     )

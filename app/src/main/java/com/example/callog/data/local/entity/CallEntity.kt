@@ -19,6 +19,8 @@ data class CallEntity(
     val timestamp: Long, // epoch millisecond
     val callType: String, // INCOMING, OUTGOING, MISSED, REJECTED
     val recordingPath: String?,
+    val phoneAccountId: String? = null,
+    val phoneAccountComponentName: String? = null,
     val isFavorite: Boolean = false,
     val notes: String? = null,
     val tags: String? = null, // Comma-separated list (e.g. "Work,Family")

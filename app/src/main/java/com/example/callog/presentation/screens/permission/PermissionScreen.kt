@@ -14,6 +14,7 @@ import androidx.compose.material.icons.filled.ContactPhone
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Security
+import androidx.compose.material.icons.filled.Phone
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -47,9 +48,10 @@ fun PermissionScreen(
     ) { permissions ->
         val callLogGranted = permissions[Manifest.permission.READ_CALL_LOG] ?: false
         val contactsGranted = permissions[Manifest.permission.READ_CONTACTS] ?: false
+        val phoneStateGranted = permissions[Manifest.permission.READ_PHONE_STATE] ?: false
         val storageGranted = permissions[storagePermission] ?: false
 
-        if (callLogGranted && contactsGranted && storageGranted) {
+        if (callLogGranted && contactsGranted && phoneStateGranted && storageGranted) {
             onPermissionsGranted()
         } else {
             hasDeclined = true
@@ -114,10 +116,19 @@ fun PermissionScreen(
         Spacer(modifier = Modifier.height(16.dp))
 
         PermissionItemCard(
+            title = "SIM & Phone Status",
+            description = "Reads installed SIM cards and active phone subscriptions to filter business calls.",
+            icon = Icons.Default.Phone,
+            iconColor = Teal300
+        )
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        PermissionItemCard(
             title = "Call Recordings Scan",
             description = "Scans device storage to find call recording audio files matching your calls.",
             icon = Icons.Default.Audiotrack,
-            iconColor = Teal300
+            iconColor = Slate400
         )
 
         if (hasDeclined) {
@@ -155,6 +166,7 @@ fun PermissionScreen(
                     arrayOf(
                         Manifest.permission.READ_CALL_LOG,
                         Manifest.permission.READ_CONTACTS,
+                        Manifest.permission.READ_PHONE_STATE,
                         storagePermission
                     )
                 )

@@ -40,6 +40,39 @@ class RecordingScanner @Inject constructor(
 
         val list = mutableListOf<DiscoveredRecording>()
 
+        // 1. Scan custom directory if configured
+        val prefs = context.getSharedPreferences("firebase_config_prefs", Context.MODE_PRIVATE)
+        val customPath = prefs.getString("custom_recording_path", "") ?: ""
+        if (customPath.isNotEmpty()) {
+            try {
+                val directory = File(customPath)
+                if (directory.exists() && directory.isDirectory) {
+                    val files = directory.listFiles()
+                    files?.forEach { file ->
+                        if (file.isFile) {
+                            val ext = file.extension.lowercase()
+                            if (ext in Constants.SUPPORTED_RECORDING_EXTENSIONS) {
+                                val parsed = parseRecordingMetadata(file.name, file.lastModified())
+                                if (parsed != null) {
+                                    list.add(
+                                        DiscoveredRecording(
+                                            filePath = file.absolutePath,
+                                            phoneNumber = parsed.first,
+                                            timestamp = parsed.second
+                                        )
+                                    )
+                                    Log.d("RecordingScanner", "Manually discovered recording: ${file.absolutePath}")
+                                }
+                            }
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e("RecordingScanner", "Error scanning custom directory: $customPath", e)
+            }
+        }
+
+        // 2. Query all audio files via MediaStore
         val projection = arrayOf(
             MediaStore.Audio.Media.DATA,
             MediaStore.Audio.Media.DISPLAY_NAME,
@@ -47,7 +80,6 @@ class RecordingScanner @Inject constructor(
         )
 
         try {
-            // Query all audio files
             val cursor = context.contentResolver.query(
                 MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
                 projection,
@@ -68,7 +100,6 @@ class RecordingScanner @Inject constructor(
 
                     if (filePath.isEmpty() || displayName.isEmpty()) continue
 
-                    // Check if file is in call recordings directory or fits call recorder naming conventions
                     val isRecording = isCallRecordingFile(filePath, displayName)
                     if (isRecording) {
                         val parsed = parseRecordingMetadata(displayName, dateAdded * 1000L)
@@ -88,8 +119,9 @@ class RecordingScanner @Inject constructor(
             Log.e("RecordingScanner", "Error querying MediaStore for audio recordings", e)
         }
 
-        Log.w("RecordingScanner", "Scanned and found ${list.size} matching recording files")
-        return list
+        val distinctList = list.distinctBy { it.filePath }
+        Log.w("RecordingScanner", "Scanned and found ${distinctList.size} unique matching recording files")
+        return distinctList
     }
 
     private fun isCallRecordingFile(filePath: String, displayName: String): Boolean {

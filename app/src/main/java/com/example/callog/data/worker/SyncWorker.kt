@@ -6,12 +6,19 @@ import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import androidx.work.workDataOf
 import com.example.callog.data.local.entity.CallEntity
+import com.example.callog.data.local.entity.SalesCallEntity
 import com.example.callog.core.utils.ConnectivityService
+import com.example.callog.data.local.dao.SalesCallDao
+import com.example.callog.data.local.dao.SyncLogDao
+import com.example.callog.core.diagnostics.DeveloperLogger
+import com.example.callog.data.remote.FirestoreService
 import com.example.callog.domain.repository.CallRepository
 import com.example.callog.domain.repository.RecordingRepository
 import com.example.callog.domain.repository.SyncRepository
 import com.example.callog.domain.service.UploadProgressState
 import com.example.callog.domain.service.UploadService
+import com.example.callog.data.remote.SupabaseService
+import com.example.callog.data.repository.FirestoreRepositoryImpl
 import dagger.hilt.EntryPoint
 import dagger.hilt.InstallIn
 import dagger.hilt.android.EntryPointAccessors
@@ -33,6 +40,11 @@ class SyncWorker(
         fun callRepository(): CallRepository
         fun recordingRepository(): RecordingRepository
         fun connectivityService(): ConnectivityService
+        fun salesCallDao(): SalesCallDao
+        fun syncLogDao(): SyncLogDao
+        fun firestoreService(): FirestoreService
+        fun supabaseService(): SupabaseService
+        fun simManager(): com.example.callog.data.provider.SimManager
     }
 
     override suspend fun doWork(): Result {
@@ -48,62 +60,145 @@ class SyncWorker(
         val callRepository = entryPoint.callRepository()
         val recordingRepository = entryPoint.recordingRepository()
         val connectivityService = entryPoint.connectivityService()
+        val salesCallDao = entryPoint.salesCallDao()
+        val syncLogDao = entryPoint.syncLogDao()
+        val firestoreService = entryPoint.firestoreService()
+        val supabaseService = entryPoint.supabaseService()
+        val simManager = entryPoint.simManager()
+
+        // Start new logger session
+        val syncId = DeveloperLogger.startNewSession()
+        val network = if (connectivityService.isConnected()) {
+            "ONLINE"
+        } else {
+            "OFFLINE"
+        }
+
+        // Abort background sync immediately if SIM card configuration mismatch is detected
+        if (simManager.isSyncSuspendedDueToSimChange()) {
+            DeveloperLogger.warning("SYNC_ABORTED", "Background sync aborted: SIM card configuration mismatch. Reconfiguration required.", network = network)
+            return Result.success()
+        }
+
+        DeveloperLogger.info("SYNC_STARTED", "Background sync run started (Trigger: Auto, Network: $network)", network = network)
 
         // Step 1: Ensure we are online before initiating sync
         if (!connectivityService.isConnected()) {
             Log.w(TAG, "Device is offline. Suspending sync run.")
+            DeveloperLogger.warning("SYNC_STARTED", "Device is offline. Suspending sync run.", network = network)
             return Result.retry()
         }
 
         try {
             // Step 2: Fetch and import call logs from provider, match files, etc.
-            Log.i(TAG, "Scanning system logs & local recordings to refresh DB")
+            DeveloperLogger.info("READ_PENDING_CALLS", "Scanning system logs & local recordings to refresh database", network = network)
             callRepository.syncCallLogs()
 
-            // Step 3: Fetch all pending items from local database
+            // Step 2b: Populate sales_calls table from refreshed call log
+            val salespersonPhoneRaw = firestoreService.getDevicePhoneNumber()
+            val salespersonName  = firestoreService.getDeviceOwnerName()
+            if (salespersonPhoneRaw.isNotEmpty()) {
+                val salespersonPhone = FirestoreRepositoryImpl.normalizePhoneNumber(salespersonPhoneRaw)
+                val allCalls = callRepository.getAllCallsSnapshot()
+                DeveloperLogger.info("SALES_CALL_CREATION_STARTED", "Generating SalesCallEntity cache. Found ${allCalls.size} calls.", network = network)
+                var createdCount = 0
+                for (call in allCalls) {
+                    val existing = salesCallDao.getSalesCallByCallId(call.id)
+                    if (existing == null) {
+                        salesCallDao.insertSalesCall(
+                            SalesCallEntity(
+                                salespersonPhone = salespersonPhone,
+                                salespersonName  = salespersonName,
+                                buyerPhone       = call.number,
+                                buyerName        = call.name,
+                                callType         = call.callType,
+                                callId           = call.id,
+                                duration         = call.duration,
+                                createdAt        = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.getDefault()).format(java.util.Date(call.timestamp))
+                            )
+                        )
+                        createdCount++
+                    }
+                }
+                if (createdCount > 0) {
+                    DeveloperLogger.success("SALES_CALL_CREATED", "Populated $createdCount new sales call logs locally.", network = network)
+                }
+            } else {
+                DeveloperLogger.warning("SALES_CALL_CREATION_STARTED", "Device configurations not set, skipping sales calls population.", network = network)
+            }
+
+            // Step 2c: Sync pending sales_calls to Supabase
+            try {
+                val pendingSalesCalls = salesCallDao.getPendingSalesCalls()
+                if (pendingSalesCalls.isNotEmpty()) {
+                    DeveloperLogger.info("SUPABASE_UPLOAD_STARTED", "Syncing ${pendingSalesCalls.size} pending sales calls to Supabase.", network = network)
+                    val startTime = System.currentTimeMillis()
+                    val syncResult = supabaseService.syncSalesCalls(pendingSalesCalls)
+                    val duration = System.currentTimeMillis() - startTime
+                    if (syncResult.isSuccess) {
+                        for (salesCall in pendingSalesCalls) {
+                            salesCallDao.updateSyncStatus(salesCall.id, "SYNCED", null)
+                        }
+                        DeveloperLogger.success("SUPABASE_UPLOAD_SUCCESS", "Successfully synced ${pendingSalesCalls.size} rows to Supabase table sales_calls.", durationMs = duration, network = network)
+                    } else {
+                        val exception = syncResult.exceptionOrNull()
+                        val errorMsg = exception?.message ?: "Unknown sync error"
+                        for (salesCall in pendingSalesCalls) {
+                            salesCallDao.updateSyncStatus(salesCall.id, "FAILED", errorMsg)
+                        }
+                        DeveloperLogger.error("SUPABASE_UPLOAD_FAILED", "Supabase sync failed: $errorMsg", exception = exception, network = network)
+                    }
+                }
+            } catch (e: Exception) {
+                DeveloperLogger.error("SUPABASE_UPLOAD_FAILED", "Exception occurred during Supabase sync execution", exception = e, network = network)
+            }
+
+            // Step 3: Fetch all pending items from local database for Firestore
             val pendingCalls = syncRepository.getPendingCalls()
             if (pendingCalls.isEmpty()) {
-                Log.d(TAG, "No pending calls found to synchronize.")
+                DeveloperLogger.success("SYNC_COMPLETED", "No pending Firestore logs found. Sync completed successfully.", network = network)
+                runLogsMaintenance(syncLogDao)
                 return Result.success()
             }
 
-            Log.i(TAG, "Found ${pendingCalls.size} pending calls to sync.")
+            DeveloperLogger.info("FIRESTORE_METADATA_UPLOAD_STARTED", "Found ${pendingCalls.size} pending call logs to sync to Firestore.", network = network)
             val currentTime = System.currentTimeMillis()
 
+            var successCount = 0
+            var failCount = 0
+            val startTime = System.currentTimeMillis()
+
             for (call in pendingCalls) {
-                // Ensure we are still online before processing each call
                 if (!connectivityService.isConnected()) {
-                    Log.w(TAG, "Connection lost during sync loop. Suspending.")
+                    DeveloperLogger.warning("SYNC_FAILED", "Network connection lost during sync. Suspending loop.", network = network)
                     return Result.retry()
                 }
 
-                // Check for max retries limit
                 if (call.retryCount >= 5) {
-                    Log.w(TAG, "Call ${call.id} exceeded maximum retries (${call.retryCount}). Skipping.")
+                    DeveloperLogger.warning("FIRESTORE_METADATA_UPLOAD_FAILED", "Call ID: ${call.id} exceeded max retries. Skipping.", network = network)
                     continue
                 }
 
-                // Check for exponential backoff on retry-pending calls
                 if (call.syncStatus == "FAILED" && call.lastAttempt != null) {
                     val backoffDuration = getBackoffDuration(call.retryCount)
                     if (currentTime < call.lastAttempt + backoffDuration) {
-                        Log.d(TAG, "Skipping call ${call.id} due to exponential backoff constraint.")
                         continue
                     }
                 }
 
-                Log.i(TAG, "Processing sync for call: ${call.id} (attempt: ${call.retryCount + 1})")
                 syncRepository.markUploading(call.id)
 
                 var recordingUrl: String? = null
                 var cloudPath: String? = null
                 var uploadFailed = false
 
-                // Step 4: If recording path exists and is not uploaded, upload it first
+                // Step 4: Upload recording to Firebase Storage if present
                 if (call.recordingPath != null && call.recordingUploadStatus != "SUCCESS") {
                     var uploadResult: com.example.callog.domain.service.UploadProgressState? = null
                     
                     try {
+                        DeveloperLogger.info("RECORDING_UPLOAD_STARTED", "Uploading audio recording file for Call ID: ${call.id} (${call.recordingPath})", network = network)
+                        val recStartTime = System.currentTimeMillis()
                         uploadService.uploadRecording(call).collect { state ->
                             uploadResult = state
                             if (state is UploadProgressState.Progress) {
@@ -111,27 +206,32 @@ class SyncWorker(
                             }
                         }
 
+                        val recDuration = System.currentTimeMillis() - recStartTime
                         when (val finalState = uploadResult) {
                             is UploadProgressState.Success -> {
                                 recordingUrl = finalState.downloadUrl
                                 cloudPath = finalState.cloudPath
+                                DeveloperLogger.success("RECORDING_UPLOAD_SUCCESS", "Successfully uploaded recording. URL: $recordingUrl", durationMs = recDuration, network = network)
                             }
                             is UploadProgressState.Error -> {
                                 val errMessage = finalState.exception.message ?: "Unknown upload error"
-                                Log.e(TAG, "Failed uploading recording for call ${call.id}: $errMessage")
+                                DeveloperLogger.error("RECORDING_UPLOAD_FAILED", "Recording upload failed for Call ID: ${call.id}: $errMessage", exception = finalState.exception, network = network)
                                 syncRepository.markFailed(call.id, errMessage, call.retryCount + 1, currentTime)
                                 uploadFailed = true
+                                failCount++
                             }
                             else -> {
-                                Log.e(TAG, "Failed uploading recording for call ${call.id}: Completed with no result")
+                                DeveloperLogger.error("RECORDING_UPLOAD_FAILED", "Recording upload failed: Completed with empty state", network = network)
                                 syncRepository.markFailed(call.id, "Completed with no result", call.retryCount + 1, currentTime)
                                 uploadFailed = true
+                                failCount++
                             }
                         }
                     } catch (e: Exception) {
-                        Log.e(TAG, "Error in recording upload stream", e)
+                        DeveloperLogger.error("RECORDING_UPLOAD_FAILED", "Recording upload exception for Call ID: ${call.id}", exception = e, network = network)
                         syncRepository.markFailed(call.id, "Upload stream exception: ${e.message}", call.retryCount + 1, currentTime)
                         uploadFailed = true
+                        failCount++
                     }
                 }
 
@@ -139,26 +239,45 @@ class SyncWorker(
 
                 // Step 5: Upload/Update metadata in Firestore
                 try {
+                    val metadataStartTime = System.currentTimeMillis()
                     val result = uploadService.uploadMetadata(call, recordingUrl)
+                    val metadataDuration = System.currentTimeMillis() - metadataStartTime
                     if (result.isSuccess) {
-                        Log.i(TAG, "Successfully synced metadata for call: ${call.id}")
                         syncRepository.markSynced(call.id, cloudPath, recordingUrl, currentTime)
+                        DeveloperLogger.success("FIRESTORE_METADATA_UPLOAD_SUCCESS", "Successfully uploaded metadata to Firestore for Call ID: ${call.id}.", durationMs = metadataDuration, network = network)
+                        successCount++
                     } else {
-                        val errMsg = result.exceptionOrNull()?.message ?: "Metadata upload failure"
-                        Log.e(TAG, "Failed metadata upload for call ${call.id}: $errMsg")
+                        val exception = result.exceptionOrNull()
+                        val errMsg = exception?.message ?: "Metadata upload failure"
+                        DeveloperLogger.error("FIRESTORE_METADATA_UPLOAD_FAILED", "Failed uploading metadata for Call ID: ${call.id}: $errMsg", exception = exception, network = network)
                         syncRepository.markFailed(call.id, errMsg, call.retryCount + 1, currentTime)
+                        failCount++
                     }
                 } catch (e: Exception) {
-                    Log.e(TAG, "Exception during metadata sync for call ${call.id}", e)
+                    DeveloperLogger.error("FIRESTORE_METADATA_UPLOAD_FAILED", "Metadata upload exception for Call ID: ${call.id}", exception = e, network = network)
                     syncRepository.markFailed(call.id, "Metadata upload exception: ${e.message}", call.retryCount + 1, currentTime)
+                    failCount++
                 }
             }
 
+            val totalDuration = System.currentTimeMillis() - startTime
+            DeveloperLogger.success("SYNC_COMPLETED", "Background sync completed. Uploaded: $successCount, Failed: $failCount, Duration: ${totalDuration}ms", durationMs = totalDuration, network = network)
+            runLogsMaintenance(syncLogDao)
             return Result.success()
 
         } catch (e: Exception) {
-            Log.e(TAG, "SyncWorker run encountered critical exception", e)
+            DeveloperLogger.error("SYNC_FAILED", "Sync worker execution crashed", exception = e, network = network)
             return Result.retry()
+        }
+    }
+
+    private suspend fun runLogsMaintenance(syncLogDao: SyncLogDao) {
+        try {
+            val cutoff = System.currentTimeMillis() - (30L * 24 * 60 * 60 * 1000) // 30 days
+            syncLogDao.deleteLogsOlderThan(cutoff)
+            syncLogDao.trimLogs(5000)
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed running log cleanup maintenance", e)
         }
     }
 

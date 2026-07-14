@@ -130,12 +130,12 @@ fun SearchBarField(
     OutlinedTextField(
         value = query,
         onValueChange = onQueryChange,
-        placeholder = { Text(placeholder, color = Slate400) },
+        placeholder = { Text(placeholder, color = MaterialTheme.colorScheme.onSurfaceVariant) },
         leadingIcon = {
             Icon(
                 imageVector = Icons.Default.Search,
                 contentDescription = "Search",
-                tint = Slate400
+                tint = MaterialTheme.colorScheme.onSurfaceVariant
             )
         },
         trailingIcon = {
@@ -144,19 +144,19 @@ fun SearchBarField(
                     Icon(
                         imageVector = Icons.Default.Clear,
                         contentDescription = "Clear",
-                        tint = Slate400
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             }
         },
         singleLine = true,
         colors = OutlinedTextFieldDefaults.colors(
-            focusedContainerColor = Slate800,
-            unfocusedContainerColor = Slate800,
-            focusedBorderColor = Teal500,
-            unfocusedBorderColor = Slate700,
-            focusedTextColor = Slate50,
-            unfocusedTextColor = Slate50
+            focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
+            unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
+            focusedBorderColor = MaterialTheme.colorScheme.primary,
+            unfocusedBorderColor = MaterialTheme.colorScheme.outline,
+            focusedTextColor = MaterialTheme.colorScheme.onSurface,
+            unfocusedTextColor = MaterialTheme.colorScheme.onSurface
         ),
         shape = RoundedCornerShape(12.dp),
         modifier = modifier.fillMaxWidth()
@@ -301,8 +301,13 @@ fun CallCard(
                 ) {
                     CallTypeIcon(call.callType)
                     
+                    val statusText = when {
+                        call.duration > 0 -> durationString
+                        call.callType.equals("MISSED", ignoreCase = true) -> "Missed"
+                        else -> "Not Connected"
+                    }
                     Text(
-                        text = if (call.duration > 0) durationString else "Missed",
+                        text = statusText,
                         style = MaterialTheme.typography.bodySmall,
                         color = Slate400
                     )
