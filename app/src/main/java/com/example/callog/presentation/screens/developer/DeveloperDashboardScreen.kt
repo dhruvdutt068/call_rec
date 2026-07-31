@@ -18,6 +18,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.activity.compose.BackHandler
 import com.example.callog.core.constants.Constants
 import com.example.callog.presentation.components.GlassyCard
 import com.example.callog.presentation.theme.*
@@ -29,8 +30,12 @@ fun DeveloperDashboardScreen(
     viewModel: CallViewModel,
     onBackClick: () -> Unit,
     onNavigateToLogs: () -> Unit,
+    onNavigateToRecordingDiagnostics: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    BackHandler {
+        onBackClick()
+    }
     val context = LocalContext.current
     val syncLogs by viewModel.syncLogs.collectAsState()
     val allCalls by viewModel.callLogs.collectAsState()
@@ -226,6 +231,17 @@ fun DeveloperDashboardScreen(
                 Icon(Icons.Default.History, contentDescription = null)
                 Spacer(modifier = Modifier.width(8.dp))
                 Text("Open Sync Timeline Logs", fontWeight = FontWeight.Bold)
+            }
+
+            Button(
+                onClick = onNavigateToRecordingDiagnostics,
+                modifier = Modifier.fillMaxWidth().height(48.dp),
+                shape = RoundedCornerShape(8.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = Teal500, contentColor = Slate50)
+            ) {
+                Icon(Icons.Default.Mic, contentDescription = null)
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("Open Recording Diagnostics", fontWeight = FontWeight.Bold)
             }
 
             Button(

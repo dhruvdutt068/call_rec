@@ -32,6 +32,171 @@ object DatabaseModule {
         }
     }
 
+    private val MIGRATION_13_14 = object : Migration(13, 14) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("""
+                CREATE TABLE IF NOT EXISTS `recordings` (
+                    `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, 
+                    `filePath` TEXT NOT NULL, 
+                    `fileName` TEXT NOT NULL, 
+                    `fileSize` INTEGER NOT NULL, 
+                    `duration` INTEGER NOT NULL, 
+                    `lastModified` INTEGER NOT NULL, 
+                    `phoneExtracted` TEXT, 
+                    `timestampExtracted` INTEGER, 
+                    `matchedCallId` INTEGER, 
+                    `matchStatus` TEXT NOT NULL, 
+                    `uploadStatus` TEXT NOT NULL, 
+                    `cloudUrl` TEXT, 
+                    `parser` TEXT, 
+                    `reason` TEXT
+                )
+            """.trimIndent())
+            db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS `index_recordings_filePath` ON `recordings` (`filePath`)")
+            db.execSQL("CREATE INDEX IF NOT EXISTS `index_recordings_matchedCallId` ON `recordings` (`matchedCallId`)")
+            
+            db.execSQL("""
+                INSERT OR IGNORE INTO recordings (filePath, fileName, fileSize, duration, lastModified, phoneExtracted, timestampExtracted, matchedCallId, matchStatus, uploadStatus, cloudUrl, parser, reason)
+                SELECT 
+                    recordingPath AS filePath,
+                    recordingPath AS fileName, 
+                    0 AS fileSize,
+                    duration AS duration,
+                    timestamp AS lastModified,
+                    number AS phoneExtracted,
+                    timestamp AS timestampExtracted,
+                    id AS matchedCallId,
+                    'MATCHED' AS matchStatus,
+                    COALESCE(recordingUploadStatus, 'PENDING') AS uploadStatus,
+                    recordingPath AS cloudUrl,
+                    'Legacy' AS parser,
+                    'Imported from call logs' AS reason
+                FROM calls 
+                WHERE recordingPath IS NOT NULL AND recordingPath != ''
+            """.trimIndent())
+        }
+    }
+
+    private val MIGRATION_14_15 = object : Migration(14, 15) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            // 1. Create calls_research table
+            db.execSQL("""
+                CREATE TABLE IF NOT EXISTS `calls_research` (
+                    `id` INTEGER PRIMARY KEY NOT NULL, 
+                    `name` TEXT, 
+                    `number` TEXT NOT NULL, 
+                    `duration` INTEGER NOT NULL, 
+                    `timestamp` INTEGER NOT NULL, 
+                    `callType` TEXT NOT NULL, 
+                    `recordingPath` TEXT, 
+                    `phoneAccountId` TEXT, 
+                    `phoneAccountComponentName` TEXT, 
+                    `isFavorite` INTEGER NOT NULL, 
+                    `notes` TEXT, 
+                    `tags` TEXT, 
+                    `syncStatus` TEXT NOT NULL, 
+                    `recordingLocalPath` TEXT, 
+                    `recordingCloudPath` TEXT, 
+                    `recordingUploadStatus` TEXT NOT NULL, 
+                    `recordingUploadedAt` INTEGER, 
+                    `recordingUrl` TEXT, 
+                    `retryCount` INTEGER NOT NULL, 
+                    `uploadedAt` INTEGER, 
+                    `syncError` TEXT, 
+                    `lastAttempt` INTEGER
+                )
+            """.trimIndent())
+            db.execSQL("CREATE INDEX IF NOT EXISTS `index_calls_research_number` ON `calls_research` (`number`)")
+            db.execSQL("CREATE INDEX IF NOT EXISTS `index_calls_research_timestamp` ON `calls_research` (`timestamp`)")
+
+            // Copy data from calls to calls_research
+            try {
+                db.execSQL("""
+                    INSERT OR IGNORE INTO calls_research (
+                        id, name, number, duration, timestamp, callType, recordingPath, 
+                        phoneAccountId, phoneAccountComponentName, isFavorite, notes, tags, 
+                        syncStatus, recordingLocalPath, recordingCloudPath, recordingUploadStatus, 
+                        recordingUploadedAt, recordingUrl, retryCount, uploadedAt, syncError, lastAttempt
+                    ) SELECT 
+                        id, name, number, duration, timestamp, callType, recordingPath, 
+                        phoneAccountId, phoneAccountComponentName, isFavorite, notes, tags, 
+                        syncStatus, recordingLocalPath, recordingCloudPath, recordingUploadStatus, 
+                        recordingUploadedAt, recordingUrl, retryCount, uploadedAt, syncError, lastAttempt
+                    FROM calls
+                """.trimIndent())
+            } catch (e: Exception) {
+                android.util.Log.e("DatabaseModule", "Failed to migrate calls to calls_research", e)
+            }
+
+             // 2. Create recordings_research table
+            db.execSQL("""
+                CREATE TABLE IF NOT EXISTS `recordings_research` (
+                    `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, 
+                    `filePath` TEXT NOT NULL, 
+                    `fileName` TEXT NOT NULL, 
+                    `fileSize` INTEGER NOT NULL, 
+                    `duration` INTEGER NOT NULL, 
+                    `lastModified` INTEGER NOT NULL, 
+                    `phoneExtracted` TEXT, 
+                    `contactExtracted` TEXT, 
+                    `timestampExtracted` INTEGER, 
+                    `matchedCallId` INTEGER, 
+                    `matchStatus` TEXT NOT NULL, 
+                    `uploadStatus` TEXT NOT NULL, 
+                    `cloudUrl` TEXT, 
+                    `parser` TEXT, 
+                    `reason` TEXT
+                )
+            """.trimIndent())
+            db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS `index_recordings_research_filePath` ON `recordings_research` (`filePath`)")
+            db.execSQL("CREATE INDEX IF NOT EXISTS `index_recordings_research_matchedCallId` ON `recordings_research` (`matchedCallId`)")
+
+            // Copy data from recordings to recordings_research
+            try {
+                db.execSQL("""
+                    INSERT OR IGNORE INTO recordings_research (
+                        id, filePath, fileName, fileSize, duration, lastModified, 
+                        phoneExtracted, contactExtracted, timestampExtracted, matchedCallId, matchStatus, 
+                        uploadStatus, cloudUrl, parser, reason
+                    ) SELECT 
+                        id, filePath, fileName, fileSize, duration, lastModified, 
+                        phoneExtracted, NULL AS contactExtracted, timestampExtracted, matchedCallId, matchStatus, 
+                        uploadStatus, cloudUrl, parser, reason
+                    FROM recordings
+                """.trimIndent())
+            } catch (e: Exception) {
+                android.util.Log.e("DatabaseModule", "Failed to migrate recordings to recordings_research", e)
+            }
+
+            // 3. Re-create reminders table to point foreign key to calls_research
+            db.execSQL("DROP INDEX IF EXISTS `index_reminders_callId`")
+            db.execSQL("DROP TABLE IF EXISTS `reminders_old`")
+            db.execSQL("ALTER TABLE `reminders` RENAME TO `reminders_old`")
+            db.execSQL("""
+                CREATE TABLE IF NOT EXISTS `reminders` (
+                    `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, 
+                    `callId` INTEGER NOT NULL, 
+                    `reminderTime` INTEGER NOT NULL, 
+                    `isCompleted` INTEGER NOT NULL, 
+                    `notes` TEXT, 
+                    FOREIGN KEY(`callId`) REFERENCES `calls_research`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE
+                )
+            """.trimIndent())
+            db.execSQL("CREATE INDEX IF NOT EXISTS `index_reminders_callId` ON `reminders` (`callId`)")
+
+            // Copy data from reminders_old to reminders
+            try {
+                db.execSQL("""
+                    INSERT OR IGNORE INTO `reminders` (id, callId, reminderTime, isCompleted, notes)
+                    SELECT id, callId, reminderTime, isCompleted, notes FROM `reminders_old`
+                """.trimIndent())
+                db.execSQL("DROP TABLE IF EXISTS `reminders_old`")
+            } catch (e: Exception) {
+                android.util.Log.e("DatabaseModule", "Failed to migrate reminders table", e)
+            }
+        }
+    }
+
     @Provides
     @Singleton
     fun provideDatabase(
@@ -41,7 +206,7 @@ object DatabaseModule {
             context,
             CallVaultDatabase::class.java,
             Constants.DATABASE_NAME
-        ).addMigrations(MIGRATION_5_6)
+        ).addMigrations(MIGRATION_5_6, MIGRATION_13_14, MIGRATION_14_15)
          .fallbackToDestructiveMigration()
          .build()
      }
@@ -69,5 +234,15 @@ object DatabaseModule {
     @Provides
     fun provideSyncLogDao(db: CallVaultDatabase): SyncLogDao {
         return db.syncLogDao()
+    }
+
+    @Provides
+    fun provideRecordingLogDao(db: CallVaultDatabase): com.example.callog.data.local.dao.RecordingLogDao {
+        return db.recordingLogDao()
+    }
+
+    @Provides
+    fun provideRecordingDao(db: CallVaultDatabase): com.example.callog.data.local.dao.RecordingDao {
+        return db.recordingDao()
     }
 }

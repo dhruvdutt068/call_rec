@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
@@ -168,13 +169,24 @@ fun NavGraph(
         composable(Screen.DeveloperDashboard.route) {
             DeveloperDashboardScreen(
                 viewModel = callViewModel,
-                onBackClick = { navController.popBackStack() },
-                onNavigateToLogs = { navController.navigate(Screen.DeveloperLogs.route) }
+                onBackClick = {
+                    callViewModel.setDeveloperModeActive(false)
+                    navController.popBackStack()
+                },
+                onNavigateToLogs = { navController.navigate(Screen.DeveloperLogs.route) },
+                onNavigateToRecordingDiagnostics = { navController.navigate(Screen.RecordingDiagnostics.route) }
             )
         }
 
         composable(Screen.DeveloperLogs.route) {
             SyncLogsScreen(
+                viewModel = callViewModel,
+                onBackClick = { navController.popBackStack() }
+            )
+        }
+
+        composable(Screen.RecordingDiagnostics.route) {
+            com.example.callog.presentation.screens.developer.RecordingDiagnosticsScreen(
                 viewModel = callViewModel,
                 onBackClick = { navController.popBackStack() }
             )
@@ -195,8 +207,24 @@ fun MainScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("CallVault", fontWeight = FontWeight.Bold) },
+                title = {
+                    val titleText = when (selectedTab) {
+                        Screen.Tab.Dashboard -> "CallVault"
+                        Screen.Tab.Logs -> "Call Logs"
+                        Screen.Tab.Recordings -> "Recordings"
+                    }
+                    Text(titleText, fontWeight = FontWeight.Bold)
+                },
                 actions = {
+                    if (selectedTab == Screen.Tab.Recordings) {
+                        IconButton(onClick = { callViewModel.rescanRecordings() }) {
+                            Icon(
+                                imageVector = Icons.Default.Refresh,
+                                contentDescription = "Rescan",
+                                tint = Teal300
+                            )
+                        }
+                    }
                     IconButton(onClick = onSettingsClick) {
                         Icon(Icons.Default.Settings, contentDescription = "Settings")
                     }
@@ -253,7 +281,6 @@ fun MainScreen(
             )
             Screen.Tab.Recordings -> RecordingManagerScreen(
                 viewModel = callViewModel,
-                onCallClick = onCallClick,
                 modifier = modifier
             )
         }

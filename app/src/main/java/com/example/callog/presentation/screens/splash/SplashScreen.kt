@@ -21,6 +21,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.layout.ContentScale
 import com.example.callog.R
+import com.example.callog.presentation.theme.*
 import kotlinx.coroutines.delay
 
 @Composable

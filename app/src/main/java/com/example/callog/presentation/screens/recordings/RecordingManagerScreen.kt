@@ -1,5 +1,7 @@
 package com.example.callog.presentation.screens.recordings
 
+import android.media.MediaPlayer
+import android.widget.Toast
 import androidx.compose.animation.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -7,19 +9,25 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.runtime.saveable.rememberSaveable
 import com.example.callog.core.extensions.toDateString
 import com.example.callog.core.extensions.toDurationString
+import com.example.callog.data.local.entity.MatchStatus
+import com.example.callog.data.local.entity.RecordingEntity
+import com.example.callog.data.local.entity.UploadStatus
 import com.example.callog.domain.model.CallLogEntry
 import com.example.callog.presentation.components.ContactAvatar
 import com.example.callog.presentation.components.EmptyStateView
@@ -27,152 +35,97 @@ import com.example.callog.presentation.components.GlassyCard
 import com.example.callog.presentation.theme.*
 import com.example.callog.presentation.viewmodel.CallViewModel
 import kotlinx.coroutines.delay
+import java.io.File
+
+data class MatchedRecordingItem(
+    val recording: RecordingEntity,
+    val call: CallLogEntry?
+)
 
 @Composable
 fun RecordingManagerScreen(
     viewModel: CallViewModel,
-    onCallClick: (Long) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onCallClick: ((Long) -> Unit)? = null
 ) {
+    val recordings by viewModel.recordingsFlow.collectAsState()
     val callLogs by viewModel.callLogs.collectAsState()
-    
-    // Filter database logs that have recording files associated
-    val recordings = remember(callLogs) {
-        callLogs.filter { it.recordingPath != null }
-    }
 
-    // Group recordings by phone number
-    val groupedRecordings = remember(recordings) {
-        recordings.groupBy { it.number }
-    }
-
-    // Sort grouped keys by the latest recording's timestamp
-    val sortedGroupedKeys = remember(groupedRecordings) {
-        groupedRecordings.keys.sortedByDescending { number ->
-            groupedRecordings[number]?.maxOfOrNull { it.timestamp } ?: 0L
+    // Resolve all recordings to call log candidates (both matched and unmatched)
+    val resolvedRecordings = remember(recordings, callLogs) {
+        recordings.map { rec ->
+            val call = callLogs.firstOrNull { it.id == rec.matchedCallId }
+            MatchedRecordingItem(rec, call)
         }
     }
 
-    // Track expanded phone number groups
+    // Group all resolved recordings by their contact phone number / name identifier
+    val groupedRecordings = remember(resolvedRecordings) {
+        resolvedRecordings.groupBy { item ->
+            item.call?.number ?: item.recording.phoneExtracted ?: item.recording.contactExtracted ?: "Unknown"
+        }
+    }
+
+    // Sort grouped keys by the latest call/recording timestamp
+    val sortedGroupedKeys = remember(groupedRecordings) {
+        groupedRecordings.keys.sortedByDescending { key ->
+            val group = groupedRecordings[key] ?: emptyList()
+            group.maxOfOrNull { it.call?.timestamp ?: it.recording.lastModified } ?: 0L
+        }
+    }
+
+    // Expandable groups saveable state
     var expandedNumbers by rememberSaveable { mutableStateOf(setOf<String>()) }
 
-    var activePlayCallId by remember { mutableStateOf<Long?>(null) }
-    var isPlaying by remember { mutableStateOf(false) }
-    var playProgress by remember { mutableFloatStateOf(0f) }
-    var activeDuration by remember { mutableFloatStateOf(1f) }
+    // Detail Dialog state
+    var selectedRecordingForDetail by remember { mutableStateOf<RecordingEntity?>(null) }
 
-    var mediaPlayer by remember { mutableStateOf<android.media.MediaPlayer?>(null) }
-
-    // Clean up media player when active call changes
-    LaunchedEffect(activePlayCallId) {
-        mediaPlayer?.stop()
-        mediaPlayer?.release()
-        mediaPlayer = null
-        playProgress = 0f
-        activeDuration = 1f
-        
-        if (activePlayCallId != null) {
-            val activeCall = recordings.firstOrNull { it.id == activePlayCallId }
-            if (activeCall?.recordingPath != null) {
-                try {
-                    mediaPlayer = android.media.MediaPlayer().apply {
-                        val file = java.io.File(activeCall.recordingPath)
-                        val fis = java.io.FileInputStream(file)
-                        setDataSource(fis.fd)
-                        prepare()
-                        activeDuration = duration.toFloat() / 1000f
-                        fis.close()
-                    }
-                } catch (e: Exception) {
-                    android.util.Log.e("RecordingManagerScreen", "Error preparing MediaPlayer for path ${activeCall.recordingPath}", e)
-                }
-            }
-        }
-    }
-
-    DisposableEffect(Unit) {
-        onDispose {
-            mediaPlayer?.stop()
-            mediaPlayer?.release()
-        }
-    }
-
-    // Playback ticker using real player state
-    LaunchedEffect(isPlaying, mediaPlayer) {
-        if (isPlaying && mediaPlayer != null) {
-            try {
-                mediaPlayer?.start()
-                while (isPlaying && mediaPlayer?.isPlaying == true) {
-                    val currentPos = mediaPlayer!!.currentPosition.toFloat() / mediaPlayer!!.duration.toFloat()
-                    playProgress = currentPos.coerceIn(0f, 1f)
-                    delay(100)
-                }
-                if (mediaPlayer?.isPlaying == false && playProgress >= 0.95f) {
-                    isPlaying = false
-                    playProgress = 0f
-                    mediaPlayer?.seekTo(0)
-                }
-            } catch (e: Exception) {
-                android.util.Log.e("RecordingManagerScreen", "Error playing recording", e)
-            }
-        } else {
-            try {
-                if (mediaPlayer?.isPlaying == true) {
-                    mediaPlayer?.pause()
-                }
-            } catch (e: Exception) {
-                // Ignore state errors
-            }
-        }
-    }
-
-    Column(
+    Box(
         modifier = modifier
             .fillMaxSize()
-            .padding(horizontal = 16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+            .padding(horizontal = 16.dp)
     ) {
-        Text(
-            text = "Recording Vault",
-            style = MaterialTheme.typography.headlineMedium,
-            fontWeight = FontWeight.Bold,
-            color = Slate50,
-            modifier = Modifier.padding(top = 12.dp)
-        )
-
         if (recordings.isEmpty()) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f),
-                contentAlignment = Alignment.Center
-            ) {
-                EmptyStateView(
-                    title = "No Call Recordings Scanned",
-                    description = "We scan accessible folders like Recordings/, Call/, OnePlus/, and Samsung/ for matching audio assets.",
-                    icon = Icons.Default.QueueMusic
-                )
-            }
+            EmptyStateView(
+                title = "No Recordings Found",
+                description = "Ensure that recordings are stored in the configured directory, then tap the scan button.",
+                icon = Icons.Default.MusicNote,
+                modifier = Modifier.align(Alignment.Center)
+            )
         } else {
             LazyColumn(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
-                contentPadding = PaddingValues(bottom = 16.dp)
+                contentPadding = PaddingValues(vertical = 16.dp),
+                modifier = Modifier.fillMaxSize()
             ) {
                 sortedGroupedKeys.forEach { number ->
-                    val groupRecordings = groupedRecordings[number] ?: emptyList()
+                    val groupList = groupedRecordings[number] ?: emptyList()
                     val isExpanded = expandedNumbers.contains(number)
-                    
+
+                    // 1. Group Header Card
                     item(key = "header_$number") {
-                        val representativeCall = groupRecordings.first()
+                        val representative = groupList.first()
+                        val displayName = representative.call?.name 
+                            ?: representative.recording.contactExtracted 
+                            ?: if (number != "Unknown") number else "Unknown/Unmatched"
+                        
+                        val displayNumber = representative.call?.number 
+                            ?: representative.recording.phoneExtracted 
+                            ?: "Unknown"
+
+                        val initials = representative.call?.initials ?: if (displayName != "Unknown/Unmatched" && displayName.isNotEmpty()) {
+                            displayName.split(" ").filter { it.isNotEmpty() }.map { it.first() }.joinToString("").take(2).uppercase()
+                        } else {
+                            "#"
+                        }
+                        val photoUri = representative.call?.contactPhotoUri
+
                         GroupHeaderCard(
-                            displayName = representativeCall.displayName,
-                            number = number,
-                            recordingCount = groupRecordings.size,
-                            initials = representativeCall.initials,
-                            photoUri = representativeCall.contactPhotoUri,
+                            displayName = displayName,
+                            number = displayNumber,
+                            count = groupList.size,
+                            initials = initials,
+                            photoUri = photoUri,
                             isExpanded = isExpanded,
                             onToggleExpand = {
                                 expandedNumbers = if (isExpanded) {
@@ -184,28 +137,13 @@ fun RecordingManagerScreen(
                         )
                     }
 
+                    // 2. Expanded Group Items
                     if (isExpanded) {
-                        items(
-                            items = groupRecordings,
-                            key = { "rec_${it.id}" }
-                        ) { call ->
-                            val isActive = activePlayCallId == call.id
-                            
-                            RecordingCard(
-                                call = call,
-                                isPlaying = isActive && isPlaying,
-                                playProgress = if (isActive) playProgress else 0f,
-                                activeDuration = if (isActive) activeDuration else null,
-                                onPlayPauseClick = {
-                                    if (isActive) {
-                                        isPlaying = !isPlaying
-                                    } else {
-                                        activePlayCallId = call.id
-                                        isPlaying = true
-                                        playProgress = 0f
-                                    }
-                                },
-                                onCardClick = { onCallClick(call.id) },
+                        items(groupList, key = { "rec_${it.recording.id}" }) { item ->
+                            RecordingChildItem(
+                                recording = item.recording,
+                                matchedCall = item.call,
+                                onCardClick = { selectedRecordingForDetail = item.recording },
                                 modifier = Modifier.padding(start = 16.dp)
                             )
                         }
@@ -214,162 +152,26 @@ fun RecordingManagerScreen(
             }
         }
     }
-}
 
-@Composable
-private fun RecordingCard(
-    call: CallLogEntry,
-    isPlaying: Boolean,
-    playProgress: Float,
-    onPlayPauseClick: () -> Unit,
-    onCardClick: () -> Unit,
-    activeDuration: Float? = null,
-    modifier: Modifier = Modifier
-) {
-    val actualFile = remember(call.recordingPath) {
-        if (call.recordingPath != null) java.io.File(call.recordingPath) else null
-    }
-
-    // Get real file size if it exists, otherwise fall back to mock
-    val fileSizeString = remember(actualFile, call.duration) {
-        if (actualFile != null && actualFile.exists()) {
-            val bytes = actualFile.length()
-            val mb = bytes.toDouble() / (1024.0 * 1024.0)
-            String.format(java.util.Locale.US, "%.1f MB", mb)
-        } else {
-            val sizeKb = call.duration * 16.0
-            val sizeMb = sizeKb / 1024.0
-            String.format(java.util.Locale.US, "%.1f MB", if (sizeMb > 0.1) sizeMb else 0.4)
-        }
-    }
-
-    // Use active duration from media player if available, otherwise call log duration
-    val totalDurationSec = activeDuration ?: call.duration.toFloat()
-    val durationString = totalDurationSec.toInt().toDurationString()
-    val dateString = call.timestamp.toDateString()
-
-    GlassyCard(modifier = modifier) {
-        Column(modifier = Modifier.fillMaxWidth()) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                // Circular Play Button
-                IconButton(
-                    onClick = onPlayPauseClick,
-                    modifier = Modifier
-                        .size(44.dp)
-                        .clip(CircleShape)
-                        .background(Teal500)
-                ) {
-                    Icon(
-                        imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                        contentDescription = "Play/Pause",
-                        tint = Slate50,
-                        modifier = Modifier.size(24.dp)
-                    )
-                }
-
-                Spacer(modifier = Modifier.width(16.dp))
-
-                Column(
-                    modifier = Modifier
-                        .weight(1f)
-                        .clickable { onCardClick() }
-                ) {
-                    Text(
-                        text = call.displayName,
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = Slate50,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                    Spacer(modifier = Modifier.height(2.dp))
-                    Text(
-                        text = "Duration: $durationString  •  File Size: $fileSizeString",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = Slate400
-                    )
-                }
-
-                val statusIcon = when (call.recordingUploadStatus) {
-                    "SUCCESS" -> Icons.Default.CloudDone
-                    "UPLOADING" -> Icons.Default.Sync
-                    "FAILED" -> Icons.Default.CloudOff
-                    else -> Icons.Default.Cloud
-                }
-                
-                val statusColor = when (call.recordingUploadStatus) {
-                    "SUCCESS" -> Green500
-                    "UPLOADING" -> Amber500
-                    "FAILED" -> Red500
-                    else -> Slate400
-                }
-
-                Box(
-                    modifier = Modifier
-                        .size(36.dp)
-                        .clip(CircleShape)
-                        .background(statusColor.copy(alpha = 0.15f)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = statusIcon,
-                        contentDescription = call.recordingUploadStatus,
-                        tint = statusColor,
-                        modifier = Modifier.size(18.dp)
-                    )
-                }
+    // Detail Dialog
+    selectedRecordingForDetail?.let { rec ->
+        val call = callLogs.firstOrNull { it.id == rec.matchedCallId }
+        RecordingDetailDialog(
+            recording = rec,
+            matchedCall = call,
+            onDismiss = { selectedRecordingForDetail = null },
+            onReUploadClick = {
+                viewModel.uploadRecordingDirect(rec.id) { }
             }
-
-            // Expanded slider view when active
-            AnimatedVisibility(
-                visible = playProgress > 0f || isPlaying,
-                enter = expandVertically() + fadeIn(),
-                exit = shrinkVertically() + fadeOut()
-            ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 12.dp)
-                ) {
-                    LinearProgressIndicator(
-                        progress = { playProgress },
-                        color = Teal300,
-                        trackColor = Slate700,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(6.dp)
-                            .clip(CircleShape)
-                    )
-                    Spacer(modifier = Modifier.height(6.dp))
-                    Row(
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text(
-                            text = (playProgress * totalDurationSec).toInt().toDurationString(),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = Slate400
-                        )
-                        Text(
-                            text = dateString,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = Slate400
-                        )
-                    }
-                }
-            }
-        }
+        )
     }
 }
 
 @Composable
-private fun GroupHeaderCard(
+fun GroupHeaderCard(
     displayName: String,
     number: String,
-    recordingCount: Int,
+    count: Int,
     initials: String,
     photoUri: String?,
     isExpanded: Boolean,
@@ -377,12 +179,14 @@ private fun GroupHeaderCard(
     modifier: Modifier = Modifier
 ) {
     GlassyCard(
-        modifier = modifier,
+        modifier = modifier.fillMaxWidth(),
         onClick = onToggleExpand
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp)
         ) {
             ContactAvatar(
                 name = displayName,
@@ -402,7 +206,7 @@ private fun GroupHeaderCard(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
-                if (displayName != number) {
+                if (displayName != number && number != "Unknown") {
                     Spacer(modifier = Modifier.height(2.dp))
                     Text(
                         text = number,
@@ -412,7 +216,7 @@ private fun GroupHeaderCard(
                 }
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
-                    text = "$recordingCount recording${if (recordingCount > 1) "s" else ""}",
+                    text = "$count recording${if (count > 1) "s" else ""}",
                     style = MaterialTheme.typography.bodySmall,
                     color = Teal300,
                     fontWeight = FontWeight.SemiBold
@@ -430,3 +234,309 @@ private fun GroupHeaderCard(
     }
 }
 
+@Composable
+fun RecordingChildItem(
+    recording: RecordingEntity,
+    matchedCall: CallLogEntry?,
+    onCardClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val fileExists = remember(recording.filePath) { File(recording.filePath).exists() }
+    val isMatched = recording.matchStatus == MatchStatus.MATCHED && matchedCall != null
+
+    GlassyCard(
+        modifier = modifier.fillMaxWidth(),
+        onClick = onCardClick
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                imageVector = Icons.Default.Mic,
+                contentDescription = null,
+                tint = when {
+                    !fileExists -> Red500
+                    isMatched -> Green500
+                    else -> Amber500
+                },
+                modifier = Modifier
+                    .size(32.dp)
+                    .background(Slate950, CircleShape)
+                    .padding(6.dp)
+            )
+
+            Spacer(modifier = Modifier.width(12.dp))
+
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = recording.lastModified.toDateString(),
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Medium,
+                    color = Slate50
+                )
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text = recording.duration.toInt().toDurationString(),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Slate400
+                )
+                Spacer(modifier = Modifier.height(6.dp))
+
+                // Indicators Row
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    // Match indicator
+                    StatusBadge(
+                        text = if (isMatched) "Matched" else "Unmatched",
+                        containerColor = if (isMatched) Green500.copy(alpha = 0.15f) else Amber500.copy(alpha = 0.15f),
+                        contentColor = if (isMatched) Green500 else Amber500
+                    )
+
+                    // Upload indicator
+                    if (isMatched) {
+                        val uploadText = when (recording.uploadStatus) {
+                            UploadStatus.UPLOADED -> "Uploaded"
+                            UploadStatus.PENDING -> "Pending"
+                            UploadStatus.FAILED -> "Failed"
+                        }
+                        val uploadColor = when (recording.uploadStatus) {
+                            UploadStatus.UPLOADED -> Green500
+                            UploadStatus.PENDING -> Slate400
+                            UploadStatus.FAILED -> Red500
+                        }
+                        StatusBadge(
+                            text = uploadText,
+                            containerColor = uploadColor.copy(alpha = 0.15f),
+                            contentColor = uploadColor
+                        )
+                    }
+
+                    // Missing file existence warning
+                    if (!fileExists) {
+                        StatusBadge(
+                            text = "File Missing",
+                            containerColor = Red500.copy(alpha = 0.15f),
+                            contentColor = Red500
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun StatusBadge(
+    text: String,
+    containerColor: Color,
+    contentColor: Color
+) {
+    Box(
+        modifier = Modifier
+            .background(containerColor, RoundedCornerShape(6.dp))
+            .padding(horizontal = 8.dp, vertical = 2.dp)
+    ) {
+        Text(
+            text = text,
+            style = Modifier.align(Alignment.Center).let { MaterialTheme.typography.labelSmall },
+            fontWeight = FontWeight.Bold,
+            color = contentColor
+        )
+    }
+}
+
+@Composable
+fun RecordingDetailDialog(
+    recording: RecordingEntity,
+    matchedCall: CallLogEntry?,
+    onDismiss: () -> Unit,
+    onReUploadClick: () -> Unit
+) {
+    val context = LocalContext.current
+    var isPlaying by remember { mutableStateOf(false) }
+    var playProgress by remember { mutableStateOf(0f) }
+    var mediaPlayer by remember { mutableStateOf<MediaPlayer?>(null) }
+
+    val file = remember(recording.filePath) { File(recording.filePath) }
+    val fileExists = remember(file) { file.exists() }
+    val isMatched = recording.matchStatus == MatchStatus.MATCHED && matchedCall != null
+
+    LaunchedEffect(isPlaying) {
+        if (isPlaying && fileExists) {
+            try {
+                if (mediaPlayer == null) {
+                    mediaPlayer = MediaPlayer().apply {
+                        val fis = java.io.FileInputStream(file)
+                        setDataSource(fis.fd)
+                        prepare()
+                        fis.close()
+                    }
+                }
+                mediaPlayer?.start()
+                while (isPlaying && mediaPlayer?.isPlaying == true) {
+                    val progress = mediaPlayer!!.currentPosition.toFloat() / mediaPlayer!!.duration.toFloat()
+                    playProgress = progress.coerceIn(0f, 1f)
+                    delay(100)
+                }
+                if (mediaPlayer?.isPlaying == false && playProgress >= 0.95f) {
+                    isPlaying = false
+                    playProgress = 0f
+                    mediaPlayer?.seekTo(0)
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("RecordingDetailDialog", "Playback failed", e)
+                Toast.makeText(context, "Playback failed: ${e.message}", Toast.LENGTH_SHORT).show()
+                isPlaying = false
+            }
+        } else {
+            mediaPlayer?.pause()
+        }
+    }
+
+    DisposableEffect(Unit) {
+        onDispose {
+            mediaPlayer?.stop()
+            mediaPlayer?.release()
+        }
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text(
+                "Recording Details",
+                color = Slate50,
+                fontWeight = FontWeight.Bold,
+                style = MaterialTheme.typography.titleLarge
+            )
+        },
+        text = {
+            Column(
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                // Playback Slider (enabled if file exists)
+                if (fileExists) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(Slate950, RoundedCornerShape(8.dp))
+                            .padding(8.dp)
+                    ) {
+                        IconButton(onClick = { isPlaying = !isPlaying }) {
+                            Icon(
+                                imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                                contentDescription = if (isPlaying) "Pause" else "Play",
+                                tint = Teal300
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(8.dp))
+                        LinearProgressIndicator(
+                            progress = { playProgress },
+                            color = Teal300,
+                            trackColor = Slate700,
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(6.dp)
+                                .clip(CircleShape)
+                        )
+                    }
+                } else {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(Red500.copy(alpha = 0.15f), RoundedCornerShape(8.dp))
+                            .padding(12.dp)
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Icon(Icons.Default.Error, contentDescription = null, tint = Red500)
+                            Text(
+                                text = "Audio file not found on device storage.",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = Red500,
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
+                    }
+                }
+
+                // Attributes List
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    SimpleDetailRow("Filename", recording.fileName)
+                    SimpleDetailRow("Path", recording.filePath)
+
+                    if (isMatched) {
+                        SimpleDetailRow("Contact", matchedCall?.name ?: "Unknown")
+                        SimpleDetailRow("Matched Call Phone", matchedCall?.number ?: "Unknown")
+                    } else {
+                        if (recording.phoneExtracted != null) {
+                            SimpleDetailRow("Extracted Phone", recording.phoneExtracted)
+                        }
+                        if (recording.contactExtracted != null) {
+                            SimpleDetailRow("Extracted Contact", recording.contactExtracted)
+                        }
+                    }
+
+                    SimpleDetailRow("Date", recording.lastModified.toDateString())
+                    SimpleDetailRow("Duration", recording.duration.toInt().toDurationString())
+
+                    SimpleDetailRow("Status", when {
+                        !fileExists -> "File Missing"
+                        isMatched -> "Matched & Linked"
+                        else -> "Unmatched"
+                    })
+
+                    if (isMatched && fileExists) {
+                        SimpleDetailRow("Sync State", when (recording.uploadStatus) {
+                            UploadStatus.UPLOADED -> "Uploaded"
+                            UploadStatus.PENDING -> "Pending Upload"
+                            UploadStatus.FAILED -> "Failed"
+                        })
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                if (isMatched && fileExists) {
+                    Button(
+                        onClick = onReUploadClick,
+                        colors = ButtonDefaults.buttonColors(containerColor = Teal500),
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text("Re-upload")
+                    }
+                }
+                Button(
+                    onClick = onDismiss,
+                    colors = ButtonDefaults.buttonColors(containerColor = Slate700),
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text("Close")
+                }
+            }
+        },
+        containerColor = Slate900,
+        shape = RoundedCornerShape(12.dp)
+    )
+}
+
+@Composable
+fun SimpleDetailRow(label: String, value: String) {
+    Column(modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp)) {
+        Text(label, style = MaterialTheme.typography.bodySmall, color = Slate400)
+        Text(value, style = MaterialTheme.typography.bodyMedium, color = Slate50, fontWeight = FontWeight.Medium)
+    }
+}

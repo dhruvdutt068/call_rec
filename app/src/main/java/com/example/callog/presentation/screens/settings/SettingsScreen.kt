@@ -49,7 +49,7 @@ fun SettingsScreen(
     var developerModeClicks by remember { mutableStateOf(0) }
     var showDeveloperPinDialog by remember { mutableStateOf(false) }
     var developerPinInput by remember { mutableStateOf("") }
-    var isDeveloperModeActive by remember { mutableStateOf(DeveloperLogger.isDeveloperModeEnabled) }
+    val isDeveloperModeActive by viewModel.isDeveloperModeActive.collectAsState()
     
     val folderPickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocumentTree()
@@ -602,8 +602,7 @@ fun SettingsScreen(
                 Button(
                     onClick = {
                         if (developerPinInput == "9852") {
-                            DeveloperLogger.isDeveloperModeEnabled = true
-                            isDeveloperModeActive = true
+                            viewModel.setDeveloperModeActive(true)
                             showDeveloperPinDialog = false
                             developerPinInput = ""
                             Toast.makeText(context, "Developer tools unlocked!", Toast.LENGTH_SHORT).show()

@@ -11,22 +11,22 @@ import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface CallDao {
-    @Query("SELECT * FROM calls ORDER BY timestamp DESC")
+    @Query("SELECT * FROM calls_research ORDER BY timestamp DESC")
     fun getAllCallsFlow(): Flow<List<CallEntity>>
 
-    @Query("SELECT * FROM calls ORDER BY timestamp DESC")
+    @Query("SELECT * FROM calls_research ORDER BY timestamp DESC")
     suspend fun getAllCalls(): List<CallEntity>
 
-    @Query("SELECT * FROM calls WHERE id = :id LIMIT 1")
+    @Query("SELECT * FROM calls_research WHERE id = :id LIMIT 1")
     suspend fun getCallById(id: Long): CallEntity?
 
-    @Query("SELECT * FROM calls WHERE id = :id LIMIT 1")
+    @Query("SELECT * FROM calls_research WHERE id = :id LIMIT 1")
     fun getCallByIdFlow(id: Long): Flow<CallEntity?>
 
-    @Query("SELECT * FROM calls WHERE isFavorite = 1 ORDER BY timestamp DESC")
+    @Query("SELECT * FROM calls_research WHERE isFavorite = 1 ORDER BY timestamp DESC")
     fun getFavoriteCallsFlow(): Flow<List<CallEntity>>
 
-    @Query("SELECT * FROM calls WHERE recordingPath IS NOT NULL ORDER BY timestamp DESC")
+    @Query("SELECT * FROM calls_research WHERE recordingPath IS NOT NULL ORDER BY timestamp DESC")
     fun getCallsWithRecordingsFlow(): Flow<List<CallEntity>>
 
     @Insert(onConflict = OnConflictStrategy.IGNORE)
@@ -41,15 +41,15 @@ interface CallDao {
     @Delete
     suspend fun deleteCall(call: CallEntity)
 
-    @Query("DELETE FROM calls")
+    @Query("DELETE FROM calls_research")
     suspend fun deleteAllCalls()
 
-    @Query("SELECT * FROM calls WHERE syncStatus != 'SYNCED'")
+    @Query("SELECT * FROM calls_research WHERE syncStatus != 'SYNCED'")
     suspend fun getPendingCalls(): List<CallEntity>
 
-    @Query("UPDATE calls SET syncStatus = :syncStatus WHERE id = :callId")
+    @Query("UPDATE calls_research SET syncStatus = :syncStatus WHERE id = :callId")
     suspend fun updateSyncStatus(callId: Long, syncStatus: String)
 
-    @Query("UPDATE calls SET syncStatus = 'PENDING'")
+    @Query("UPDATE calls_research SET syncStatus = 'PENDING'")
     suspend fun resetAllSyncStatus()
 }

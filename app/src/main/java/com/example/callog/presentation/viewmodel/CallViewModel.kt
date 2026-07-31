@@ -18,9 +18,13 @@ import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
-import com.example.callog.data.local.dao.SyncLogDao
+import com.example.callog.data.local.entity.RecordingEntity
+import com.example.callog.data.local.entity.RecordingLogEntity
+import com.example.callog.data.local.dao.RecordingLogDao
 import com.example.callog.data.local.entity.SyncLogEntity
+import com.example.callog.data.local.dao.SyncLogDao
 import com.example.callog.domain.service.SyncManager
+import com.example.callog.core.diagnostics.DeveloperLogger
 
 @HiltViewModel
 class CallViewModel @Inject constructor(
@@ -42,8 +46,15 @@ class CallViewModel @Inject constructor(
     private val syncManager: SyncManager,
     private val salesCallDao: SalesCallDao,
     private val syncLogDao: SyncLogDao,
+    private val recordingLogDao: RecordingLogDao,
     private val simManager: com.example.callog.data.provider.SimManager
 ) : ViewModel() {
+
+    val recordingLogs: StateFlow<List<RecordingLogEntity>> = recordingLogDao.getAllLogsFlow()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val recordingsFlow: StateFlow<List<RecordingEntity>> = recordingRepository.getAllRecordingsFlow()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     val syncLogs: StateFlow<List<SyncLogEntity>> = syncLogDao.getAllLogsFlow()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
@@ -94,6 +105,14 @@ class CallViewModel @Inject constructor(
 
     private val _customRecordingPath = MutableStateFlow("")
     val customRecordingPath = _customRecordingPath.asStateFlow()
+
+    private val _isDeveloperModeActive = MutableStateFlow(DeveloperLogger.isDeveloperModeEnabled)
+    val isDeveloperModeActive = _isDeveloperModeActive.asStateFlow()
+
+    fun setDeveloperModeActive(active: Boolean) {
+        DeveloperLogger.isDeveloperModeEnabled = active
+        _isDeveloperModeActive.value = active
+    }
 
     private val _connectionStatus = MutableStateFlow<String?>(null) // null/idle, "TESTING", "SUCCESS", "FAILED:<error>"
     val connectionStatus = _connectionStatus.asStateFlow()
@@ -437,6 +456,77 @@ class CallViewModel @Inject constructor(
         viewModelScope.launch {
             val success = recordingRepository.deleteRecording(callId)
             onResult(success)
+        }
+    }
+
+    fun rescanRecordings() {
+        viewModelScope.launch {
+            recordingRepository.scanRecordings()
+        }
+    }
+
+    fun clearRecordingLogs() {
+        viewModelScope.launch {
+            recordingLogDao.clearAllLogs()
+        }
+    }
+
+    fun exportRecordingDiagnostics(context: android.content.Context) {
+        viewModelScope.launch {
+            try {
+                val logs = recordingLogs.value
+                val sb = StringBuilder()
+                sb.append("[\n")
+                logs.forEachIndexed { index, log ->
+                    sb.append("  {\n")
+                    sb.append("    \"id\": ${log.id},\n")
+                    sb.append("    \"scanId\": \"${log.scanId}\",\n")
+                    sb.append("    \"fileName\": \"${log.fileName}\",\n")
+                    sb.append("    \"path\": \"${log.path.replace("\\", "\\\\")}\",\n")
+                    sb.append("    \"parser\": \"${log.parser}\",\n")
+                    sb.append("    \"phoneExtracted\": ${if (log.phoneExtracted != null) "\"${log.phoneExtracted}\"" else "null"},\n")
+                    sb.append("    \"timestampExtracted\": ${log.timestampExtracted ?: "null"},\n")
+                    sb.append("    \"candidateCount\": ${log.candidateCount},\n")
+                    sb.append("    \"matchedCallId\": ${log.matchedCallId ?: "null"},\n")
+                    sb.append("    \"status\": \"${log.status}\",\n")
+                    sb.append("    \"reason\": ${if (log.reason != null) "\"${log.reason}\"" else "null"},\n")
+                    sb.append("    \"createdAt\": ${log.createdAt}\n")
+                    sb.append("  }")
+                    if (index < logs.size - 1) {
+                        sb.append(",")
+                    }
+                    sb.append("\n")
+                }
+                sb.append("]")
+                
+                val dir = context.getExternalFilesDir(null) ?: context.filesDir
+                val file = java.io.File(dir, "recording_diagnostics.json")
+                file.writeText(sb.toString())
+                
+                android.widget.Toast.makeText(context, "Exported to: ${file.absolutePath}", android.widget.Toast.LENGTH_LONG).show()
+            } catch (e: Exception) {
+                android.util.Log.e("CallViewModel", "Failed to export logs", e)
+                android.widget.Toast.makeText(context, "Export failed: ${e.message}", android.widget.Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    fun clearAllRecordings() {
+        viewModelScope.launch {
+            recordingRepository.clearAllRecordings()
+        }
+    }
+
+    fun manualMatchRecording(recordingId: Long, callId: Long) {
+        viewModelScope.launch {
+            recordingRepository.manualMatchRecording(recordingId, callId)
+        }
+    }
+
+    fun uploadRecordingDirect(recordingId: Long, onResult: (Result<String>) -> Unit) {
+        viewModelScope.launch {
+            val result = recordingRepository.uploadRecordingDirect(recordingId)
+            onResult(result)
         }
     }
 }

@@ -5,7 +5,7 @@ import androidx.room.Index
 import androidx.room.PrimaryKey
 
 @Entity(
-    tableName = "calls",
+    tableName = "calls_research",
     indices = [
         Index(value = ["number"]),
         Index(value = ["timestamp"])

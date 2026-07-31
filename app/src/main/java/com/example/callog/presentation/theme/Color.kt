@@ -15,9 +15,13 @@ val AllSetDarkBg = Color(0xFF1F1F1F)     // #1F1F1F (Dark Background)
 val AllSetBorder = Color(0xFFD2D5E7)     // Soft light blue-gray for borders
 
 // Dynamic Theme Mappings (support both light and dark themes)
+val isDarkTheme: Boolean
+    @Composable
+    get() = MaterialTheme.colorScheme.background == AllSetDarkBg
+
 val MidnightNavy: Color
     @Composable
-    get() = if (isSystemInDarkTheme()) AllSetLightBg else AllSetDarkBg
+    get() = if (isDarkTheme) AllSetDarkBg else AllSetLightBg
 
 val Slate800: Color
     @Composable
@@ -25,15 +29,15 @@ val Slate800: Color
 
 val Slate700: Color
     @Composable
-    get() = if (isSystemInDarkTheme()) Color(0xFF3A3A3C) else AllSetBorder
+    get() = if (isDarkTheme) Color(0xFF3A3A3C) else AllSetBorder
 
 val Teal500: Color
     @Composable
-    get() = if (isSystemInDarkTheme()) AllSetLavender else AllSetBlue
+    get() = if (isDarkTheme) AllSetLavender else AllSetBlue
 
 val Teal300: Color
     @Composable
-    get() = if (isSystemInDarkTheme()) AllSetBlue else AllSetLavender
+    get() = if (isDarkTheme) AllSetBlue else AllSetLavender
 
 val Amber500: Color
     @Composable
@@ -49,7 +53,7 @@ val Green500: Color
 
 val GlassSurface: Color
     @Composable
-    get() = if (isSystemInDarkTheme()) Color(0x80282828) else Color(0x80FFFFFF)
+    get() = if (isDarkTheme) Color(0x80282828) else Color(0x80FFFFFF)
 
 // Dynamic Composable Mappings (resolves text contrast dynamically based on current theme)
 val Slate50: Color
@@ -65,7 +69,7 @@ val Slate400: Color
 /** Slate300: secondary body text. Light grey in dark mode, medium grey in light mode. */
 val Slate300: Color
     @Composable
-    get() = if (isSystemInDarkTheme()) Color(0xFFCBD5E1) else Color(0xFF5E607E)
+    get() = if (isDarkTheme) Color(0xFFCBD5E1) else Color(0xFF5E607E)
 
 /** Slate900: heavy card/dialog backgrounds. Maps to MaterialTheme surface token. */
 val Slate900: Color

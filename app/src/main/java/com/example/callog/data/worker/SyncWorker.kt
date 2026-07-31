@@ -217,12 +217,14 @@ class SyncWorker(
                                 val errMessage = finalState.exception.message ?: "Unknown upload error"
                                 DeveloperLogger.error("RECORDING_UPLOAD_FAILED", "Recording upload failed for Call ID: ${call.id}: $errMessage", exception = finalState.exception, network = network)
                                 syncRepository.markFailed(call.id, errMessage, call.retryCount + 1, currentTime)
+                                recordingRepository.updateRecordingUploadStatus(call.id, com.example.callog.data.local.entity.UploadStatus.FAILED, reason = errMessage)
                                 uploadFailed = true
                                 failCount++
                             }
                             else -> {
                                 DeveloperLogger.error("RECORDING_UPLOAD_FAILED", "Recording upload failed: Completed with empty state", network = network)
                                 syncRepository.markFailed(call.id, "Completed with no result", call.retryCount + 1, currentTime)
+                                recordingRepository.updateRecordingUploadStatus(call.id, com.example.callog.data.local.entity.UploadStatus.FAILED, reason = "Completed with no result")
                                 uploadFailed = true
                                 failCount++
                             }
@@ -230,6 +232,7 @@ class SyncWorker(
                     } catch (e: Exception) {
                         DeveloperLogger.error("RECORDING_UPLOAD_FAILED", "Recording upload exception for Call ID: ${call.id}", exception = e, network = network)
                         syncRepository.markFailed(call.id, "Upload stream exception: ${e.message}", call.retryCount + 1, currentTime)
+                        recordingRepository.updateRecordingUploadStatus(call.id, com.example.callog.data.local.entity.UploadStatus.FAILED, reason = e.message)
                         uploadFailed = true
                         failCount++
                     }
@@ -244,6 +247,7 @@ class SyncWorker(
                     val metadataDuration = System.currentTimeMillis() - metadataStartTime
                     if (result.isSuccess) {
                         syncRepository.markSynced(call.id, cloudPath, recordingUrl, currentTime)
+                        recordingRepository.updateRecordingUploadStatus(call.id, com.example.callog.data.local.entity.UploadStatus.UPLOADED, recordingUrl)
                         DeveloperLogger.success("FIRESTORE_METADATA_UPLOAD_SUCCESS", "Successfully uploaded metadata to Firestore for Call ID: ${call.id}.", durationMs = metadataDuration, network = network)
                         successCount++
                     } else {
@@ -251,11 +255,13 @@ class SyncWorker(
                         val errMsg = exception?.message ?: "Metadata upload failure"
                         DeveloperLogger.error("FIRESTORE_METADATA_UPLOAD_FAILED", "Failed uploading metadata for Call ID: ${call.id}: $errMsg", exception = exception, network = network)
                         syncRepository.markFailed(call.id, errMsg, call.retryCount + 1, currentTime)
+                        recordingRepository.updateRecordingUploadStatus(call.id, com.example.callog.data.local.entity.UploadStatus.FAILED, reason = errMsg)
                         failCount++
                     }
                 } catch (e: Exception) {
                     DeveloperLogger.error("FIRESTORE_METADATA_UPLOAD_FAILED", "Metadata upload exception for Call ID: ${call.id}", exception = e, network = network)
                     syncRepository.markFailed(call.id, "Metadata upload exception: ${e.message}", call.retryCount + 1, currentTime)
+                    recordingRepository.updateRecordingUploadStatus(call.id, com.example.callog.data.local.entity.UploadStatus.FAILED, reason = e.message)
                     failCount++
                 }
             }

@@ -3,7 +3,9 @@ package com.example.callog.data.repository
 import android.content.Context
 import android.util.Log
 import com.example.callog.data.local.dao.CallDao
+import com.example.callog.data.local.dao.RecordingLogDao
 import com.example.callog.data.local.entity.CallEntity
+import com.example.callog.data.local.entity.RecordingLogEntity
 import com.example.callog.data.provider.RecordingScanner
 import com.example.callog.data.remote.FirestoreService
 import com.example.callog.domain.repository.RecordingRepository
@@ -23,12 +25,20 @@ import java.util.Locale
 import javax.inject.Inject
 import javax.inject.Singleton
 
+import com.example.callog.data.local.entity.RecordingEntity
+import com.example.callog.data.local.entity.MatchStatus
+import com.example.callog.data.local.entity.UploadStatus
+import kotlinx.coroutines.flow.Flow
+
 @Singleton
 class RecordingRepositoryImpl @Inject constructor(
     @ApplicationContext private val context: Context,
     private val callDao: CallDao,
     private val firestoreService: FirestoreService,
-    private val recordingScanner: RecordingScanner
+    private val recordingScanner: RecordingScanner,
+    private val contactsProvider: com.example.callog.data.provider.ContactsProvider,
+    private val recordingLogDao: com.example.callog.data.local.dao.RecordingLogDao,
+    private val recordingDao: com.example.callog.data.local.dao.RecordingDao
 ) : RecordingRepository {
     private val TAG = "RecordingRepository"
 
@@ -64,61 +74,351 @@ class RecordingRepositoryImpl @Inject constructor(
         }
     }
 
+    private fun normalizePhoneNumber(num: String): String {
+        val clean = num.replace(Regex("[^0-9]"), "")
+        return when {
+            clean.length == 10 -> "91$clean"
+            clean.length > 10 && clean.startsWith("0") -> "91${clean.substring(1)}"
+            else -> clean
+        }
+    }
+
     override suspend fun scanRecordings() = withContext(Dispatchers.IO) {
         try {
+            val scanId = java.util.UUID.randomUUID().toString()
             val recordings = recordingScanner.scanRecordings().toMutableList()
+            Log.d(TAG, "RecordingRepository: Starting scan session $scanId of ${recordings.size} discovered recording(s)")
             if (recordings.isEmpty()) return@withContext
 
             val dbCalls = callDao.getAllCalls()
-            dbCalls.forEach { call ->
-                if (call.recordingLocalPath == null && call.recordingPath == null) {
-                    val matchingRec = recordings.firstOrNull { rec ->
-                        val cleanCallNum = call.number.replace(Regex("[^0-9]"), "")
-                        val isNameBased = rec.phoneNumber.any { it.isLetter() }
-                        val match: Boolean
+            val contacts = try {
+                contactsProvider.fetchContacts()
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to fetch contacts in RecordingRepositoryImpl", e)
+                emptyList()
+            }
 
-                        if (isNameBased) {
-                            val callName = call.name?.trim()?.lowercase()
-                            val recName = rec.phoneNumber.trim().lowercase()
-                            val nameMatches = !callName.isNullOrEmpty() && recName.isNotEmpty() && (
-                                callName == recName ||
-                                callName.contains(recName) ||
-                                recName.contains(callName)
-                            )
-                            val digitsInRec = rec.phoneNumber.replace(Regex("[^0-9]"), "")
-                            val numberMatches = digitsInRec.isNotEmpty() && cleanCallNum.isNotEmpty() && (
-                                cleanCallNum == digitsInRec ||
-                                (cleanCallNum.length >= 7 && digitsInRec.endsWith(cleanCallNum.takeLast(7))) ||
-                                (digitsInRec.length >= 7 && cleanCallNum.endsWith(digitsInRec.takeLast(7)))
-                            )
-                            match = nameMatches || numberMatches
-                        } else {
-                            val cleanRecNum = rec.phoneNumber.replace(Regex("[^0-9]"), "")
-                            match = cleanCallNum.isNotEmpty() && cleanRecNum.isNotEmpty() && (
-                                cleanCallNum == cleanRecNum ||
-                                (cleanCallNum.length >= 7 && cleanRecNum.endsWith(cleanCallNum.takeLast(7))) ||
-                                (cleanRecNum.length >= 7 && cleanCallNum.endsWith(cleanRecNum.takeLast(7)))
+            recordings.forEach { rec ->
+                val fileName = File(rec.filePath).name
+                val existingRecording = recordingDao.getRecordingByPath(rec.filePath)
+                
+                // If it is already matched or uploaded, make sure the CallEntity is synced, and don't re-run match
+                if (existingRecording != null && (existingRecording.matchStatus == MatchStatus.MATCHED || existingRecording.uploadStatus == UploadStatus.UPLOADED)) {
+                    existingRecording.matchedCallId?.let { cid ->
+                        val call = callDao.getCallById(cid)
+                        if (call != null && (call.recordingLocalPath == null || call.recordingPath == null)) {
+                            callDao.updateCall(
+                                call.copy(
+                                    recordingPath = rec.filePath,
+                                    recordingLocalPath = rec.filePath,
+                                    recordingUploadStatus = if (existingRecording.uploadStatus == UploadStatus.UPLOADED) "SUCCESS" else "PENDING"
+                                )
                             )
                         }
-                        val durationMs = call.duration * 1000L
-                        val timeMatch = rec.timestamp >= (call.timestamp - 300000L) && 
-                                        rec.timestamp <= (call.timestamp + durationMs + 300000L)
-                        match && timeMatch
                     }
+                    return@forEach
+                }
 
-                    if (matchingRec != null) {
-                        recordings.remove(matchingRec)
-                        callDao.updateCall(
-                            call.copy(
-                                recordingPath = matchingRec.filePath,
-                                recordingLocalPath = matchingRec.filePath,
-                                recordingUploadStatus = "PENDING"
-                            )
+                val durationSec = rec.durationMs / 1000L
+
+                // 1. Check if parser failed
+                if (rec.phoneNumber == null && rec.contactName == null) {
+                    val recordingEntity = RecordingEntity(
+                        id = existingRecording?.id ?: 0,
+                        filePath = rec.filePath,
+                        fileName = fileName,
+                        fileSize = rec.fileSize,
+                        duration = durationSec,
+                        lastModified = rec.lastModified,
+                        phoneExtracted = null,
+                        contactExtracted = null,
+                        timestampExtracted = rec.timestamp,
+                        matchedCallId = null,
+                        matchStatus = MatchStatus.PARSER_FAILED,
+                        uploadStatus = UploadStatus.PENDING,
+                        parser = rec.parserName,
+                        reason = "Unknown filename pattern"
+                    )
+                    recordingDao.insertRecording(recordingEntity)
+                    recordingLogDao.insertLog(
+                        RecordingLogEntity(
+                            scanId = scanId,
+                            fileName = fileName,
+                            path = rec.filePath,
+                            parser = rec.parserName,
+                            phoneExtracted = null,
+                            timestampExtracted = rec.timestamp,
+                            candidateCount = 0,
+                            matchedCallId = null,
+                            status = "PARSER_FAILED",
+                            reason = "Unknown filename pattern"
                         )
-                        Log.i(TAG, "Matched recording file ${matchingRec.filePath} with call to ${call.number}")
-                        enqueueUploadWork(call.id)
+                    )
+                    return@forEach
+                }
+
+                // 2. Find call logs within ±60 seconds
+                val candidates = dbCalls.filter { call ->
+                    rec.timestamp >= (call.timestamp - 60000L) && 
+                    rec.timestamp <= (call.timestamp + 60000L)
+                }
+
+                if (candidates.isEmpty()) {
+                    val recordingEntity = RecordingEntity(
+                        id = existingRecording?.id ?: 0,
+                        filePath = rec.filePath,
+                        fileName = fileName,
+                        fileSize = rec.fileSize,
+                        duration = durationSec,
+                        lastModified = rec.lastModified,
+                        phoneExtracted = rec.phoneNumber,
+                        contactExtracted = rec.contactName,
+                        timestampExtracted = rec.timestamp,
+                        matchedCallId = null,
+                        matchStatus = MatchStatus.UNMATCHED,
+                        uploadStatus = UploadStatus.PENDING,
+                        parser = rec.parserName,
+                        reason = "No call log within ±60 seconds"
+                    )
+                    recordingDao.insertRecording(recordingEntity)
+                    recordingLogDao.insertLog(
+                        RecordingLogEntity(
+                            scanId = scanId,
+                            fileName = fileName,
+                            path = rec.filePath,
+                            parser = rec.parserName,
+                            phoneExtracted = rec.phoneNumber ?: rec.contactName,
+                            timestampExtracted = rec.timestamp,
+                            candidateCount = 0,
+                            matchedCallId = null,
+                            status = "UNMATCHED",
+                            reason = "No call log within ±60 seconds"
+                        )
+                    )
+                    return@forEach
+                }
+
+                // 3. If only one candidate -> Match
+                if (candidates.size == 1) {
+                    val bestCall = candidates[0]
+                    val recordingEntity = RecordingEntity(
+                        id = existingRecording?.id ?: 0,
+                        filePath = rec.filePath,
+                        fileName = fileName,
+                        fileSize = rec.fileSize,
+                        duration = durationSec,
+                        lastModified = rec.lastModified,
+                        phoneExtracted = rec.phoneNumber,
+                        contactExtracted = rec.contactName,
+                        timestampExtracted = rec.timestamp,
+                        matchedCallId = bestCall.id,
+                        matchStatus = MatchStatus.MATCHED,
+                        uploadStatus = UploadStatus.PENDING,
+                        parser = rec.parserName,
+                        reason = "Matched to unique call within ±60 seconds"
+                    )
+                    recordingDao.insertRecording(recordingEntity)
+                    callDao.updateCall(
+                        bestCall.copy(
+                            recordingPath = rec.filePath,
+                            recordingLocalPath = rec.filePath,
+                            recordingUploadStatus = "PENDING"
+                        )
+                    )
+                    Log.i(TAG, "Matched unique candidate: ${rec.filePath} -> Call ID ${bestCall.id}")
+                    enqueueUploadWork(bestCall.id)
+
+                    recordingLogDao.insertLog(
+                        RecordingLogEntity(
+                            scanId = scanId,
+                            fileName = fileName,
+                            path = rec.filePath,
+                            parser = rec.parserName,
+                            phoneExtracted = rec.phoneNumber ?: rec.contactName,
+                            timestampExtracted = rec.timestamp,
+                            candidateCount = 1,
+                            matchedCallId = bestCall.id,
+                            status = "MATCHED",
+                            reason = null
+                        )
+                    )
+                    return@forEach
+                }
+
+                // 4. If multiple candidates -> Use phone number (if available)
+                var matchedByPhone: List<CallEntity> = emptyList()
+                if (rec.phoneNumber != null) {
+                    val normRecNum = normalizePhoneNumber(rec.phoneNumber)
+                    matchedByPhone = candidates.filter { call ->
+                        val normCallNum = normalizePhoneNumber(call.number)
+                        normCallNum.isNotEmpty() && normRecNum.isNotEmpty() && (
+                            normCallNum == normRecNum ||
+                            (normCallNum.length >= 7 && normRecNum.endsWith(normCallNum.takeLast(7))) ||
+                            (normRecNum.length >= 7 && normCallNum.endsWith(normRecNum.takeLast(7)))
+                        )
+                    }
+                } else if (rec.contactName != null) {
+                    val recNameClean = rec.contactName.trim().lowercase()
+                    matchedByPhone = candidates.filter { call ->
+                        val callNameClean = call.name?.trim()?.lowercase() ?: ""
+                        if (callNameClean.isNotEmpty() && (
+                            callNameClean == recNameClean ||
+                            callNameClean.contains(recNameClean) ||
+                            recNameClean.contains(callNameClean)
+                        )) {
+                            true
+                        } else {
+                            val matchedContacts = contacts.filter { contact ->
+                                val cName = contact.name.trim().lowercase()
+                                cName == recNameClean || cName.contains(recNameClean) || recNameClean.contains(cName)
+                            }
+                            val contactPhones = matchedContacts.flatMap { it.phoneNumbers }.map { normalizePhoneNumber(it) }
+                            val normCallNum = normalizePhoneNumber(call.number)
+                            
+                            contactPhones.any { cPhone ->
+                                cPhone.isNotEmpty() && normCallNum.isNotEmpty() && (
+                                    cPhone == normCallNum ||
+                                    (cPhone.length >= 7 && normCallNum.endsWith(cPhone.takeLast(7))) ||
+                                    (normCallNum.length >= 7 && cPhone.endsWith(normCallNum.takeLast(7)))
+                                )
+                            }
+                        }
                     }
                 }
+
+                if (matchedByPhone.size == 1) {
+                    val bestCall = matchedByPhone[0]
+                    val recordingEntity = RecordingEntity(
+                        id = existingRecording?.id ?: 0,
+                        filePath = rec.filePath,
+                        fileName = fileName,
+                        fileSize = rec.fileSize,
+                        duration = durationSec,
+                        lastModified = rec.lastModified,
+                        phoneExtracted = rec.phoneNumber,
+                        contactExtracted = rec.contactName,
+                        timestampExtracted = rec.timestamp,
+                        matchedCallId = bestCall.id,
+                        matchStatus = MatchStatus.MATCHED,
+                        uploadStatus = UploadStatus.PENDING,
+                        parser = rec.parserName,
+                        reason = "Matched by phone number from multiple candidates"
+                    )
+                    recordingDao.insertRecording(recordingEntity)
+                    callDao.updateCall(
+                        bestCall.copy(
+                            recordingPath = rec.filePath,
+                            recordingLocalPath = rec.filePath,
+                            recordingUploadStatus = "PENDING"
+                        )
+                    )
+                    Log.i(TAG, "Matched by phone: ${rec.filePath} -> Call ID ${bestCall.id}")
+                    enqueueUploadWork(bestCall.id)
+
+                    recordingLogDao.insertLog(
+                        RecordingLogEntity(
+                            scanId = scanId,
+                            fileName = fileName,
+                            path = rec.filePath,
+                            parser = rec.parserName,
+                            phoneExtracted = rec.phoneNumber ?: rec.contactName,
+                            timestampExtracted = rec.timestamp,
+                            candidateCount = candidates.size,
+                            matchedCallId = bestCall.id,
+                            status = "MATCHED",
+                            reason = null
+                        )
+                    )
+                    return@forEach
+                }
+
+                // 5. If still tied -> Use call duration
+                val baseCandidatesForDuration = if (matchedByPhone.isNotEmpty()) matchedByPhone else candidates
+                val durationTolerance = 5
+                val durationMatched = baseCandidatesForDuration.filter { call ->
+                    Math.abs(call.duration - durationSec) <= durationTolerance
+                }
+
+                if (durationMatched.size == 1) {
+                    val bestCall = durationMatched[0]
+                    val recordingEntity = RecordingEntity(
+                        id = existingRecording?.id ?: 0,
+                        filePath = rec.filePath,
+                        fileName = fileName,
+                        fileSize = rec.fileSize,
+                        duration = durationSec,
+                        lastModified = rec.lastModified,
+                        phoneExtracted = rec.phoneNumber,
+                        contactExtracted = rec.contactName,
+                        timestampExtracted = rec.timestamp,
+                        matchedCallId = bestCall.id,
+                        matchStatus = MatchStatus.MATCHED,
+                        uploadStatus = UploadStatus.PENDING,
+                        parser = rec.parserName,
+                        reason = "Matched by duration difference within 5s"
+                    )
+                    recordingDao.insertRecording(recordingEntity)
+                    callDao.updateCall(
+                        bestCall.copy(
+                            recordingPath = rec.filePath,
+                            recordingLocalPath = rec.filePath,
+                            recordingUploadStatus = "PENDING"
+                        )
+                    )
+                    Log.i(TAG, "Matched by duration: ${rec.filePath} -> Call ID ${bestCall.id}")
+                    enqueueUploadWork(bestCall.id)
+
+                    recordingLogDao.insertLog(
+                        RecordingLogEntity(
+                            scanId = scanId,
+                            fileName = fileName,
+                            path = rec.filePath,
+                            parser = rec.parserName,
+                            phoneExtracted = rec.phoneNumber ?: rec.contactName,
+                            timestampExtracted = rec.timestamp,
+                            candidateCount = candidates.size,
+                            matchedCallId = bestCall.id,
+                            status = "MATCHED",
+                            reason = null
+                        )
+                    )
+                    return@forEach
+                }
+
+                // 6. If still tied -> Manual review
+                val reason = "Tied between ${baseCandidatesForDuration.size} candidates after timestamp, phone and duration checks"
+                val recordingEntity = RecordingEntity(
+                    id = existingRecording?.id ?: 0,
+                    filePath = rec.filePath,
+                    fileName = fileName,
+                    fileSize = rec.fileSize,
+                    duration = durationSec,
+                    lastModified = rec.lastModified,
+                    phoneExtracted = rec.phoneNumber,
+                    contactExtracted = rec.contactName,
+                    timestampExtracted = rec.timestamp,
+                    matchedCallId = null,
+                    matchStatus = MatchStatus.UNMATCHED,
+                    uploadStatus = UploadStatus.PENDING,
+                    parser = rec.parserName,
+                    reason = reason
+                )
+                recordingDao.insertRecording(recordingEntity)
+
+                recordingLogDao.insertLog(
+                    RecordingLogEntity(
+                        scanId = scanId,
+                        fileName = fileName,
+                        path = rec.filePath,
+                        parser = rec.parserName,
+                        phoneExtracted = rec.phoneNumber ?: rec.contactName,
+                        timestampExtracted = rec.timestamp,
+                        candidateCount = candidates.size,
+                        matchedCallId = null,
+                        status = "UNMATCHED",
+                        reason = reason
+                    )
+                )
             }
         } catch (e: Exception) {
             Log.e(TAG, "Error in scanRecordings", e)
@@ -213,15 +513,35 @@ class RecordingRepositoryImpl @Inject constructor(
                         recordingUploadedAt = System.currentTimeMillis()
                     )
                 )
+                updateRecordingUploadStatus(callId, UploadStatus.UPLOADED, downloadUrl)
                 Result.success(remotePath)
             } else {
                 callDao.updateCall(call.copy(recordingUploadStatus = "FAILED"))
+                updateRecordingUploadStatus(callId, UploadStatus.FAILED, reason = "Failed to update Firestore metadata")
                 Result.failure(Exception("Failed to update Firestore metadata after upload"))
             }
         } catch (e: Exception) {
             Log.e(TAG, "Error uploading call recording $callId to GCS", e)
             callDao.updateCall(call.copy(recordingUploadStatus = "FAILED"))
+            updateRecordingUploadStatus(callId, UploadStatus.FAILED, reason = e.message)
             Result.failure(e)
+        }
+    }
+
+    override suspend fun updateRecordingUploadStatus(callId: Long, status: UploadStatus, cloudUrl: String?, reason: String?) {
+        try {
+            val list = recordingDao.getAllRecordings().filter { it.matchedCallId == callId }
+            for (rec in list) {
+                recordingDao.updateRecording(
+                    rec.copy(
+                        uploadStatus = status,
+                        cloudUrl = cloudUrl ?: rec.cloudUrl,
+                        reason = reason ?: rec.reason
+                    )
+                )
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to sync recording upload status", e)
         }
     }
 
@@ -286,6 +606,17 @@ class RecordingRepositoryImpl @Inject constructor(
                     recordingUploadedAt = null
                 )
             )
+            
+            // Sync recordings table
+            val recList = recordingDao.getAllRecordings().filter { it.matchedCallId == callId }
+            for (rec in recList) {
+                recordingDao.updateRecording(
+                    rec.copy(
+                        uploadStatus = UploadStatus.PENDING,
+                        cloudUrl = null
+                    )
+                )
+            }
             true
         } catch (e: Exception) {
             Log.e(TAG, "Error deleting call recording $callId from GCS", e)
@@ -307,6 +638,76 @@ class RecordingRepositoryImpl @Inject constructor(
                 Log.i(TAG, "Manually associated recording file $localPath with call $callId")
             }
         }
+    }
+
+    override fun getAllRecordingsFlow(): Flow<List<RecordingEntity>> {
+        return recordingDao.getAllRecordingsFlow()
+    }
+
+    override suspend fun getAllRecordings(): List<RecordingEntity> {
+        return recordingDao.getAllRecordings()
+    }
+
+    override suspend fun getRecordingById(id: Long): RecordingEntity? {
+        return recordingDao.getRecordingById(id)
+    }
+
+    override suspend fun clearAllRecordings() {
+        recordingDao.clearAllRecordings()
+    }
+
+    override suspend fun manualMatchRecording(recordingId: Long, callId: Long) {
+        withContext(Dispatchers.IO) {
+            val recording = recordingDao.getRecordingById(recordingId)
+            val call = callDao.getCallById(callId)
+            if (recording != null && call != null) {
+                recordingDao.updateRecording(
+                    recording.copy(
+                        matchedCallId = callId,
+                        matchStatus = MatchStatus.MATCHED,
+                        reason = "Manually matched to call"
+                    )
+                )
+                callDao.updateCall(
+                    call.copy(
+                        recordingPath = recording.filePath,
+                        recordingLocalPath = recording.filePath,
+                        recordingUploadStatus = "PENDING"
+                    )
+                )
+                Log.i(TAG, "Manually matched recording ${recording.filePath} to call ${call.number} ($callId)")
+                enqueueUploadWork(callId)
+            }
+        }
+    }
+
+    override suspend fun uploadRecordingDirect(recordingId: Long): Result<String> = withContext(Dispatchers.IO) {
+        val recording = recordingDao.getRecordingById(recordingId)
+            ?: return@withContext Result.failure(Exception("Recording not found in database: $recordingId"))
+        
+        val callId = recording.matchedCallId
+            ?: return@withContext Result.failure(Exception("Recording is not matched to any call: $recordingId"))
+        
+        recordingDao.updateRecording(recording.copy(uploadStatus = UploadStatus.PENDING))
+        
+        val result = uploadRecording(callId)
+        if (result.isSuccess) {
+            val updatedCall = callDao.getCallById(callId)
+            recordingDao.updateRecording(
+                recording.copy(
+                    uploadStatus = UploadStatus.UPLOADED,
+                    cloudUrl = updatedCall?.recordingUrl ?: result.getOrNull()
+                )
+            )
+        } else {
+            recordingDao.updateRecording(
+                recording.copy(
+                    uploadStatus = UploadStatus.FAILED,
+                    reason = "Upload failed: ${result.exceptionOrNull()?.message}"
+                )
+            )
+        }
+        result
     }
 
     private fun enqueueUploadWork(callId: Long) {
