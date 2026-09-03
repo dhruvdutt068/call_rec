@@ -22,6 +22,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.example.callog.presentation.components.CallCard
 import com.example.callog.presentation.components.EmptyStateView
+import androidx.compose.material.icons.filled.ArrowBack
 import com.example.callog.presentation.components.SearchBarField
 import com.example.callog.presentation.theme.*
 import com.example.callog.presentation.viewmodel.CallViewModel
@@ -31,6 +32,7 @@ import com.example.callog.presentation.viewmodel.CallViewModel
 fun CallLogsScreen(
     viewModel: CallViewModel,
     onCallClick: (Long) -> Unit,
+    onBackClick: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val callLogs by viewModel.callLogs.collectAsState()
@@ -70,6 +72,19 @@ fun CallLogsScreen(
                 .fillMaxWidth()
                 .padding(top = 12.dp)
         ) {
+            if (onBackClick != null) {
+                IconButton(
+                    onClick = onBackClick,
+                    modifier = Modifier.padding(end = 4.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.ArrowBack,
+                        contentDescription = "Back",
+                        tint = MaterialTheme.colorScheme.onBackground
+                    )
+                }
+            }
+
             SearchBarField(
                 query = searchQuery,
                 onQueryChange = { viewModel.setSearchQuery(it) },

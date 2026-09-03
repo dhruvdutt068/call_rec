@@ -25,7 +25,8 @@ data class CallLogEntry(
     val retryCount: Int = 0,
     val uploadedAt: Long? = null,
     val syncError: String? = null,
-    val lastAttempt: Long? = null
+    val lastAttempt: Long? = null,
+    val personId: String? = null
 ) {
     // Helper to get initials or placeholder name
     val displayName: String

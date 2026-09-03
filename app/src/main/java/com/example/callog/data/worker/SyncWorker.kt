@@ -45,6 +45,8 @@ class SyncWorker(
         fun firestoreService(): FirestoreService
         fun supabaseService(): SupabaseService
         fun simManager(): com.example.callog.data.provider.SimManager
+        fun personRepository(): com.example.callog.domain.repository.PersonRepository
+        fun personDao(): com.example.callog.data.local.dao.PersonDao
     }
 
     override suspend fun doWork(): Result {
@@ -65,6 +67,8 @@ class SyncWorker(
         val firestoreService = entryPoint.firestoreService()
         val supabaseService = entryPoint.supabaseService()
         val simManager = entryPoint.simManager()
+        val personRepository = entryPoint.personRepository()
+        val personDao = entryPoint.personDao()
 
         // Start new logger session
         val syncId = DeveloperLogger.startNewSession()
@@ -114,6 +118,7 @@ class SyncWorker(
                                 callType         = call.callType,
                                 callId           = call.id,
                                 duration         = call.duration,
+                                personId         = call.personId,
                                 createdAt        = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.getDefault()).format(java.util.Date(call.timestamp))
                             )
                         )
@@ -151,6 +156,52 @@ class SyncWorker(
                 }
             } catch (e: Exception) {
                 DeveloperLogger.error("SUPABASE_UPLOAD_FAILED", "Exception occurred during Supabase sync execution", exception = e, network = network)
+            }
+
+            // Step 2d: Resolve local Contacts to canonical Person and sync to Supabase
+            try {
+                DeveloperLogger.info("IDENTITY_SYNC_STARTED", "Resolving contacts to Person canonical identity and syncing to Supabase", network = network)
+                personRepository.syncContactsFromDevice()
+
+                val pendingPeople = personDao.getPendingPeople()
+                if (pendingPeople.isNotEmpty()) {
+                    val res = supabaseService.syncPeople(pendingPeople)
+                    if (res.isSuccess) {
+                        for (p in pendingPeople) {
+                            personDao.updatePersonSyncStatus(p.id, "SYNCED")
+                        }
+                        DeveloperLogger.success("IDENTITY_PEOPLE_SYNCED", "Synced ${pendingPeople.size} people to Supabase.", network = network)
+                    }
+                }
+
+                val pendingPhoneNumbers = personDao.getPendingPhoneNumbers()
+                if (pendingPhoneNumbers.isNotEmpty()) {
+                    val res = supabaseService.syncPhoneNumbers(pendingPhoneNumbers)
+                    if (res.isSuccess) {
+                        for (pn in pendingPhoneNumbers) {
+                            personDao.updatePhoneNumberSyncStatus(pn.id, "SYNCED")
+                        }
+                        DeveloperLogger.success("IDENTITY_PHONES_SYNCED", "Synced ${pendingPhoneNumbers.size} phone numbers to Supabase.", network = network)
+                    }
+                }
+
+                val pendingAliases = personDao.getPendingAliases()
+                if (pendingAliases.isNotEmpty()) {
+                    val res = supabaseService.syncContactAliases(pendingAliases)
+                    if (res.isSuccess) {
+                        for (ca in pendingAliases) {
+                            personDao.updateAliasSyncStatus(ca.id, "SYNCED")
+                        }
+                        DeveloperLogger.success("IDENTITY_ALIASES_SYNCED", "Synced ${pendingAliases.size} aliases to Supabase.", network = network)
+                    }
+                }
+
+                val devices = personDao.getAllDevices()
+                if (devices.isNotEmpty()) {
+                    supabaseService.syncDevices(devices)
+                }
+            } catch (e: Exception) {
+                DeveloperLogger.error("IDENTITY_SYNC_FAILED", "Exception during Person identity sync: ${e.message}", exception = e, network = network)
             }
 
             // Step 3: Fetch all pending items from local database for Firestore

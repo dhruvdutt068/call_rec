@@ -34,6 +34,12 @@ sealed interface AllSetNavKey {
     @Serializable
     data object SettingsTab : AllSetNavKey
 
+    @Serializable
+    data object CallLogs : AllSetNavKey
+
+    @Serializable
+    data object DeveloperLogs : AllSetNavKey
+
     // ==========================================
     // AUTHENTICATION FLOW
     // ==========================================

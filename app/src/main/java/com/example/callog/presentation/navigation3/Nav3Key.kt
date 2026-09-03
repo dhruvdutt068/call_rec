@@ -46,6 +46,12 @@ sealed interface Nav3Key {
 
         @Serializable
         data object Settings : CrmTab
+
+        @Serializable
+        data object CallLogs : CrmTab
+
+        @Serializable
+        data object DeveloperLogs : CrmTab
     }
 
     /**

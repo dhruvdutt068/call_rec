@@ -8,7 +8,8 @@ import androidx.room.PrimaryKey
     tableName = "calls_research",
     indices = [
         Index(value = ["number"]),
-        Index(value = ["timestamp"])
+        Index(value = ["timestamp"]),
+        Index(value = ["personId"])
     ]
 )
 data class CallEntity(
@@ -33,5 +34,6 @@ data class CallEntity(
     val retryCount: Int = 0,
     val uploadedAt: Long? = null,
     val syncError: String? = null,
-    val lastAttempt: Long? = null
+    val lastAttempt: Long? = null,
+    val personId: String? = null
 )

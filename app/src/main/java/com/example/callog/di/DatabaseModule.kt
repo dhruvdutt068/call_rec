@@ -197,6 +197,93 @@ object DatabaseModule {
         }
     }
 
+    private val MIGRATION_15_16 = object : Migration(15, 16) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            // 1. Devices Table
+            db.execSQL("""
+                CREATE TABLE IF NOT EXISTS `devices` (
+                    `id` TEXT NOT NULL,
+                    `deviceName` TEXT NOT NULL,
+                    `devicePhone` TEXT NOT NULL,
+                    `deviceIdentifier` TEXT NOT NULL,
+                    `createdAt` INTEGER NOT NULL,
+                    `updatedAt` INTEGER NOT NULL,
+                    `lastSyncAt` INTEGER,
+                    PRIMARY KEY(`id`)
+                )
+            """.trimIndent())
+            db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS `index_devices_deviceIdentifier` ON `devices` (`deviceIdentifier`)")
+
+            // 2. People Table
+            db.execSQL("""
+                CREATE TABLE IF NOT EXISTS `people` (
+                    `id` TEXT NOT NULL,
+                    `displayName` TEXT NOT NULL,
+                    `companyName` TEXT,
+                    `notes` TEXT,
+                    `createdAt` INTEGER NOT NULL,
+                    `updatedAt` INTEGER NOT NULL,
+                    `syncStatus` TEXT NOT NULL,
+                    PRIMARY KEY(`id`)
+                )
+            """.trimIndent())
+            db.execSQL("CREATE INDEX IF NOT EXISTS `index_people_displayName` ON `people` (`displayName`)")
+
+            // 3. Phone Numbers Table
+            db.execSQL("""
+                CREATE TABLE IF NOT EXISTS `phone_numbers` (
+                    `id` TEXT NOT NULL,
+                    `personId` TEXT NOT NULL,
+                    `phoneNumber` TEXT NOT NULL,
+                    `normalizedNumber` TEXT NOT NULL,
+                    `phoneType` TEXT NOT NULL,
+                    `isPrimary` INTEGER NOT NULL,
+                    `createdAt` INTEGER NOT NULL,
+                    `syncStatus` TEXT NOT NULL,
+                    PRIMARY KEY(`id`),
+                    FOREIGN KEY(`personId`) REFERENCES `people`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE
+                )
+            """.trimIndent())
+            db.execSQL("CREATE INDEX IF NOT EXISTS `index_phone_numbers_personId` ON `phone_numbers` (`personId`)")
+            db.execSQL("CREATE INDEX IF NOT EXISTS `index_phone_numbers_normalizedNumber` ON `phone_numbers` (`normalizedNumber`)")
+
+            // 4. Contact Aliases Table
+            db.execSQL("""
+                CREATE TABLE IF NOT EXISTS `contact_aliases` (
+                    `id` TEXT NOT NULL,
+                    `personId` TEXT NOT NULL,
+                    `deviceId` TEXT NOT NULL,
+                    `androidContactId` TEXT NOT NULL,
+                    `aliasName` TEXT NOT NULL,
+                    `phoneNumber` TEXT NOT NULL,
+                    `normalizedNumber` TEXT NOT NULL,
+                    `createdAt` INTEGER NOT NULL,
+                    `syncStatus` TEXT NOT NULL,
+                    PRIMARY KEY(`id`),
+                    FOREIGN KEY(`personId`) REFERENCES `people`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE,
+                    FOREIGN KEY(`deviceId`) REFERENCES `devices`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE
+                )
+            """.trimIndent())
+            db.execSQL("CREATE INDEX IF NOT EXISTS `index_contact_aliases_personId` ON `contact_aliases` (`personId`)")
+            db.execSQL("CREATE INDEX IF NOT EXISTS `index_contact_aliases_deviceId` ON `contact_aliases` (`deviceId`)")
+            db.execSQL("CREATE INDEX IF NOT EXISTS `index_contact_aliases_aliasName` ON `contact_aliases` (`aliasName`)")
+            db.execSQL("CREATE INDEX IF NOT EXISTS `index_contact_aliases_normalizedNumber` ON `contact_aliases` (`normalizedNumber`)")
+        }
+    }
+
+    private val MIGRATION_16_17 = object : Migration(16, 17) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            try {
+                db.execSQL("ALTER TABLE `calls_research` ADD COLUMN `personId` TEXT DEFAULT NULL")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_calls_research_personId` ON `calls_research` (`personId`)")
+                db.execSQL("ALTER TABLE `sales_calls` ADD COLUMN `personId` TEXT DEFAULT NULL")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_sales_calls_personId` ON `sales_calls` (`personId`)")
+            } catch (e: Exception) {
+                android.util.Log.e("DatabaseModule", "Failed to migrate database to v17", e)
+            }
+        }
+    }
+
     @Provides
     @Singleton
     fun provideDatabase(
@@ -206,7 +293,7 @@ object DatabaseModule {
             context,
             CallVaultDatabase::class.java,
             Constants.DATABASE_NAME
-        ).addMigrations(MIGRATION_5_6, MIGRATION_13_14, MIGRATION_14_15)
+        ).addMigrations(MIGRATION_5_6, MIGRATION_13_14, MIGRATION_14_15, MIGRATION_15_16, MIGRATION_16_17)
          .fallbackToDestructiveMigration()
          .build()
      }
@@ -244,5 +331,10 @@ object DatabaseModule {
     @Provides
     fun provideRecordingDao(db: CallVaultDatabase): com.example.callog.data.local.dao.RecordingDao {
         return db.recordingDao()
+    }
+
+    @Provides
+    fun providePersonDao(db: CallVaultDatabase): com.example.callog.data.local.dao.PersonDao {
+        return db.personDao()
     }
 }

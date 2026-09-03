@@ -12,6 +12,8 @@ interface CallRepository {
     fun getFavoriteLogsFlow(): Flow<List<CallLogEntry>>
     fun getRecordingLogsFlow(): Flow<List<CallLogEntry>>
     fun getCallLogByIdFlow(id: Long): Flow<CallLogEntry?>
+    fun getCallsForPersonFlow(personId: String): Flow<List<CallLogEntry>>
+    suspend fun getCallsForPerson(personId: String): List<CallLogEntry>
     
     suspend fun syncCallLogs()
     suspend fun getAllCallsSnapshot(): List<CallEntity>

@@ -2,21 +2,9 @@ package com.example.callog.data.local.database
 
 import androidx.room.Database
 import androidx.room.RoomDatabase
-import com.example.callog.data.local.dao.CallDao
-import com.example.callog.data.local.dao.ReminderDao
-import com.example.callog.data.local.dao.SalesCallDao
-import com.example.callog.data.local.dao.TracebackDao
-import com.example.callog.data.local.dao.SyncLogDao
 import androidx.room.TypeConverters
-import com.example.callog.data.local.dao.RecordingLogDao
-import com.example.callog.data.local.dao.RecordingDao
-import com.example.callog.data.local.entity.CallEntity
-import com.example.callog.data.local.entity.ReminderEntity
-import com.example.callog.data.local.entity.SalesCallEntity
-import com.example.callog.data.local.entity.TracebackEntity
-import com.example.callog.data.local.entity.SyncLogEntity
-import com.example.callog.data.local.entity.RecordingLogEntity
-import com.example.callog.data.local.entity.RecordingEntity
+import com.example.callog.data.local.dao.*
+import com.example.callog.data.local.entity.*
 
 @Database(
     entities = [
@@ -26,9 +14,13 @@ import com.example.callog.data.local.entity.RecordingEntity
         SalesCallEntity::class,
         SyncLogEntity::class,
         RecordingLogEntity::class,
-        RecordingEntity::class
+        RecordingEntity::class,
+        DeviceEntity::class,
+        PersonEntity::class,
+        PhoneNumberEntity::class,
+        ContactAliasEntity::class
     ],
-    version = 15,
+    version = 17,
     exportSchema = false
 )
 @TypeConverters(Converters::class)
@@ -40,5 +32,5 @@ abstract class CallVaultDatabase : RoomDatabase() {
     abstract fun syncLogDao(): SyncLogDao
     abstract fun recordingLogDao(): RecordingLogDao
     abstract fun recordingDao(): RecordingDao
+    abstract fun personDao(): PersonDao
 }
-

@@ -17,4 +17,10 @@ abstract class AppModule {
     abstract fun bindCallRepository(
         callRepositoryImpl: CallRepositoryImpl
     ): CallRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindPersonRepository(
+        personRepositoryImpl: com.example.callog.data.repository.PersonRepositoryImpl
+    ): com.example.callog.domain.repository.PersonRepository
 }

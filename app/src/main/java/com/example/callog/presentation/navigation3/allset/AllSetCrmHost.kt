@@ -91,8 +91,23 @@ fun AllSetCrmHost(
                     DashboardScreen(
                         callViewModel = callViewModel,
                         analyticsViewModel = analyticsViewModel,
-                        onViewAllLogsClick = { multiStack.selectTab(AllSetCrmTab.CONTACTS) },
+                        onViewAllLogsClick = { multiStack.navigate(AllSetNavKey.CallLogs) },
                         onCallClick = onCallClick
+                    )
+                }
+
+                is AllSetNavKey.CallLogs -> {
+                    com.example.callog.presentation.screens.logs.CallLogsScreen(
+                        viewModel = callViewModel,
+                        onCallClick = onCallClick,
+                        onBackClick = { multiStack.pop() }
+                    )
+                }
+
+                is AllSetNavKey.DeveloperLogs -> {
+                    com.example.callog.presentation.screens.developer.SyncLogsScreen(
+                        viewModel = callViewModel,
+                        onBackClick = { multiStack.pop() }
                     )
                 }
 

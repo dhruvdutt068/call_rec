@@ -82,6 +82,8 @@ object AllSetDeepLinkParser {
             }
             "home" -> AllSetNavKey.Home
             "settings" -> AllSetNavKey.SettingsTab
+            "logs", "callog", "call-logs" -> AllSetNavKey.CallLogs
+            "developer-logs", "sync-logs" -> AllSetNavKey.DeveloperLogs
             else -> null
         }
     }
@@ -179,6 +181,8 @@ object AllSetDeepLinkParser {
             }
             "home" -> AllSetNavKey.Home
             "settings" -> AllSetNavKey.SettingsTab
+            "logs", "callog", "call-logs" -> AllSetNavKey.CallLogs
+            "developer-logs", "sync-logs" -> AllSetNavKey.DeveloperLogs
             else -> null
         }
     }

@@ -24,7 +24,8 @@ import java.util.Locale
     indices = [
         Index(value = ["callId"], unique = true),
         Index(value = ["salespersonPhone"]),
-        Index(value = ["buyerPhone"])
+        Index(value = ["buyerPhone"]),
+        Index(value = ["personId"])
     ]
 )
 data class SalesCallEntity(
@@ -42,6 +43,9 @@ data class SalesCallEntity(
     val callType: String,          // INCOMING | OUTGOING | MISSED | REJECTED
     val callId: Long,              // References CallEntity.id
     val duration: Int,             // in seconds
+
+    // ── Canonical Person reference ──────────────────────────────────────────
+    val personId: String? = null,
 
     // ── Timestamps ──────────────────────────────────────────────────────────
     val createdAt: String = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date()),

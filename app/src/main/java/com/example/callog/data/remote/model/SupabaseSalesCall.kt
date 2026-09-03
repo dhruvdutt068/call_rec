@@ -12,5 +12,6 @@ data class SupabaseSalesCall(
     @SerialName("call_type") val callType: String,
     @SerialName("call_id") val callId: Long,
     @SerialName("duration") val duration: Int,
-    @SerialName("created_at") val createdAt: String
+    @SerialName("created_at") val createdAt: String,
+    @SerialName("person_id") val personId: String? = null
 )

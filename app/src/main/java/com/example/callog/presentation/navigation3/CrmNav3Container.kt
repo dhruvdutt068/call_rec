@@ -113,9 +113,24 @@ fun CrmNav3Container(
                         callViewModel = callViewModel,
                         analyticsViewModel = analyticsViewModel,
                         onViewAllLogsClick = {
-                            multiStack.selectTab(CrmBottomTab.CONTACTS)
+                            multiStack.navigate(Nav3Key.CrmTab.CallLogs)
                         },
                         onCallClick = onCallClick
+                    )
+                }
+
+                is Nav3Key.CrmTab.CallLogs -> {
+                    com.example.callog.presentation.screens.logs.CallLogsScreen(
+                        viewModel = callViewModel,
+                        onCallClick = onCallClick,
+                        onBackClick = { multiStack.pop() }
+                    )
+                }
+
+                is Nav3Key.CrmTab.DeveloperLogs -> {
+                    com.example.callog.presentation.screens.developer.SyncLogsScreen(
+                        viewModel = callViewModel,
+                        onBackClick = { multiStack.pop() }
                     )
                 }
 

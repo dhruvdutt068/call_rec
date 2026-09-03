@@ -13,6 +13,8 @@ import io.github.jan.supabase.SupabaseClient
 import io.github.jan.supabase.createSupabaseClient
 import io.github.jan.supabase.postgrest.Postgrest
 import io.github.jan.supabase.postgrest.from
+import io.github.jan.supabase.postgrest.postgrest
+import io.github.jan.supabase.postgrest.rpc
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
@@ -35,6 +37,11 @@ class SupabaseService @Inject constructor(
         val prefs = getSharedPreferences()
         val url = prefs.getString("supabase_url", null)
         val key = prefs.getString("supabase_key", null)
+        if (!url.isNullOrBlank() && (url.contains("qizrtmvgcwxuycbpkeua") || url.isBlank())) {
+            // Clean up legacy URL to adopt updated SupabaseDefaults
+            prefs.edit().remove("supabase_url").remove("supabase_key").apply()
+            return null
+        }
         return if (!url.isNullOrBlank() && !key.isNullOrBlank()) {
             SupabaseConfig(url, key)
         } else {
@@ -120,7 +127,8 @@ class SupabaseService @Inject constructor(
                     callType = entity.callType,
                     callId = entity.callId,
                     duration = entity.duration,
-                    createdAt = entity.createdAt
+                    createdAt = entity.createdAt,
+                    personId = entity.personId
                 )
             }
 
@@ -141,6 +149,124 @@ class SupabaseService @Inject constructor(
         } catch (e: Exception) {
             Log.e("SUPABASE", "Error syncing sales calls to Supabase", e)
             DeveloperLogger.error("SUPABASE_UPLOAD_FAILED", "Failed syncing sales calls to Supabase", e)
+            Result.failure(e)
+        }
+    }
+
+    private fun formatTimestamp(epochMillis: Long): String {
+        val sdf = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", java.util.Locale.US)
+        sdf.timeZone = java.util.TimeZone.getTimeZone("UTC")
+        return sdf.format(java.util.Date(epochMillis))
+    }
+
+    suspend fun syncPeople(people: List<com.example.callog.data.local.entity.PersonEntity>): Result<Unit> = withContext(Dispatchers.IO) {
+        return@withContext try {
+            val supabasePeople = people.map {
+                com.example.callog.data.remote.model.SupabasePerson(
+                    id = it.id,
+                    displayName = it.displayName,
+                    companyName = it.companyName,
+                    notes = it.notes,
+                    createdAt = formatTimestamp(it.createdAt),
+                    updatedAt = formatTimestamp(it.updatedAt)
+                )
+            }
+            getClient().from(SupabaseDefaults.TABLE_PEOPLE).upsert(supabasePeople) {
+                onConflict = "id"
+            }
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Log.e(TAG, "Error syncing people to Supabase", e)
+            Result.failure(e)
+        }
+    }
+
+    suspend fun syncPhoneNumbers(numbers: List<com.example.callog.data.local.entity.PhoneNumberEntity>): Result<Unit> = withContext(Dispatchers.IO) {
+        return@withContext try {
+            val supabaseNumbers = numbers.map {
+                com.example.callog.data.remote.model.SupabasePhoneNumber(
+                    id = it.id,
+                    personId = it.personId,
+                    phoneNumber = it.phoneNumber,
+                    normalizedNumber = it.normalizedNumber,
+                    phoneType = it.phoneType,
+                    isPrimary = it.isPrimary,
+                    createdAt = formatTimestamp(it.createdAt)
+                )
+            }
+            getClient().from(SupabaseDefaults.TABLE_PHONE_NUMBERS).upsert(supabaseNumbers) {
+                onConflict = "id"
+            }
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Log.e(TAG, "Error syncing phone numbers to Supabase", e)
+            Result.failure(e)
+        }
+    }
+
+    suspend fun syncContactAliases(aliases: List<com.example.callog.data.local.entity.ContactAliasEntity>): Result<Unit> = withContext(Dispatchers.IO) {
+        return@withContext try {
+            val supabaseAliases = aliases.map {
+                com.example.callog.data.remote.model.SupabaseContactAlias(
+                    id = it.id,
+                    personId = it.personId,
+                    deviceId = it.deviceId,
+                    androidContactId = it.androidContactId,
+                    aliasName = it.aliasName,
+                    phoneNumber = it.phoneNumber,
+                    normalizedNumber = it.normalizedNumber,
+                    createdAt = formatTimestamp(it.createdAt)
+                )
+            }
+            getClient().from(SupabaseDefaults.TABLE_CONTACT_ALIASES).upsert(supabaseAliases) {
+                onConflict = "id"
+            }
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Log.e(TAG, "Error syncing contact aliases to Supabase", e)
+            Result.failure(e)
+        }
+    }
+
+    suspend fun syncDevices(devices: List<com.example.callog.data.local.entity.DeviceEntity>): Result<Unit> = withContext(Dispatchers.IO) {
+        return@withContext try {
+            val supabaseDevices = devices.map {
+                com.example.callog.data.remote.model.SupabaseDevice(
+                    id = it.id,
+                    deviceName = it.deviceName,
+                    devicePhone = it.devicePhone,
+                    deviceIdentifier = it.deviceIdentifier,
+                    createdAt = formatTimestamp(it.createdAt),
+                    updatedAt = formatTimestamp(it.updatedAt),
+                    lastSyncAt = it.lastSyncAt?.let { ts -> formatTimestamp(ts) }
+                )
+            }
+            getClient().from(SupabaseDefaults.TABLE_DEVICES).upsert(supabaseDevices) {
+                onConflict = "id"
+            }
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Log.e(TAG, "Error syncing devices to Supabase", e)
+            Result.failure(e)
+        }
+    }
+
+    suspend fun resolveAndAttachContactRemote(
+        request: com.example.callog.data.remote.model.PersonResolutionRequest
+    ): Result<com.example.callog.data.remote.model.PersonResolutionResponse> = withContext(Dispatchers.IO) {
+        return@withContext try {
+            val client = getClient()
+            val response = client.from("resolve_and_attach_contact")
+            // In postgrest-kt, rpc can be invoked via postgrest.rpc(...)
+            val rpcResult = client.postgrest.rpc(
+                function = "resolve_and_attach_contact",
+                parameters = request
+            ).decodeAs<com.example.callog.data.remote.model.PersonResolutionResponse>()
+
+            Log.i(TAG, "Server resolved identity for contact: person_id=${rpcResult.personId}")
+            Result.success(rpcResult)
+        } catch (e: Exception) {
+            Log.e(TAG, "Error executing resolve_and_attach_contact RPC on Supabase", e)
             Result.failure(e)
         }
     }

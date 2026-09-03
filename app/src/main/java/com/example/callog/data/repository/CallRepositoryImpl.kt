@@ -15,6 +15,8 @@ import com.example.callog.data.provider.SimManager
 import com.example.callog.domain.model.CallLogEntry
 import com.example.callog.domain.repository.CallRepository
 import com.example.callog.domain.repository.FirestoreRepository
+import com.example.callog.core.utils.PhoneNumberNormalizer
+import com.example.callog.data.local.dao.PersonDao
 import com.example.callog.core.diagnostics.DeveloperLogger
 import android.telephony.SubscriptionManager
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -34,6 +36,7 @@ class CallRepositoryImpl @Inject constructor(
     @ApplicationContext private val context: Context,
     private val callDao: CallDao,
     private val reminderDao: ReminderDao,
+    private val personDao: PersonDao,
     private val callLogProvider: CallLogProvider,
     private val contactsProvider: ContactsProvider,
     private val recordingScanner: RecordingScanner,
@@ -96,6 +99,27 @@ class CallRepositoryImpl @Inject constructor(
         }.flowOn(Dispatchers.Default)
     }
 
+    override fun getCallsForPersonFlow(personId: String): Flow<List<CallLogEntry>> {
+        val callsFlow = callDao.getCallsForPersonFlow(personId)
+        val contactsFlow = flow {
+            emit(contactsProvider.fetchContacts())
+        }.flowOn(Dispatchers.IO)
+
+        return combine(callsFlow, contactsFlow) { calls, contacts ->
+            val contactsMap = buildContactsMap(contacts)
+            calls.map { call ->
+                mapToCallLogEntry(call, contactsMap)
+            }
+        }.flowOn(Dispatchers.Default)
+    }
+
+    override suspend fun getCallsForPerson(personId: String): List<CallLogEntry> = withContext(Dispatchers.IO) {
+        val calls = callDao.getCallsForPerson(personId)
+        val contacts = contactsProvider.fetchContacts()
+        val contactsMap = buildContactsMap(contacts)
+        calls.map { mapToCallLogEntry(it, contactsMap) }
+    }
+
     override suspend fun syncCallLogs() { withContext(Dispatchers.IO) {
         try {
             // Check SIM configuration states
@@ -150,6 +174,20 @@ class CallRepositoryImpl @Inject constructor(
                         )
                         false
                     }
+                }.map { call ->
+                    // Canonical Person identity resolution:
+                    // Normalize phone number and look up personId in PersonDao
+                    val norm = PhoneNumberNormalizer.normalize(call.number)
+                    val phoneMatch = if (norm.isNotBlank()) personDao.findPhoneNumberByNormalized(norm) else null
+                    val resolvedPersonId = phoneMatch?.personId
+                    
+                    if (resolvedPersonId != null) {
+                        DeveloperLogger.info(
+                            "CALL_IDENTITY_RESOLVED",
+                            "Call from ${call.number} (norm: $norm) matched canonical Person $resolvedPersonId"
+                        )
+                    }
+                    call.copy(personId = resolvedPersonId)
                 }
 
                 if (newCalls.isNotEmpty()) {
@@ -220,8 +258,10 @@ class CallRepositoryImpl @Inject constructor(
         return reminderDao.getPendingRemindersFlow()
     }
 
-    override suspend fun addReminder(reminder: ReminderEntity): Long = withContext(Dispatchers.IO) {
-        return@withContext reminderDao.insertReminder(reminder)
+    override suspend fun addReminder(reminder: ReminderEntity): Long {
+        return withContext(Dispatchers.IO) {
+            reminderDao.insertReminder(reminder)
+        }
     }
 
     override suspend fun completeReminder(reminderId: Long) {
@@ -289,7 +329,8 @@ class CallRepositoryImpl @Inject constructor(
             retryCount = call.retryCount,
             uploadedAt = call.uploadedAt,
             syncError = call.syncError,
-            lastAttempt = call.lastAttempt
+            lastAttempt = call.lastAttempt,
+            personId = call.personId
         )
     }
 

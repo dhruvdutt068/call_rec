@@ -52,4 +52,19 @@ interface CallDao {
 
     @Query("UPDATE calls_research SET syncStatus = 'PENDING'")
     suspend fun resetAllSyncStatus()
+
+    @Query("SELECT * FROM calls_research WHERE personId = :personId ORDER BY timestamp DESC")
+    fun getCallsForPersonFlow(personId: String): Flow<List<CallEntity>>
+
+    @Query("SELECT * FROM calls_research WHERE personId = :personId ORDER BY timestamp DESC")
+    suspend fun getCallsForPerson(personId: String): List<CallEntity>
+
+    @Query("SELECT COUNT(*) FROM calls_research WHERE personId = :personId")
+    suspend fun getCallCountForPerson(personId: String): Int
+
+    @Query("SELECT * FROM calls_research WHERE personId = :personId ORDER BY timestamp DESC LIMIT :limit")
+    suspend fun getLatestCallsForPerson(personId: String, limit: Int = 10): List<CallEntity>
+
+    @Query("UPDATE calls_research SET personId = :personId WHERE number = :number")
+    suspend fun updatePersonIdForNumber(number: String, personId: String)
 }
