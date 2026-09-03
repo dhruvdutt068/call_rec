@@ -29,8 +29,17 @@
             android:theme="@style/Theme.Callog">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
-
                 <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+
+            <!-- Deep links for Navigation 3 CRM & Auth flows -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="callog" />
+                <data android:scheme="allset" />
+                <data android:host="*" />
             </intent-filter>
         </activity>
 

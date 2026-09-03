@@ -26,7 +26,8 @@ import com.example.callog.presentation.viewmodel.CallViewModel
 @Composable
 fun ContactsScreen(
     viewModel: CallViewModel,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onContactClick: ((contactId: String) -> Unit)? = null
 ) {
     val contacts by viewModel.contacts.collectAsState()
     var searchQuery by remember { mutableStateOf("") }
@@ -83,7 +84,10 @@ fun ContactsScreen(
                     items = filteredContacts,
                     key = { it.contactId }
                 ) { contact ->
-                    ContactCard(contact = contact)
+                    ContactCard(
+                        contact = contact,
+                        onClick = { onContactClick?.invoke(contact.contactId) }
+                    )
                 }
             }
         }
@@ -93,6 +97,7 @@ fun ContactsScreen(
 @Composable
 private fun ContactCard(
     contact: ContactDto,
+    onClick: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     // Generate initials for avatar fallback
@@ -105,7 +110,10 @@ private fun ContactCard(
         }
     }
 
-    GlassyCard(modifier = modifier) {
+    GlassyCard(
+        modifier = modifier,
+        onClick = onClick
+    ) {
         Row(
             verticalAlignment = Alignment.Top,
             modifier = Modifier.fillMaxWidth()

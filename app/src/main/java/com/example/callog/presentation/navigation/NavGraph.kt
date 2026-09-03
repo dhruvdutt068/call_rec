@@ -28,6 +28,8 @@ import com.example.callog.presentation.theme.*
 import com.example.callog.presentation.viewmodel.AnalyticsViewModel
 import com.example.callog.presentation.viewmodel.CallViewModel
 
+import com.example.callog.presentation.navigation3.AuthNav3Container
+import com.example.callog.presentation.navigation3.CrmNav3Container
 import com.example.callog.presentation.screens.onboarding.OnboardingScreen
 
 @Composable
@@ -99,6 +101,16 @@ fun NavGraph(
             )
         }
 
+        composable(Screen.Auth.route) {
+            AuthNav3Container(
+                onAuthSuccess = {
+                    navController.navigate(Screen.Main.route) {
+                        popUpTo(Screen.Auth.route) { inclusive = true }
+                    }
+                }
+            )
+        }
+
         composable(Screen.Main.route) {
             val isSimChangeRequired by callViewModel.isSimChangeRequired.collectAsState()
             val activeSims by callViewModel.activeSims.collectAsState()
@@ -106,14 +118,16 @@ fun NavGraph(
             val isSuspendedDueToChange = activeSims.isNotEmpty() && selectedSubId != android.telephony.SubscriptionManager.INVALID_SUBSCRIPTION_ID
 
             Box {
-                MainScreen(
+                CrmNav3Container(
                     callViewModel = callViewModel,
                     analyticsViewModel = analyticsViewModel,
+                    darkTheme = darkTheme,
+                    onDarkThemeChange = onDarkThemeChange,
                     onCallClick = { callId ->
                         navController.navigate(Screen.CallDetails.createRoute(callId))
                     },
-                    onSettingsClick = {
-                        navController.navigate(Screen.Settings.route)
+                    onNavigateToDeveloperDashboard = {
+                        navController.navigate(Screen.DeveloperDashboard.route)
                     }
                 )
 
