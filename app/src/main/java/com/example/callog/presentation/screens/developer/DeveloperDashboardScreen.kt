@@ -1,9 +1,13 @@
 package com.example.callog.presentation.screens.developer
 
 import android.os.Build
+import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -18,8 +22,10 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.activity.compose.BackHandler
+import com.example.callog.core.config.SupabaseDefaults
 import com.example.callog.core.constants.Constants
+import com.example.callog.domain.model.FirebaseConfig
+import com.example.callog.domain.model.SupabaseConfig
 import com.example.callog.presentation.components.GlassyCard
 import com.example.callog.presentation.theme.*
 import com.example.callog.presentation.viewmodel.CallViewModel
@@ -41,6 +47,33 @@ fun DeveloperDashboardScreen(
     val allCalls by viewModel.callLogs.collectAsState()
     val allSalesCalls by viewModel.allSalesCalls.collectAsState()
     val isSyncing by viewModel.isSyncing.collectAsState()
+
+    // Firebase & Supabase credential state
+    val savedFirebaseConfig by viewModel.firebaseConfig.collectAsState()
+    val firebaseConnectionStatus by viewModel.connectionStatus.collectAsState()
+    val savedSupabaseConfig by viewModel.supabaseConfig.collectAsState()
+    val supabaseConnectionStatus by viewModel.supabaseConnectionStatus.collectAsState()
+
+    var supabaseUrlInput by remember { mutableStateOf("") }
+    var supabaseKeyInput by remember { mutableStateOf("") }
+
+    var firebaseProjectIdInput by remember { mutableStateOf("") }
+    var firebaseApiKeyInput by remember { mutableStateOf("") }
+    var firebaseAppIdInput by remember { mutableStateOf("") }
+
+    var isSupabaseExpanded by remember { mutableStateOf(false) }
+    var isFirebaseExpanded by remember { mutableStateOf(false) }
+
+    LaunchedEffect(savedSupabaseConfig) {
+        supabaseUrlInput = savedSupabaseConfig?.url ?: SupabaseDefaults.DEFAULT_URL
+        supabaseKeyInput = savedSupabaseConfig?.apiKey ?: SupabaseDefaults.DEFAULT_ANON_KEY
+    }
+
+    LaunchedEffect(savedFirebaseConfig) {
+        firebaseProjectIdInput = savedFirebaseConfig?.projectId ?: ""
+        firebaseApiKeyInput = savedFirebaseConfig?.apiKey ?: ""
+        firebaseAppIdInput = savedFirebaseConfig?.appId ?: ""
+    }
 
     val pendingCallsCount = allCalls.count { it.syncStatus != "SYNCED" }
     val pendingSalesCallsCount = allSalesCalls.count { it.syncStatus != "SYNCED" }
@@ -93,16 +126,290 @@ fun DeveloperDashboardScreen(
         ) {
             // Header Description
             Text(
-                text = "Diagnostics & System Telemetry",
+                text = "Diagnostics & Environment Switcher",
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.Bold,
                 color = Slate50
             )
             Text(
-                text = "Use this interface to inspect local database metrics, verify API connections, review synchronization events, and export system diagnostic reports.",
+                text = "Easily toggle between your development/testing databases and client production instances without reinstalling.",
                 style = MaterialTheme.typography.bodySmall,
                 color = Slate400
             )
+
+            // Section: Cloud Credentials & Environment Switcher
+            DashboardSectionHeader(title = "Cloud Environments & Credentials")
+
+            // 1. Supabase Environment Card
+            GlassyCard(modifier = Modifier.fillMaxWidth()) {
+                Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { isSupabaseExpanded = !isSupabaseExpanded },
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(
+                                modifier = Modifier
+                                    .size(36.dp)
+                                    .clip(CircleShape)
+                                    .background(Teal500.copy(alpha = 0.15f)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(Icons.Default.Storage, contentDescription = null, tint = Teal300, modifier = Modifier.size(20.dp))
+                            }
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Column {
+                                Text("Supabase (PostgreSQL)", fontWeight = FontWeight.Bold, color = Slate50)
+                                Text(
+                                    text = if (savedSupabaseConfig != null) "Active: Custom Development Instance" else "Active: Default Client Instance",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = if (savedSupabaseConfig != null) Teal300 else Slate400
+                                )
+                            }
+                        }
+                        IconButton(onClick = { isSupabaseExpanded = !isSupabaseExpanded }) {
+                            Icon(
+                                imageVector = if (isSupabaseExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                                contentDescription = null,
+                                tint = Slate400
+                            )
+                        }
+                    }
+
+                    AnimatedVisibility(visible = isSupabaseExpanded) {
+                        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                            OutlinedTextField(
+                                value = supabaseUrlInput,
+                                onValueChange = { supabaseUrlInput = it },
+                                label = { Text("Supabase Project URL") },
+                                placeholder = { Text("https://xyz.supabase.co") },
+                                singleLine = true,
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedBorderColor = Teal300,
+                                    unfocusedBorderColor = Slate700
+                                )
+                            )
+
+                            OutlinedTextField(
+                                value = supabaseKeyInput,
+                                onValueChange = { supabaseKeyInput = it },
+                                label = { Text("Supabase Anon Key") },
+                                singleLine = true,
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedBorderColor = Teal300,
+                                    unfocusedBorderColor = Slate700
+                                )
+                            )
+
+                            // Status Banner
+                            if (supabaseConnectionStatus != null) {
+                                Surface(
+                                    shape = RoundedCornerShape(8.dp),
+                                    color = when {
+                                        supabaseConnectionStatus == "TESTING" -> Slate800
+                                        supabaseConnectionStatus == "SUCCESS" -> Teal500.copy(alpha = 0.15f)
+                                        else -> MaterialTheme.colorScheme.error.copy(alpha = 0.15f)
+                                    },
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(10.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        if (supabaseConnectionStatus == "TESTING") {
+                                            CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp, color = Teal300)
+                                            Spacer(modifier = Modifier.width(8.dp))
+                                            Text("Testing connection...", style = MaterialTheme.typography.bodySmall, color = Slate300)
+                                        } else if (supabaseConnectionStatus == "SUCCESS") {
+                                            Icon(Icons.Default.CheckCircle, contentDescription = null, tint = Teal300, modifier = Modifier.size(18.dp))
+                                            Spacer(modifier = Modifier.width(8.dp))
+                                            Text("Connection Successful & Config Saved", style = MaterialTheme.typography.bodySmall, color = Teal300, fontWeight = FontWeight.Bold)
+                                        } else {
+                                            Icon(Icons.Default.Error, contentDescription = null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(18.dp))
+                                            Spacer(modifier = Modifier.width(8.dp))
+                                            Text(supabaseConnectionStatus?.removePrefix("FAILED:") ?: "Connection Failed", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                                        }
+                                    }
+                                }
+                            }
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Button(
+                                    onClick = {
+                                        if (supabaseUrlInput.isNotBlank() && supabaseKeyInput.isNotBlank()) {
+                                            viewModel.testAndSaveSupabaseConfig(supabaseUrlInput, supabaseKeyInput)
+                                        }
+                                    },
+                                    modifier = Modifier.weight(1f),
+                                    colors = ButtonDefaults.buttonColors(containerColor = Teal500, contentColor = Slate50)
+                                ) {
+                                    Text("Test & Save", fontWeight = FontWeight.Bold)
+                                }
+
+                                OutlinedButton(
+                                    onClick = {
+                                        viewModel.resetSupabaseConfig()
+                                    },
+                                    modifier = Modifier.weight(1f),
+                                    colors = ButtonDefaults.outlinedButtonColors(contentColor = Slate300)
+                                ) {
+                                    Text("Reset to Client", style = MaterialTheme.typography.bodySmall)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // 2. Firebase Environment Card
+            GlassyCard(modifier = Modifier.fillMaxWidth()) {
+                Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { isFirebaseExpanded = !isFirebaseExpanded },
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(
+                                modifier = Modifier
+                                    .size(36.dp)
+                                    .clip(CircleShape)
+                                    .background(AllSetAmber.copy(alpha = 0.15f)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(Icons.Default.CloudQueue, contentDescription = null, tint = AllSetAmber, modifier = Modifier.size(20.dp))
+                            }
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Column {
+                                Text("Firebase / Google Cloud", fontWeight = FontWeight.Bold, color = Slate50)
+                                Text(
+                                    text = if (savedFirebaseConfig != null) "Active: Custom (${savedFirebaseConfig?.projectId})" else "Active: Default Client (google-services.json)",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = if (savedFirebaseConfig != null) AllSetAmber else Slate400
+                                )
+                            }
+                        }
+                        IconButton(onClick = { isFirebaseExpanded = !isFirebaseExpanded }) {
+                            Icon(
+                                imageVector = if (isFirebaseExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                                contentDescription = null,
+                                tint = Slate400
+                            )
+                        }
+                    }
+
+                    AnimatedVisibility(visible = isFirebaseExpanded) {
+                        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                            OutlinedTextField(
+                                value = firebaseProjectIdInput,
+                                onValueChange = { firebaseProjectIdInput = it },
+                                label = { Text("Project ID") },
+                                singleLine = true,
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedBorderColor = AllSetAmber,
+                                    unfocusedBorderColor = Slate700
+                                )
+                            )
+
+                            OutlinedTextField(
+                                value = firebaseApiKeyInput,
+                                onValueChange = { firebaseApiKeyInput = it },
+                                label = { Text("API Key") },
+                                singleLine = true,
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedBorderColor = AllSetAmber,
+                                    unfocusedBorderColor = Slate700
+                                )
+                            )
+
+                            OutlinedTextField(
+                                value = firebaseAppIdInput,
+                                onValueChange = { firebaseAppIdInput = it },
+                                label = { Text("App ID") },
+                                singleLine = true,
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedBorderColor = AllSetAmber,
+                                    unfocusedBorderColor = Slate700
+                                )
+                            )
+
+                            // Status Banner
+                            if (firebaseConnectionStatus != null) {
+                                Surface(
+                                    shape = RoundedCornerShape(8.dp),
+                                    color = when {
+                                        firebaseConnectionStatus == "TESTING" -> Slate800
+                                        firebaseConnectionStatus == "SUCCESS" -> Teal500.copy(alpha = 0.15f)
+                                        else -> MaterialTheme.colorScheme.error.copy(alpha = 0.15f)
+                                    },
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(10.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        if (firebaseConnectionStatus == "TESTING") {
+                                            CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp, color = AllSetAmber)
+                                            Spacer(modifier = Modifier.width(8.dp))
+                                            Text("Testing Firebase connection...", style = MaterialTheme.typography.bodySmall, color = Slate300)
+                                        } else if (firebaseConnectionStatus == "SUCCESS") {
+                                            Icon(Icons.Default.CheckCircle, contentDescription = null, tint = Teal300, modifier = Modifier.size(18.dp))
+                                            Spacer(modifier = Modifier.width(8.dp))
+                                            Text("Firebase Connected Successfully", style = MaterialTheme.typography.bodySmall, color = Teal300, fontWeight = FontWeight.Bold)
+                                        } else {
+                                            Icon(Icons.Default.Error, contentDescription = null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(18.dp))
+                                            Spacer(modifier = Modifier.width(8.dp))
+                                            Text(firebaseConnectionStatus?.removePrefix("FAILED:") ?: "Connection Failed", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                                        }
+                                    }
+                                }
+                            }
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Button(
+                                    onClick = {
+                                        if (firebaseProjectIdInput.isNotBlank() && firebaseApiKeyInput.isNotBlank() && firebaseAppIdInput.isNotBlank()) {
+                                            viewModel.testAndSaveFirebaseConfig(
+                                                FirebaseConfig(firebaseProjectIdInput, firebaseApiKeyInput, firebaseAppIdInput)
+                                            )
+                                        }
+                                    },
+                                    modifier = Modifier.weight(1f),
+                                    colors = ButtonDefaults.buttonColors(containerColor = AllSetAmber, contentColor = Slate900)
+                                ) {
+                                    Text("Test & Save", fontWeight = FontWeight.Bold)
+                                }
+
+                                OutlinedButton(
+                                    onClick = {
+                                        viewModel.resetFirebaseConfig()
+                                    },
+                                    modifier = Modifier.weight(1f),
+                                    colors = ButtonDefaults.outlinedButtonColors(contentColor = Slate300)
+                                ) {
+                                    Text("Reset to Client", style = MaterialTheme.typography.bodySmall)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
 
             // Section 1: Health & Sync Status Card
             DashboardSectionHeader(title = "Synchronization Health")

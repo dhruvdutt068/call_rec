@@ -106,20 +106,6 @@ fun SettingsScreen(
     val selectedSimCarrier by viewModel.selectedSimCarrier.collectAsState()
     val selectedSimDisplayName by viewModel.selectedSimDisplayName.collectAsState()
     val selectedSimPhoneNumber by viewModel.selectedSimPhoneNumber.collectAsState()
-    
-    val savedConfig by viewModel.firebaseConfig.collectAsState()
-    val connectionStatus by viewModel.connectionStatus.collectAsState()
-    val lastUploadError by viewModel.lastUploadError.collectAsState()
-
-    var projectIdInput by remember { mutableStateOf("") }
-    var apiKeyInput by remember { mutableStateOf("") }
-    var appIdInput by remember { mutableStateOf("") }
-
-    LaunchedEffect(savedConfig) {
-        projectIdInput = savedConfig?.projectId ?: ""
-        apiKeyInput = savedConfig?.apiKey ?: ""
-        appIdInput = savedConfig?.appId ?: ""
-    }
 
     Column(
         modifier = modifier

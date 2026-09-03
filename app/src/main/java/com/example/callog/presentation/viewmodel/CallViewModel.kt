@@ -9,6 +9,8 @@ import com.example.callog.data.local.entity.SalesCallEntity
 import com.example.callog.data.provider.ContactDto
 import com.example.callog.domain.model.CallLogEntry
 import com.example.callog.domain.model.FirebaseConfig
+import com.example.callog.domain.model.SupabaseConfig
+import com.example.callog.data.remote.SupabaseService
 import com.example.callog.domain.repository.CallRepository
 import com.example.callog.domain.repository.FirestoreRepository
 import com.example.callog.domain.usecase.*
@@ -47,7 +49,8 @@ class CallViewModel @Inject constructor(
     private val salesCallDao: SalesCallDao,
     private val syncLogDao: SyncLogDao,
     private val recordingLogDao: RecordingLogDao,
-    private val simManager: com.example.callog.data.provider.SimManager
+    private val simManager: com.example.callog.data.provider.SimManager,
+    private val supabaseService: SupabaseService
 ) : ViewModel() {
 
     val recordingLogs: StateFlow<List<RecordingLogEntity>> = recordingLogDao.getAllLogsFlow()
@@ -96,6 +99,12 @@ class CallViewModel @Inject constructor(
 
     private val _firebaseConfig = MutableStateFlow<FirebaseConfig?>(null)
     val firebaseConfig = _firebaseConfig.asStateFlow()
+
+    private val _supabaseConfig = MutableStateFlow<SupabaseConfig?>(null)
+    val supabaseConfig = _supabaseConfig.asStateFlow()
+
+    private val _supabaseConnectionStatus = MutableStateFlow<String?>(null) // null/idle, "TESTING", "SUCCESS", "FAILED:<error>"
+    val supabaseConnectionStatus = _supabaseConnectionStatus.asStateFlow()
 
     private val _devicePhoneNumber = MutableStateFlow("")
     val devicePhoneNumber = _devicePhoneNumber.asStateFlow()
@@ -176,6 +185,7 @@ class CallViewModel @Inject constructor(
     init {
         loadContacts()
         loadFirebaseConfig()
+        loadSupabaseConfig()
         syncLogs()
         populateSalesCalls()
         loadSimConfigurations()
@@ -323,15 +333,54 @@ class CallViewModel @Inject constructor(
         }
     }
 
-    fun testDefaultConnection() {
+    fun resetFirebaseConfig() {
+        firestoreRepository.saveFirebaseConfig(null)
+        _firebaseConfig.value = null
+        _connectionStatus.value = null
+    }
+
+    fun loadSupabaseConfig() {
+        _supabaseConfig.value = supabaseService.getSavedConfig()
+    }
+
+    fun saveSupabaseConfig(config: SupabaseConfig?) {
+        supabaseService.saveConfig(config)
+        _supabaseConfig.value = config
+        _supabaseConnectionStatus.value = null
+    }
+
+    fun resetSupabaseConfig() {
+        supabaseService.resetToDefaults()
+        _supabaseConfig.value = null
+        _supabaseConnectionStatus.value = null
+    }
+
+    fun testAndSaveSupabaseConfig(url: String, key: String) {
         viewModelScope.launch {
-            _connectionStatus.value = "TESTING"
-            val result = firestoreRepository.testFirebaseConnection(null)
+            _supabaseConnectionStatus.value = "TESTING"
+            val result = supabaseService.testSupabaseConnection(url, key)
             if (result.isSuccess) {
-                _connectionStatus.value = "SUCCESS"
+                val config = SupabaseConfig(url, key)
+                supabaseService.saveConfig(config)
+                _supabaseConfig.value = config
+                _supabaseConnectionStatus.value = "SUCCESS"
             } else {
                 val errorMsg = result.exceptionOrNull()?.message ?: "Unknown error"
-                _connectionStatus.value = "FAILED:$errorMsg"
+                _supabaseConnectionStatus.value = "FAILED:$errorMsg"
+            }
+        }
+    }
+
+    fun testDefaultSupabaseConnection() {
+        viewModelScope.launch {
+            _supabaseConnectionStatus.value = "TESTING"
+            val active = supabaseService.getActiveConfig()
+            val result = supabaseService.testSupabaseConnection(active.url, active.apiKey)
+            if (result.isSuccess) {
+                _supabaseConnectionStatus.value = "SUCCESS"
+            } else {
+                val errorMsg = result.exceptionOrNull()?.message ?: "Unknown error"
+                _supabaseConnectionStatus.value = "FAILED:$errorMsg"
             }
         }
     }

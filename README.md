@@ -13,6 +13,7 @@ A robust Android application designed to scan system call logs, match them with 
 * **Supabase Sales Integration**: Maps and synchronizes sales interaction logs to a remote Supabase Postgres database.
 * **Background Sync Service**: Employs Android `WorkManager` with exponential backoff retries to automatically sync pending data and upload recordings in the background when connected to the internet.
 * **Local Database Caching**: Uses Room SQLite DB to cache records, track favorite status, write notes, assign tags, and monitor upload progress.
+* **SIM & Dual SIM Management**: Tracks and handles call routing and identification across multi-SIM hardware through dedicated SIM managers.
 
 ---
 
@@ -25,7 +26,9 @@ A robust Android application designed to scan system call logs, match them with 
 * **Network & Remote Services**:
   * **Firebase**: Firestore (Metadata) & Cloud Storage (Audio assets)
   * **Supabase**: Postgrest Kotlin SDK (Sales calls logging)
-* **UI (Jetpack Compose)**: Dynamic configuration settings, recording managers, and dashboard view models.
+* **UI**: Jetpack Compose (Dynamic configuration settings, recording managers, and dashboard view models)
+* **Media**: Media3 ExoPlayer for audio playback
+* **Image Loading**: Coil
 
 ---
 
@@ -37,21 +40,24 @@ app/src/main/java/com/example/callog/
 ├── core/                  # Core helpers, constants, and utilities
 ├── data/
 │   ├── local/             # Room Database, DAOs, and Entities
-│   │   ├── dao/           # CallDao, SalesCallDao, TracebackDao
-│   │   └── entity/        # CallEntity, SalesCallEntity, TracebackEntity
 │   ├── provider/          # CallLogProvider and RecordingScanner
 │   ├── remote/            # Remote APIs (FirestoreService, SupabaseService)
-│   └── repository/        # Repository implementations (Firestore, Supabase, Call, Recording)
+│   ├── receiver/          # Broadcast receivers (CallReceiver)
+│   └── repository/        # Repository implementations
+│
+├── di/                    # Dagger Hilt Dependency Injection modules
 │
 ├── domain/
-│   ├── model/             # Shared data models (FirebaseConfig)
+│   ├── model/             # Shared data models
 │   ├── repository/        # Interface contracts for Repositories
 │   └── usecase/           # Domain use cases orchestrating repository actions
 │
-└── presentation/
-    ├── screens/           # Jetpack Compose Screens (Settings, Recordings)
-    ├── theme/             # Material Design Styles and Themes
-    └── viewmodel/         # ViewModels managing UI state (CallViewModel)
+├── presentation/
+│   ├── screens/           # Jetpack Compose Screens
+│   ├── theme/             # Material Design Styles and Themes
+│   └── viewmodel/         # ViewModels managing UI state
+│
+└── sim/                   # SIM tracking, identification and management logic
 ```
 
 ---
@@ -59,26 +65,29 @@ app/src/main/java/com/example/callog/
 ## ⚙️ Setup & Configuration
 
 ### 1. Permissions Required
-The app requires permissions to perform system reads and storage lookups:
-* `READ_CALL_LOG`
-* `READ_CONTACTS`
-* `READ_EXTERNAL_STORAGE` / `READ_MEDIA_AUDIO` (Android 13+)
-* `WRITE_EXTERNAL_STORAGE`
-* `INTERNET` / `ACCESS_NETWORK_STATE`
+The app requires permissions to perform system reads and storage lookups. These are declared in `AndroidManifest.xml`:
+* `READ_CALL_LOG` - Access call history.
+* `READ_CONTACTS` - Match caller IDs with contact names.
+* `READ_PHONE_STATE` - Monitor ongoing call state.
+* `POST_NOTIFICATIONS` - Post foreground service and sync notifications (Android 13+).
+* `READ_EXTERNAL_STORAGE` / `READ_MEDIA_AUDIO` - Access audio recordings.
+
+*(Note: Depending on functionality, background network sync implicitly relies on Internet access provided by the system via Firebase/WorkManager.)*
 
 ### 2. Remote Configuration (Firebase & Supabase)
 To establish server connections, configure details via the **Device Configuration** Settings screen inside the app:
 * **Device Phone Number & Owner Name**: Used to attribute caller details and organize upload pathways.
-* **Firebase Credentials**: Set your Project ID, API Key, and App ID to hook up your Firestore & GCS buckets.
-* **Supabase Client**: Configured in `SupabaseService.kt` to upsert records into your Postgres database.
+* **Firebase Credentials**: Setup the required `google-services.json` or connect directly.
+* **Supabase Client**: Configured to upsert records into your Postgres database.
 
 ---
 
 ## 🛠️ Build & Installation
 
 Prerequisites:
-* Android Studio (Ladybug or newer)
-* Android SDK (API Level 26+ / Android 8.0+)
+* Android Studio (Ladybug or newer recommended)
+* Android SDK (API Level 29+ / Android 10.0+)
+* JDK 17
 * Gradle 8.0+
 
 ### Gradle CLI Quickstart
