@@ -36,7 +36,13 @@ sealed interface Nav3Key {
         data object Dashboard : CrmTab
 
         @Serializable
+        data object Calls : CrmTab
+
+        @Serializable
         data object Contacts : CrmTab
+
+        @Serializable
+        data object Recordings : CrmTab
 
         @Serializable
         data object Tasks : CrmTab
@@ -45,10 +51,19 @@ sealed interface Nav3Key {
         data object Meetings : CrmTab
 
         @Serializable
+        data object Analytics : CrmTab
+
+        @Serializable
         data object Settings : CrmTab
 
         @Serializable
         data object CallLogs : CrmTab
+
+        @Serializable
+        data object Dialer : CrmTab
+
+        @Serializable
+        data object Favorites : CrmTab
 
         @Serializable
         data object DeveloperLogs : CrmTab

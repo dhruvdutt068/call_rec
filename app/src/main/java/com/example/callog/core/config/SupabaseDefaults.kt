@@ -12,4 +12,5 @@ object SupabaseDefaults {
     const val TABLE_PHONE_NUMBERS = "phone_numbers"
     const val TABLE_CONTACT_ALIASES = "contact_aliases"
     const val TABLE_DEVICES = "devices"
+    const val TABLE_LEADS = "leads"
 }

@@ -1,0 +1,1 @@
+{"nodes": [{"id": "$graphify-root$_app_src_main_java_com_example_callog_domain_model_call_kt", "label": "Call.kt", "file_type": "code", "source_file": "app/src/main/java/com/example/callog/domain/model/Call.kt", "source_location": "L1"}], "edges": [], "raw_calls": [], "kotlin_package": "com.example.callog.domain.model"}

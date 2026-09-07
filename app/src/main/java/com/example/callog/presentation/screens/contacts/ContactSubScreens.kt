@@ -35,15 +35,57 @@ fun WhatsAppScreen(
     val context = LocalContext.current
     val contacts by viewModel.contacts.collectAsState()
     val contact = remember(contacts, contactId) { contacts.find { it.contactId == contactId } }
-    var messageText by remember { mutableStateOf("Hi ${contact?.name ?: ""}, following up from AllSet CRM.") }
+    val phoneNumber = contact?.phoneNumbers?.firstOrNull() ?: ""
+
+    // Collect Room Conversation & Messages Flow
+    val conversation by viewModel.getConversationForPersonFlow(contactId).collectAsState(initial = null)
+    val messages by if (conversation != null) {
+        viewModel.getMessagesForConversationFlow(conversation!!.id).collectAsState(initial = emptyList())
+    } else {
+        remember { mutableStateOf(emptyList()) }
+    }
+
+    // Initialize conversation if not present
+    LaunchedEffect(contactId, phoneNumber) {
+        if (conversation == null && contactId.isNotBlank()) {
+            viewModel.initializeConversation(contactId, phoneNumber.ifBlank { "Unknown" })
+        }
+    }
+
+    var messageText by remember { mutableStateOf("") }
+    var showHandoverDialog by remember { mutableStateOf(false) }
+    var selectedReason by remember { mutableStateOf(com.example.callog.domain.model.HandoverReason.MANUAL) }
+    var repName by remember { mutableStateOf("Sales Rep") }
+
+    val isAiHandling = conversation?.status == com.example.callog.domain.model.ConversationStatus.AI_HANDLING
 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("WhatsApp • ${contact?.name ?: contactId}", fontWeight = FontWeight.Bold) },
+                title = {
+                    Column {
+                        Text("WhatsApp • ${contact?.name ?: contactId}", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
+                        Text(
+                            text = if (isAiHandling) "🟢 AI Active • Auto-Replying" else "🟠 Human Handling • ${conversation?.assignedUserName ?: "Assigned"}",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = if (isAiHandling) Green500 else Amber500
+                        )
+                    }
+                },
                 navigationIcon = {
                     IconButton(onClick = onBackClick) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                    }
+                },
+                actions = {
+                    IconButton(onClick = {
+                        val cleanPhone = phoneNumber.replace("[^0-9+]".toRegex(), "")
+                        val intent = Intent(Intent.ACTION_VIEW).apply {
+                            data = Uri.parse("https://api.whatsapp.com/send?phone=$cleanPhone")
+                        }
+                        context.startActivity(intent)
+                    }) {
+                        Icon(Icons.Default.Share, contentDescription = "External WhatsApp", tint = Slate300)
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -59,40 +101,274 @@ fun WhatsAppScreen(
                 .fillMaxSize()
                 .padding(innerPadding)
                 .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
+            // Live Status & Handover Control Card
             GlassyCard {
-                Column(modifier = Modifier.fillMaxWidth().padding(12.dp)) {
-                    Text("Client Contact", style = MaterialTheme.typography.labelSmall, color = Slate400)
-                    Text(contact?.name ?: "Unknown", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = Slate50)
-                    Text(contact?.phoneNumbers?.firstOrNull() ?: "No phone", color = Teal300)
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(14.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Box(
+                                modifier = Modifier
+                                    .size(10.dp)
+                                    .clip(CircleShape)
+                                    .background(if (isAiHandling) Green500 else Amber500)
+                            )
+                            Text(
+                                text = if (isAiHandling) "AI Agent Active" else "Human Handling",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = if (isAiHandling) Green500 else Amber500
+                            )
+                        }
+
+                        if (isAiHandling) {
+                            Button(
+                                onClick = { showHandoverDialog = true },
+                                colors = ButtonDefaults.buttonColors(containerColor = Amber500, contentColor = Slate900),
+                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                            ) {
+                                Icon(Icons.Default.Person, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("Handover to Rep", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+                            }
+                        } else {
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                OutlinedButton(
+                                    onClick = { showHandoverDialog = true },
+                                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp)
+                                ) {
+                                    Text("Reassign", style = MaterialTheme.typography.labelSmall)
+                                }
+                                Button(
+                                    onClick = { conversation?.id?.let { viewModel.releaseConversationToAi(it) } },
+                                    colors = ButtonDefaults.buttonColors(containerColor = Teal300, contentColor = Slate900),
+                                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                                ) {
+                                    Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text("Return to AI", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+                                }
+                            }
+                        }
+                    }
+
+                    Text(
+                        text = if (isAiHandling) {
+                            "Customer queries are automatically handled by the AllSet AI assistant. Take over if custom negotiation or escalation is required."
+                        } else {
+                            "Assigned to ${conversation?.assignedUserName ?: "Sales Rep"}. Reason: ${conversation?.handoverReason?.name ?: "Manual"}. Automated AI replies are paused."
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Slate400
+                    )
                 }
             }
 
-            OutlinedTextField(
-                value = messageText,
-                onValueChange = { messageText = it },
-                label = { Text("Message to Send via WhatsApp") },
-                modifier = Modifier.fillMaxWidth(),
-                minLines = 4
-            )
-
-            Spacer(modifier = Modifier.weight(1f))
-
-            Button(
-                onClick = {
-                    val phone = contact?.phoneNumbers?.firstOrNull()?.replace("[^0-9+]".toRegex(), "") ?: ""
-                    val intent = Intent(Intent.ACTION_VIEW).apply {
-                        data = Uri.parse("https://api.whatsapp.com/send?phone=$phone&text=${Uri.encode(messageText)}")
-                    }
-                    context.startActivity(intent)
-                },
-                modifier = Modifier.fillMaxWidth().height(50.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = Green500, contentColor = Slate900)
+            // Message Timeline Feed
+            LazyColumn(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+                reverseLayout = false
             ) {
-                Icon(Icons.Default.Send, contentDescription = null)
-                Spacer(modifier = Modifier.width(8.dp))
-                Text("Open in WhatsApp", fontWeight = FontWeight.Bold)
+                if (messages.isEmpty()) {
+                    item {
+                        EmptyStateView(
+                            title = "No Messages Yet",
+                            description = "Start the conversation or wait for incoming WhatsApp messages.",
+                            icon = Icons.Default.ChatBubbleOutline
+                        )
+                    }
+                } else {
+                    items(messages, key = { it.id }) { msg ->
+                        MessageBubble(msg = msg)
+                    }
+                }
+            }
+
+            // In-App Compose & Send Bar
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                OutlinedTextField(
+                    value = messageText,
+                    onValueChange = { messageText = it },
+                    placeholder = { Text("Reply as Sales Rep...") },
+                    modifier = Modifier.weight(1f),
+                    maxLines = 3,
+                    singleLine = false
+                )
+
+                IconButton(
+                    onClick = {
+                        conversation?.id?.let { convId ->
+                            if (messageText.isNotBlank()) {
+                                viewModel.sendHumanWhatsAppMessage(convId, messageText, repName)
+                                messageText = ""
+                            }
+                        }
+                    },
+                    modifier = Modifier
+                        .size(48.dp)
+                        .clip(CircleShape)
+                        .background(Teal300),
+                    enabled = messageText.isNotBlank()
+                ) {
+                    Icon(Icons.Default.Send, contentDescription = "Send Reply", tint = Slate900)
+                }
+            }
+        }
+    }
+
+    // Escalation / Handover Dialog
+    if (showHandoverDialog) {
+        AlertDialog(
+            onDismissRequest = { showHandoverDialog = false },
+            title = { Text("Escalate & Handover Conversation", fontWeight = FontWeight.Bold) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text("Select reason for escalating conversation to a human sales rep:", style = MaterialTheme.typography.bodyMedium, color = Slate300)
+                    
+                    com.example.callog.domain.model.HandoverReason.entries.forEach { reason ->
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            RadioButton(
+                                selected = selectedReason == reason,
+                                onClick = { selectedReason = reason }
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(reason.name.replace("_", " "), style = MaterialTheme.typography.bodyMedium)
+                        }
+                    }
+
+                    OutlinedTextField(
+                        value = repName,
+                        onValueChange = { repName = it },
+                        label = { Text("Assignee Name") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        conversation?.id?.let { convId ->
+                            viewModel.handoverConversationToHuman(
+                                conversationId = convId,
+                                reason = selectedReason,
+                                assignedUserId = "USER_" + repName.replace(" ", "_").uppercase(),
+                                assignedUserName = repName
+                            )
+                        }
+                        showHandoverDialog = false
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = Amber500, contentColor = Slate900)
+                ) {
+                    Text("Confirm Handover", fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showHandoverDialog = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+}
+
+@Composable
+private fun MessageBubble(msg: com.example.callog.domain.model.ConversationMessage) {
+    val isCustomer = msg.senderType == com.example.callog.domain.model.SenderType.CUSTOMER
+    val isSystem = msg.senderType == com.example.callog.domain.model.SenderType.SYSTEM
+    val isAi = msg.senderType == com.example.callog.domain.model.SenderType.AI
+    val isHuman = msg.senderType == com.example.callog.domain.model.SenderType.HUMAN
+
+    if (isSystem) {
+        Box(
+            modifier = Modifier.fillMaxWidth(),
+            contentAlignment = Alignment.Center
+        ) {
+            Surface(
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
+                shape = CircleShape,
+                border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.3f))
+            ) {
+                Text(
+                    text = msg.messageText,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Amber500,
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)
+                )
+            }
+        }
+    } else {
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalAlignment = if (isCustomer) Alignment.Start else Alignment.End
+        ) {
+            // Sender Badge
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
+            ) {
+                Text(
+                    text = when {
+                        isAi -> "🤖 ${msg.senderName}"
+                        isHuman -> "👤 ${msg.senderName}"
+                        else -> msg.senderName
+                    },
+                    style = MaterialTheme.typography.labelSmall,
+                    color = when {
+                        isAi -> Color(0xFFB8BCFF)
+                        isHuman -> Teal300
+                        else -> Slate400
+                    },
+                    fontWeight = FontWeight.Bold
+                )
+            }
+
+            // Message Bubble Surface
+            Surface(
+                color = when {
+                    isCustomer -> MaterialTheme.colorScheme.surfaceVariant
+                    isAi -> Color(0xFF2E2C54)
+                    else -> Color(0xFF1E3D34)
+                },
+                shape = MaterialTheme.shapes.medium,
+                border = androidx.compose.foundation.BorderStroke(
+                    1.dp,
+                    when {
+                        isCustomer -> MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
+                        isAi -> Color(0xFF4A4FD8).copy(alpha = 0.5f)
+                        else -> Teal300.copy(alpha = 0.5f)
+                    }
+                ),
+                modifier = Modifier.widthIn(max = 280.dp)
+            ) {
+                Column(modifier = Modifier.padding(10.dp)) {
+                    Text(
+                        text = msg.messageText,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                }
             }
         }
     }

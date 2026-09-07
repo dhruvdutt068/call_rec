@@ -47,6 +47,7 @@ class SyncWorker(
         fun simManager(): com.example.callog.data.provider.SimManager
         fun personRepository(): com.example.callog.domain.repository.PersonRepository
         fun personDao(): com.example.callog.data.local.dao.PersonDao
+        fun leadDao(): com.example.callog.data.local.dao.LeadDao
     }
 
     override suspend fun doWork(): Result {
@@ -69,6 +70,7 @@ class SyncWorker(
         val simManager = entryPoint.simManager()
         val personRepository = entryPoint.personRepository()
         val personDao = entryPoint.personDao()
+        val leadDao = entryPoint.leadDao()
 
         // Start new logger session
         val syncId = DeveloperLogger.startNewSession()
@@ -163,45 +165,111 @@ class SyncWorker(
                 DeveloperLogger.info("IDENTITY_SYNC_STARTED", "Resolving contacts to Person canonical identity and syncing to Supabase", network = network)
                 personRepository.syncContactsFromDevice()
 
-                val pendingPeople = personDao.getPendingPeople()
-                if (pendingPeople.isNotEmpty()) {
-                    val res = supabaseService.syncPeople(pendingPeople)
-                    if (res.isSuccess) {
-                        for (p in pendingPeople) {
-                            personDao.updatePersonSyncStatus(p.id, "SYNCED")
-                        }
-                        DeveloperLogger.success("IDENTITY_PEOPLE_SYNCED", "Synced ${pendingPeople.size} people to Supabase.", network = network)
-                    }
-                }
-
-                val pendingPhoneNumbers = personDao.getPendingPhoneNumbers()
-                if (pendingPhoneNumbers.isNotEmpty()) {
-                    val res = supabaseService.syncPhoneNumbers(pendingPhoneNumbers)
-                    if (res.isSuccess) {
-                        for (pn in pendingPhoneNumbers) {
-                            personDao.updatePhoneNumberSyncStatus(pn.id, "SYNCED")
-                        }
-                        DeveloperLogger.success("IDENTITY_PHONES_SYNCED", "Synced ${pendingPhoneNumbers.size} phone numbers to Supabase.", network = network)
-                    }
-                }
-
-                val pendingAliases = personDao.getPendingAliases()
-                if (pendingAliases.isNotEmpty()) {
-                    val res = supabaseService.syncContactAliases(pendingAliases)
-                    if (res.isSuccess) {
-                        for (ca in pendingAliases) {
-                            personDao.updateAliasSyncStatus(ca.id, "SYNCED")
-                        }
-                        DeveloperLogger.success("IDENTITY_ALIASES_SYNCED", "Synced ${pendingAliases.size} aliases to Supabase.", network = network)
-                    }
-                }
-
-                val devices = personDao.getAllDevices()
+                // 1. Sync all Devices first to guarantee contact_aliases foreign key
+                val devices = personDao.getAllDevices().distinctBy { it.id }
                 if (devices.isNotEmpty()) {
                     supabaseService.syncDevices(devices)
                 }
+
+                // 2. Collect all pending records
+                val pendingPhoneNumbers = personDao.getPendingPhoneNumbers()
+                val pendingAliases = personDao.getPendingAliases()
+                val pendingPeople = personDao.getPendingPeople()
+
+                // Guarantee that ALL People referenced by pending phone numbers or aliases are upserted first
+                val allReferencedPersonIds = (pendingPeople.map { it.id } +
+                        pendingPhoneNumbers.map { it.personId } +
+                        pendingAliases.map { it.personId }).distinct()
+
+                val peopleToUpsert = allReferencedPersonIds.mapNotNull { personDao.getPersonById(it) }.distinctBy { it.id }
+                if (peopleToUpsert.isNotEmpty()) {
+                    val res = supabaseService.syncPeople(peopleToUpsert)
+                    if (res.isSuccess) {
+                        for (p in peopleToUpsert) {
+                            personDao.updatePersonSyncStatus(p.id, "SYNCED")
+                        }
+                        DeveloperLogger.success("IDENTITY_PEOPLE_SYNCED", "Synced ${peopleToUpsert.size} people to Supabase.", network = network)
+                    } else {
+                        val errMsg = res.exceptionOrNull()?.message ?: "Unknown error"
+                        DeveloperLogger.error("IDENTITY_PEOPLE_SYNC_FAILED", "Failed syncing people to Supabase: $errMsg", exception = res.exceptionOrNull(), network = network)
+                    }
+                }
+
+                // 3. Sync phone numbers (deduplicated by normalized_number and ensuring valid personId)
+                if (pendingPhoneNumbers.isNotEmpty()) {
+                    val validPhoneNumbers = pendingPhoneNumbers
+                        .filter { pn -> personDao.getPersonById(pn.personId) != null }
+                        .distinctBy { it.normalizedNumber }
+
+                    if (validPhoneNumbers.isNotEmpty()) {
+                        val res = supabaseService.syncPhoneNumbers(validPhoneNumbers)
+                        if (res.isSuccess) {
+                            for (pn in validPhoneNumbers) {
+                                personDao.updatePhoneNumberSyncStatus(pn.id, "SYNCED")
+                            }
+                            DeveloperLogger.success("IDENTITY_PHONES_SYNCED", "Synced ${validPhoneNumbers.size} phone numbers to Supabase.", network = network)
+                        } else {
+                            val errMsg = res.exceptionOrNull()?.message ?: "Unknown error"
+                            DeveloperLogger.error("IDENTITY_PHONES_SYNC_FAILED", "Failed syncing phone numbers to Supabase: $errMsg", exception = res.exceptionOrNull(), network = network)
+                        }
+                    }
+                }
+
+                // 4. Sync contact aliases (deduplicated by device_id + normalized_number and ensuring valid personId)
+                if (pendingAliases.isNotEmpty()) {
+                    val validAliases = pendingAliases
+                        .filter { ca -> personDao.getPersonById(ca.personId) != null }
+                        .distinctBy { "${it.deviceId}_${it.normalizedNumber}" }
+
+                    if (validAliases.isNotEmpty()) {
+                        val res = supabaseService.syncContactAliases(validAliases)
+                        if (res.isSuccess) {
+                            for (ca in validAliases) {
+                                personDao.updateAliasSyncStatus(ca.id, "SYNCED")
+                            }
+                            DeveloperLogger.success("IDENTITY_ALIASES_SYNCED", "Synced ${validAliases.size} aliases to Supabase.", network = network)
+                        } else {
+                            val errMsg = res.exceptionOrNull()?.message ?: "Unknown error"
+                            DeveloperLogger.error("IDENTITY_ALIASES_SYNC_FAILED", "Failed syncing aliases to Supabase: $errMsg", exception = res.exceptionOrNull(), network = network)
+                        }
+                    }
+                }
             } catch (e: Exception) {
                 DeveloperLogger.error("IDENTITY_SYNC_FAILED", "Exception during Person identity sync: ${e.message}", exception = e, network = network)
+            }
+
+            // Step 2e: Sync pending CRM Leads to Supabase
+            try {
+                val pendingLeads = leadDao.getPendingLeads()
+                if (pendingLeads.isNotEmpty()) {
+                    DeveloperLogger.info("LEAD_SYNC_STARTED", "Syncing ${pendingLeads.size} pending CRM leads to Supabase", network = network)
+                    
+                    // Guarantee foreign key constraint is satisfied by syncing referenced people first
+                    val referencedPersonIds = pendingLeads.map { it.personId }.distinct()
+                    val peopleToUpsert = referencedPersonIds.mapNotNull { personDao.getPersonById(it) }
+                    if (peopleToUpsert.isNotEmpty()) {
+                        supabaseService.syncPeople(peopleToUpsert)
+                    }
+
+                    val startTime = System.currentTimeMillis()
+                    val res = supabaseService.syncLeads(pendingLeads)
+                    val duration = System.currentTimeMillis() - startTime
+                    if (res.isSuccess) {
+                        for (lead in pendingLeads) {
+                            leadDao.updateSyncStatus(lead.id, "SYNCED")
+                        }
+                        DeveloperLogger.success("LEAD_SYNC_SUCCESS", "Successfully synced ${pendingLeads.size} CRM leads to Supabase.", durationMs = duration, network = network)
+                    } else {
+                        val exception = res.exceptionOrNull()
+                        val errMsg = exception?.message ?: "Unknown lead sync error"
+                        for (lead in pendingLeads) {
+                            leadDao.updateSyncStatus(lead.id, "FAILED")
+                        }
+                        DeveloperLogger.error("LEAD_SYNC_FAILED", "Failed syncing CRM leads: $errMsg", exception = exception, network = network)
+                    }
+                }
+            } catch (e: Exception) {
+                DeveloperLogger.error("LEAD_SYNC_FAILED", "Exception during Lead sync: ${e.message}", exception = e, network = network)
             }
 
             // Step 3: Fetch all pending items from local database for Firestore

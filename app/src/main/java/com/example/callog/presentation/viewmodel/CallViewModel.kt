@@ -50,8 +50,85 @@ class CallViewModel @Inject constructor(
     private val syncLogDao: SyncLogDao,
     private val recordingLogDao: RecordingLogDao,
     private val simManager: com.example.callog.data.provider.SimManager,
-    private val supabaseService: SupabaseService
+    private val supabaseService: SupabaseService,
+    private val conversationRepository: com.example.callog.domain.repository.ConversationRepository,
+    private val callSessionManager: com.example.callog.domain.service.CallSessionManager
 ) : ViewModel() {
+
+    fun startOutgoingCall(number: String, simSlot: Int = 0) {
+        callSessionManager.startOutgoingCall(number, simSlot)
+    }
+
+    /**
+     * Unified call initiation point for the entire application.
+     * Pre-seeds the session, launches InCallActivity, and invokes TelecomManager.placeCall.
+     */
+    fun initiateCall(context: android.content.Context, number: String, simSlot: Int = 0) {
+        if (number.isBlank()) return
+        val cleanNumber = number.trim()
+        val uri = android.net.Uri.parse("tel:${android.net.Uri.encode(cleanNumber)}")
+
+        // 1. Initialize outgoing call session in CallSessionManager
+        callSessionManager.startOutgoingCall(cleanNumber, simSlot)
+
+        // 2. Launch Callog In-Call CRM UI directly in foreground
+        try {
+            val inCallIntent = android.content.Intent(context, com.example.callog.presentation.call.InCallActivity::class.java).apply {
+                flags = android.content.Intent.FLAG_ACTIVITY_NEW_TASK or
+                        android.content.Intent.FLAG_ACTIVITY_SINGLE_TOP or
+                        android.content.Intent.FLAG_ACTIVITY_REORDER_TO_FRONT
+            }
+            context.startActivity(inCallIntent)
+        } catch (e: Exception) {
+            DeveloperLogger.error("CallViewModel", "Failed to launch InCallActivity: ${e.message}")
+        }
+
+        // 3. Connect telephony line via TelecomManager if default dialer
+        val telecomManager = context.getSystemService(android.content.Context.TELECOM_SERVICE) as? android.telecom.TelecomManager
+        val isDefault = com.example.callog.core.telecom.TelecomRoleHelper.isDefaultDialer(context)
+        val selectedSim = _activeSims.value.getOrNull(simSlot)
+
+        if (isDefault && telecomManager != null) {
+            val extras = android.os.Bundle().apply {
+                selectedSim?.let { sim ->
+                    putInt("subscription_id", sim.subscriptionId)
+                    putInt("android.telephony.extra.SUBSCRIPTION_INDEX", sim.subscriptionId)
+                    putInt("com.android.phone.extra.slot", sim.slotIndex)
+                    putInt("simSlot", sim.slotIndex)
+                }
+            }
+            try {
+                telecomManager.placeCall(uri, extras)
+            } catch (se: SecurityException) {
+                try {
+                    val intent = android.content.Intent(android.content.Intent.ACTION_CALL, uri).apply {
+                        flags = android.content.Intent.FLAG_ACTIVITY_NEW_TASK
+                    }
+                    context.startActivity(intent)
+                } catch (e: Exception) {
+                    DeveloperLogger.error("CallViewModel", "Failed to place call via fallback: ${e.message}")
+                }
+            }
+        } else {
+            try {
+                val intent = android.content.Intent(android.content.Intent.ACTION_CALL, uri).apply {
+                    flags = android.content.Intent.FLAG_ACTIVITY_NEW_TASK
+                    selectedSim?.let { sim ->
+                        putExtra("subscription_id", sim.subscriptionId)
+                        putExtra("android.telephony.extra.SUBSCRIPTION_INDEX", sim.subscriptionId)
+                        putExtra("com.android.phone.extra.slot", sim.slotIndex)
+                        putExtra("simSlot", sim.slotIndex)
+                    }
+                }
+                context.startActivity(intent)
+            } catch (e: SecurityException) {
+                val dialIntent = android.content.Intent(android.content.Intent.ACTION_DIAL, uri).apply {
+                    flags = android.content.Intent.FLAG_ACTIVITY_NEW_TASK
+                }
+                context.startActivity(dialIntent)
+            }
+        }
+    }
 
     val recordingLogs: StateFlow<List<RecordingLogEntity>> = recordingLogDao.getAllLogsFlow()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
@@ -576,6 +653,58 @@ class CallViewModel @Inject constructor(
         viewModelScope.launch {
             val result = recordingRepository.uploadRecordingDirect(recordingId)
             onResult(result)
+        }
+    }
+
+    // ==========================================
+    // PHASE 7: WHATSAPP & HUMAN HANDOVER
+    // ==========================================
+
+    fun getConversationForPersonFlow(personId: String): Flow<com.example.callog.domain.model.Conversation?> {
+        return conversationRepository.getConversationByPersonIdFlow(personId)
+    }
+
+    fun getMessagesForConversationFlow(conversationId: String): Flow<List<com.example.callog.domain.model.ConversationMessage>> {
+        return conversationRepository.getMessagesFlow(conversationId)
+    }
+
+    fun initializeConversation(personId: String, whatsappNumber: String, onComplete: (com.example.callog.domain.model.Conversation) -> Unit = {}) {
+        viewModelScope.launch {
+            val conv = conversationRepository.createOrGetConversation(personId, whatsappNumber)
+            onComplete(conv)
+        }
+    }
+
+    fun handoverConversationToHuman(
+        conversationId: String,
+        reason: com.example.callog.domain.model.HandoverReason,
+        assignedUserId: String? = "USER_REP_1",
+        assignedUserName: String? = "Sales Rep"
+    ) {
+        viewModelScope.launch {
+            conversationRepository.handoverToHuman(conversationId, reason, assignedUserId, assignedUserName)
+            DeveloperLogger.info("Handover", "Conversation $conversationId escalated to human: ${reason.name}")
+        }
+    }
+
+    fun releaseConversationToAi(conversationId: String) {
+        viewModelScope.launch {
+            conversationRepository.releaseToAi(conversationId)
+            DeveloperLogger.info("Handover", "Conversation $conversationId released back to AI")
+        }
+    }
+
+    fun assignConversationUser(conversationId: String, userId: String, userName: String) {
+        viewModelScope.launch {
+            conversationRepository.assignToUser(conversationId, userId, userName)
+        }
+    }
+
+    fun sendHumanWhatsAppMessage(conversationId: String, text: String, senderName: String = "Sales Rep") {
+        viewModelScope.launch {
+            if (text.isNotBlank()) {
+                conversationRepository.sendHumanMessage(conversationId, text.trim(), senderName)
+            }
         }
     }
 }

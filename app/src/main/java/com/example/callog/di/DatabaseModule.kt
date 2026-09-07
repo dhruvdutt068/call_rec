@@ -284,6 +284,93 @@ object DatabaseModule {
         }
     }
 
+    private val MIGRATION_17_18 = object : Migration(17, 18) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            try {
+                db.execSQL("""
+                    CREATE TABLE IF NOT EXISTS `leads` (
+                        `id` TEXT NOT NULL,
+                        `personId` TEXT NOT NULL,
+                        `status` TEXT NOT NULL,
+                        `priority` TEXT NOT NULL,
+                        `feedback` TEXT,
+                        `feedbackRating` INTEGER,
+                        `notes` TEXT,
+                        `ownerId` TEXT,
+                        `source` TEXT NOT NULL,
+                        `nextFollowUpAt` INTEGER,
+                        `isArchived` INTEGER NOT NULL,
+                        `archivedAt` INTEGER,
+                        `createdAt` INTEGER NOT NULL,
+                        `updatedAt` INTEGER NOT NULL,
+                        `syncStatus` TEXT NOT NULL,
+                        PRIMARY KEY(`id`),
+                        FOREIGN KEY(`personId`) REFERENCES `people`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE
+                    )
+                """.trimIndent())
+                db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS `index_leads_personId` ON `leads` (`personId`)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_leads_status` ON `leads` (`status`)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_leads_priority` ON `leads` (`priority`)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_leads_nextFollowUpAt` ON `leads` (`nextFollowUpAt`)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_leads_updatedAt` ON `leads` (`updatedAt`)")
+            } catch (e: Exception) {
+                android.util.Log.e("DatabaseModule", "Failed to migrate database to v18", e)
+            }
+        }
+    }
+
+    private val MIGRATION_18_19 = object : Migration(18, 19) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            try {
+                // 1. Create conversations table
+                db.execSQL("""
+                    CREATE TABLE IF NOT EXISTS `conversations` (
+                        `id` TEXT NOT NULL,
+                        `personId` TEXT NOT NULL,
+                        `whatsappNumber` TEXT NOT NULL,
+                        `status` TEXT NOT NULL DEFAULT 'AI_HANDLING',
+                        `assignedUserId` TEXT,
+                        `assignedUserName` TEXT,
+                        `lastMessage` TEXT,
+                        `lastMessageAt` INTEGER NOT NULL,
+                        `handoverReason` TEXT,
+                        `createdAt` INTEGER NOT NULL,
+                        `updatedAt` INTEGER NOT NULL,
+                        `syncStatus` TEXT NOT NULL DEFAULT 'PENDING',
+                        PRIMARY KEY(`id`),
+                        FOREIGN KEY(`personId`) REFERENCES `people`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE
+                    )
+                """.trimIndent())
+                db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS `index_conversations_personId` ON `conversations` (`personId`)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_conversations_whatsappNumber` ON `conversations` (`whatsappNumber`)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_conversations_status` ON `conversations` (`status`)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_conversations_assignedUserId` ON `conversations` (`assignedUserId`)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_conversations_updatedAt` ON `conversations` (`updatedAt`)")
+
+                // 2. Create conversation_messages table
+                db.execSQL("""
+                    CREATE TABLE IF NOT EXISTS `conversation_messages` (
+                        `id` TEXT NOT NULL,
+                        `conversationId` TEXT NOT NULL,
+                        `senderType` TEXT NOT NULL,
+                        `senderName` TEXT NOT NULL,
+                        `messageText` TEXT NOT NULL,
+                        `timestamp` INTEGER NOT NULL,
+                        `deliveryStatus` TEXT NOT NULL DEFAULT 'SENT',
+                        `syncStatus` TEXT NOT NULL DEFAULT 'PENDING',
+                        PRIMARY KEY(`id`),
+                        FOREIGN KEY(`conversationId`) REFERENCES `conversations`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE
+                    )
+                """.trimIndent())
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_conversation_messages_conversationId` ON `conversation_messages` (`conversationId`)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_conversation_messages_timestamp` ON `conversation_messages` (`timestamp`)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_conversation_messages_senderType` ON `conversation_messages` (`senderType`)")
+            } catch (e: Exception) {
+                android.util.Log.e("DatabaseModule", "Failed to migrate database to v19", e)
+            }
+        }
+    }
+
     @Provides
     @Singleton
     fun provideDatabase(
@@ -293,7 +380,7 @@ object DatabaseModule {
             context,
             CallVaultDatabase::class.java,
             Constants.DATABASE_NAME
-        ).addMigrations(MIGRATION_5_6, MIGRATION_13_14, MIGRATION_14_15, MIGRATION_15_16, MIGRATION_16_17)
+        ).addMigrations(MIGRATION_5_6, MIGRATION_13_14, MIGRATION_14_15, MIGRATION_15_16, MIGRATION_16_17, MIGRATION_17_18, MIGRATION_18_19)
          .fallbackToDestructiveMigration()
          .build()
      }
@@ -336,5 +423,15 @@ object DatabaseModule {
     @Provides
     fun providePersonDao(db: CallVaultDatabase): com.example.callog.data.local.dao.PersonDao {
         return db.personDao()
+    }
+
+    @Provides
+    fun provideLeadDao(db: CallVaultDatabase): com.example.callog.data.local.dao.LeadDao {
+        return db.leadDao()
+    }
+
+    @Provides
+    fun provideConversationDao(db: CallVaultDatabase): com.example.callog.data.local.dao.ConversationDao {
+        return db.conversationDao()
     }
 }

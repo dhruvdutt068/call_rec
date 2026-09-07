@@ -161,7 +161,7 @@ class SupabaseService @Inject constructor(
 
     suspend fun syncPeople(people: List<com.example.callog.data.local.entity.PersonEntity>): Result<Unit> = withContext(Dispatchers.IO) {
         return@withContext try {
-            val supabasePeople = people.map {
+            val supabasePeople = people.distinctBy { it.id }.map {
                 com.example.callog.data.remote.model.SupabasePerson(
                     id = it.id,
                     displayName = it.displayName,
@@ -183,7 +183,7 @@ class SupabaseService @Inject constructor(
 
     suspend fun syncPhoneNumbers(numbers: List<com.example.callog.data.local.entity.PhoneNumberEntity>): Result<Unit> = withContext(Dispatchers.IO) {
         return@withContext try {
-            val supabaseNumbers = numbers.map {
+            val supabaseNumbers = numbers.distinctBy { it.normalizedNumber }.map {
                 com.example.callog.data.remote.model.SupabasePhoneNumber(
                     id = it.id,
                     personId = it.personId,
@@ -195,7 +195,7 @@ class SupabaseService @Inject constructor(
                 )
             }
             getClient().from(SupabaseDefaults.TABLE_PHONE_NUMBERS).upsert(supabaseNumbers) {
-                onConflict = "id"
+                onConflict = "normalized_number"
             }
             Result.success(Unit)
         } catch (e: Exception) {
@@ -206,7 +206,7 @@ class SupabaseService @Inject constructor(
 
     suspend fun syncContactAliases(aliases: List<com.example.callog.data.local.entity.ContactAliasEntity>): Result<Unit> = withContext(Dispatchers.IO) {
         return@withContext try {
-            val supabaseAliases = aliases.map {
+            val supabaseAliases = aliases.distinctBy { "${it.deviceId}_${it.normalizedNumber}" }.map {
                 com.example.callog.data.remote.model.SupabaseContactAlias(
                     id = it.id,
                     personId = it.personId,
@@ -219,7 +219,7 @@ class SupabaseService @Inject constructor(
                 )
             }
             getClient().from(SupabaseDefaults.TABLE_CONTACT_ALIASES).upsert(supabaseAliases) {
-                onConflict = "id"
+                onConflict = "device_id,normalized_number"
             }
             Result.success(Unit)
         } catch (e: Exception) {
@@ -247,6 +247,36 @@ class SupabaseService @Inject constructor(
             Result.success(Unit)
         } catch (e: Exception) {
             Log.e(TAG, "Error syncing devices to Supabase", e)
+            Result.failure(e)
+        }
+    }
+
+    suspend fun syncLeads(leads: List<com.example.callog.data.local.entity.LeadEntity>): Result<Unit> = withContext(Dispatchers.IO) {
+        return@withContext try {
+            val supabaseLeads = leads.map {
+                com.example.callog.data.remote.model.SupabaseLead(
+                    id = it.id,
+                    personId = it.personId,
+                    status = it.status,
+                    priority = it.priority,
+                    feedback = it.feedback,
+                    feedbackRating = it.feedbackRating,
+                    notes = it.notes,
+                    ownerId = it.ownerId,
+                    source = it.source,
+                    nextFollowUpAt = it.nextFollowUpAt?.let { ts -> formatTimestamp(ts) },
+                    isArchived = it.isArchived,
+                    archivedAt = it.archivedAt?.let { ts -> formatTimestamp(ts) },
+                    createdAt = formatTimestamp(it.createdAt),
+                    updatedAt = formatTimestamp(it.updatedAt)
+                )
+            }
+            getClient().from(SupabaseDefaults.TABLE_LEADS).upsert(supabaseLeads) {
+                onConflict = "person_id"
+            }
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Log.e(TAG, "Error syncing leads to Supabase", e)
             Result.failure(e)
         }
     }

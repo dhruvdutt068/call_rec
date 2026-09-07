@@ -23,4 +23,16 @@ abstract class AppModule {
     abstract fun bindPersonRepository(
         personRepositoryImpl: com.example.callog.data.repository.PersonRepositoryImpl
     ): com.example.callog.domain.repository.PersonRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindLeadRepository(
+        leadRepositoryImpl: com.example.callog.data.repository.LeadRepositoryImpl
+    ): com.example.callog.domain.repository.LeadRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindConversationRepository(
+        conversationRepositoryImpl: com.example.callog.data.repository.ConversationRepositoryImpl
+    ): com.example.callog.domain.repository.ConversationRepository
 }

@@ -9,16 +9,16 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import com.example.callog.presentation.screens.calls.CallsHubScreen
 import com.example.callog.presentation.screens.contacts.ContactDetailsScreen
 import com.example.callog.presentation.screens.contacts.ContactsScreen
-import com.example.callog.presentation.screens.dashboard.DashboardScreen
+import com.example.callog.presentation.screens.crm.CrmHubScreen
+import com.example.callog.presentation.screens.insights.InsightsHubScreen
 import com.example.callog.presentation.screens.meetings.MeetingDetailsScreen
-import com.example.callog.presentation.screens.meetings.MeetingListScreen
 import com.example.callog.presentation.screens.meetings.ScheduleMeetingScreen
-import com.example.callog.presentation.screens.settings.SettingsScreen
+import com.example.callog.presentation.screens.recordings.RecordingManagerScreen
 import com.example.callog.presentation.screens.tasks.CreateTaskScreen
 import com.example.callog.presentation.screens.tasks.TaskDetailsScreen
-import com.example.callog.presentation.screens.tasks.TaskListScreen
 import com.example.callog.presentation.viewmodel.AnalyticsViewModel
 import com.example.callog.presentation.viewmodel.CallViewModel
 
@@ -26,11 +26,11 @@ enum class CrmBottomTab(
     val title: String,
     val icon: ImageVector
 ) {
-    DASHBOARD("Dashboard", Icons.Default.Dashboard),
+    CALLS("Calls", Icons.Default.Phone),
     CONTACTS("Contacts", Icons.Default.People),
-    TASKS("Tasks", Icons.Default.CheckCircle),
-    MEETINGS("Meetings", Icons.Default.Event),
-    SETTINGS("Settings", Icons.Default.Settings)
+    RECORDINGS("Recordings", Icons.Default.GraphicEq),
+    ACTIVITIES("CRM", Icons.Default.Assignment),
+    INSIGHTS("Insights", Icons.Default.Tune)
 }
 
 /**
@@ -49,24 +49,24 @@ fun CrmNav3Container(
 ) {
     val tabRoots = remember {
         mapOf<CrmBottomTab, Nav3Key>(
-            CrmBottomTab.DASHBOARD to Nav3Key.CrmTab.Dashboard,
+            CrmBottomTab.CALLS to Nav3Key.CrmTab.Calls,
             CrmBottomTab.CONTACTS to Nav3Key.Contacts.ContactList,
-            CrmBottomTab.TASKS to Nav3Key.Task.TaskList,
-            CrmBottomTab.MEETINGS to Nav3Key.Meeting.MeetingList,
-            CrmBottomTab.SETTINGS to Nav3Key.CrmTab.Settings
+            CrmBottomTab.RECORDINGS to Nav3Key.CrmTab.Recordings,
+            CrmBottomTab.ACTIVITIES to Nav3Key.CrmTab.Dashboard,
+            CrmBottomTab.INSIGHTS to Nav3Key.CrmTab.Settings
         )
     }
 
     val multiStack = rememberNav3MultiBackStack(
-        initialTab = CrmBottomTab.DASHBOARD,
+        initialTab = CrmBottomTab.CALLS,
         tabRoots = tabRoots
     )
 
-    // BackHandler: If active tab has items to pop, pop it; otherwise, if not on DASHBOARD, return to DASHBOARD tab.
+    // BackHandler: If active tab has items to pop, pop it; otherwise, if not on CALLS, return to CALLS tab.
     BackHandler(enabled = true) {
         if (!multiStack.pop()) {
-            if (multiStack.selectedTab != CrmBottomTab.DASHBOARD) {
-                multiStack.selectTab(CrmBottomTab.DASHBOARD)
+            if (multiStack.selectedTab != CrmBottomTab.CALLS) {
+                multiStack.selectTab(CrmBottomTab.CALLS)
             }
         }
     }
@@ -107,15 +107,15 @@ fun CrmNav3Container(
             enableBackHandler = false // Outer handler manages multi-tab fallback
         ) { key ->
             when (key) {
-                // --- Dashboard Flow ---
-                is Nav3Key.CrmTab.Dashboard -> {
-                    DashboardScreen(
-                        callViewModel = callViewModel,
-                        analyticsViewModel = analyticsViewModel,
-                        onViewAllLogsClick = {
-                            multiStack.navigate(Nav3Key.CrmTab.CallLogs)
-                        },
-                        onCallClick = onCallClick
+                // --- Calls Hub (History, Keypad / Dialer, Starred Favorites) ---
+                is Nav3Key.CrmTab.Calls -> {
+                    CallsHubScreen(
+                        viewModel = callViewModel,
+                        onCallClick = onCallClick,
+                        onContactClick = { canonicalId ->
+                            multiStack.selectTab(CrmBottomTab.CONTACTS)
+                            multiStack.navigate(Nav3Key.Contacts.ContactDetails(contactId = canonicalId))
+                        }
                     )
                 }
 
@@ -123,13 +123,6 @@ fun CrmNav3Container(
                     com.example.callog.presentation.screens.logs.CallLogsScreen(
                         viewModel = callViewModel,
                         onCallClick = onCallClick,
-                        onBackClick = { multiStack.pop() }
-                    )
-                }
-
-                is Nav3Key.CrmTab.DeveloperLogs -> {
-                    com.example.callog.presentation.screens.developer.SyncLogsScreen(
-                        viewModel = callViewModel,
                         onBackClick = { multiStack.pop() }
                     )
                 }
@@ -149,27 +142,49 @@ fun CrmNav3Container(
                         viewModel = callViewModel,
                         onBackClick = { multiStack.pop() },
                         onScheduleMeetingClick = { cid ->
-                            multiStack.selectTab(CrmBottomTab.MEETINGS)
+                            multiStack.selectTab(CrmBottomTab.ACTIVITIES)
                             multiStack.navigate(Nav3Key.Meeting.ScheduleMeeting(initialContactId = cid))
                         },
                         onCreateTaskClick = { cid ->
-                            multiStack.selectTab(CrmBottomTab.TASKS)
+                            multiStack.selectTab(CrmBottomTab.ACTIVITIES)
                             multiStack.navigate(Nav3Key.Task.CreateTask(initialContactId = cid))
                         }
                     )
                 }
 
-                // --- Task Flows ---
-                is Nav3Key.Task.TaskList -> {
-                    TaskListScreen(
+                // --- Recordings Flow ---
+                is Nav3Key.CrmTab.Recordings -> {
+                    RecordingManagerScreen(
+                        viewModel = callViewModel,
+                        onCallClick = onCallClick
+                    )
+                }
+
+                // --- CRM Activities Hub (Dashboard, Tasks, Meetings) ---
+                is Nav3Key.CrmTab.Dashboard -> {
+                    CrmHubScreen(
+                        callViewModel = callViewModel,
+                        analyticsViewModel = analyticsViewModel,
+                        onViewAllLogsClick = {
+                            multiStack.selectTab(CrmBottomTab.CALLS)
+                        },
+                        onCallClick = onCallClick,
                         onCreateTaskClick = {
                             multiStack.navigate(Nav3Key.Task.CreateTask())
                         },
                         onTaskClick = { taskId ->
                             multiStack.navigate(Nav3Key.Task.TaskDetails(taskId = taskId))
+                        },
+                        onScheduleMeetingClick = {
+                            multiStack.navigate(Nav3Key.Meeting.ScheduleMeeting())
+                        },
+                        onMeetingClick = { meetingId ->
+                            multiStack.navigate(Nav3Key.Meeting.MeetingDetails(meetingId = meetingId))
                         }
                     )
                 }
+
+                // --- Task Sub-Flows ---
                 is Nav3Key.Task.CreateTask -> {
                     CreateTaskScreen(
                         initialContactId = key.initialContactId,
@@ -185,17 +200,7 @@ fun CrmNav3Container(
                     )
                 }
 
-                // --- Meeting Flows ---
-                is Nav3Key.Meeting.MeetingList -> {
-                    MeetingListScreen(
-                        onScheduleMeetingClick = {
-                            multiStack.navigate(Nav3Key.Meeting.ScheduleMeeting())
-                        },
-                        onMeetingClick = { meetingId ->
-                            multiStack.navigate(Nav3Key.Meeting.MeetingDetails(meetingId = meetingId))
-                        }
-                    )
-                }
+                // --- Meeting Sub-Flows ---
                 is Nav3Key.Meeting.ScheduleMeeting -> {
                     ScheduleMeetingScreen(
                         initialContactId = key.initialContactId,
@@ -211,13 +216,21 @@ fun CrmNav3Container(
                     )
                 }
 
-                // --- Settings Flow ---
+                // --- Insights & Settings Flow (Analytics & System Settings) ---
                 is Nav3Key.CrmTab.Settings -> {
-                    SettingsScreen(
-                        viewModel = callViewModel,
+                    InsightsHubScreen(
+                        callViewModel = callViewModel,
+                        analyticsViewModel = analyticsViewModel,
                         darkTheme = darkTheme,
                         onDarkThemeChange = onDarkThemeChange,
                         onNavigateToDeveloperDashboard = onNavigateToDeveloperDashboard
+                    )
+                }
+
+                is Nav3Key.CrmTab.DeveloperLogs -> {
+                    com.example.callog.presentation.screens.developer.SyncLogsScreen(
+                        viewModel = callViewModel,
+                        onBackClick = { multiStack.pop() }
                     )
                 }
 

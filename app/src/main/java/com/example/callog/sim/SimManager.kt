@@ -26,8 +26,8 @@ import javax.inject.Singleton
  *    multiple fallback strategies for cross-OEM compatibility.
  */
 @Singleton
-class SimManager @Inject constructor(
-    @ApplicationContext private val context: Context
+open class SimManager @Inject constructor(
+    @param:ApplicationContext private val context: Context
 ) {
 
     companion object {

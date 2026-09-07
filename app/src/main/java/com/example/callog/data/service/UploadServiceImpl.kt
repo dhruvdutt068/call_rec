@@ -59,14 +59,9 @@ class UploadServiceImpl @Inject constructor(
                 FirebaseStorage.getInstance(customApp)
             } else {
                 if (FirebaseApp.getApps(context).isEmpty()) {
-                    val options = FirebaseOptions.Builder()
-                        .setApplicationId("1:799427430422:android:e0f5737f12b8b9cbb20d37")
-                        .setProjectId("allset-491218")
-                        .setApiKey("AIzaSyBtlY7EoO6PgPUCMjNR55K88H2v665qQgQ")
-                        .build()
-                    FirebaseApp.initializeApp(context, options)
+                    FirebaseApp.initializeApp(context)
                 }
-                FirebaseStorage.getInstance("gs://allset_calllogs_bucket")
+                FirebaseStorage.getInstance()
             }
         } catch (e: Exception) {
             Log.e(TAG, "Failed to initialize Firebase Storage", e)

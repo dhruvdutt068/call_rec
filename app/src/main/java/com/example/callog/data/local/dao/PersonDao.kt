@@ -39,7 +39,7 @@ interface PersonDao {
     @Query("SELECT * FROM people ORDER BY displayName ASC")
     suspend fun getAllPeopleWithDetails(): List<PersonWithDetails>
 
-    @Query("SELECT * FROM people WHERE syncStatus = 'PENDING'")
+    @Query("SELECT * FROM people WHERE syncStatus != 'SYNCED'")
     suspend fun getPendingPeople(): List<PersonEntity>
 
     @Query("UPDATE people SET syncStatus = :status, updatedAt = :updatedAt WHERE id = :id")
@@ -61,7 +61,7 @@ interface PersonDao {
     @Query("SELECT * FROM phone_numbers WHERE normalizedNumber = :normalizedNumber")
     suspend fun findPhoneNumbersByNormalized(normalizedNumber: String): List<PhoneNumberEntity>
 
-    @Query("SELECT * FROM phone_numbers WHERE syncStatus = 'PENDING'")
+    @Query("SELECT * FROM phone_numbers WHERE syncStatus != 'SYNCED'")
     suspend fun getPendingPhoneNumbers(): List<PhoneNumberEntity>
 
     @Query("UPDATE phone_numbers SET syncStatus = :status WHERE id = :id")
@@ -83,7 +83,7 @@ interface PersonDao {
     @Query("SELECT * FROM contact_aliases WHERE personId = :personId AND deviceId = :deviceId AND normalizedNumber = :normalizedNumber LIMIT 1")
     suspend fun findAlias(personId: String, deviceId: String, normalizedNumber: String): ContactAliasEntity?
 
-    @Query("SELECT * FROM contact_aliases WHERE syncStatus = 'PENDING'")
+    @Query("SELECT * FROM contact_aliases WHERE syncStatus != 'SYNCED'")
     suspend fun getPendingAliases(): List<ContactAliasEntity>
 
     @Query("UPDATE contact_aliases SET syncStatus = :status WHERE id = :id")

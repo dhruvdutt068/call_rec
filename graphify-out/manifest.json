@@ -1,0 +1,938 @@
+{
+  "app/build.gradle.kts": {
+    "mtime": 1783760860.182049,
+    "seen": 1788628857.4044979,
+    "ast_hash": "a362b371b7ff4b58d2be3bebe38b73d3",
+    "semantic_hash": "a362b371b7ff4b58d2be3bebe38b73d3"
+  },
+  "app/src/androidTest/java/com/example/callog/ExampleInstrumentedTest.kt": {
+    "mtime": 1782746915.5354185,
+    "seen": 1788628857.4044979,
+    "ast_hash": "1085d14e58c2510e5bb8513fc75f22a7",
+    "semantic_hash": "1085d14e58c2510e5bb8513fc75f22a7"
+  },
+  "app/src/main/java/com/example/callog/CallVaultApp.kt": {
+    "mtime": 1784021632.3795514,
+    "seen": 1788628857.4044979,
+    "ast_hash": "1ca615438730a08be8a9cb6b023fa57b",
+    "semantic_hash": "1ca615438730a08be8a9cb6b023fa57b"
+  },
+  "app/src/main/java/com/example/callog/MainActivity.kt": {
+    "mtime": 1783678735.1378586,
+    "seen": 1788628857.4044979,
+    "ast_hash": "b6dc522c3bace88e4434055d2f1d3dd6",
+    "semantic_hash": "b6dc522c3bace88e4434055d2f1d3dd6"
+  },
+  "app/src/main/java/com/example/callog/core/config/SupabaseDefaults.kt": {
+    "mtime": 1788628500.34913,
+    "seen": 1788628857.4044979,
+    "ast_hash": "41706c3a53a9912b5d69d724ca5c6416",
+    "semantic_hash": "41706c3a53a9912b5d69d724ca5c6416"
+  },
+  "app/src/main/java/com/example/callog/core/constants/Constants.kt": {
+    "mtime": 1782815210.3362417,
+    "seen": 1788628857.4044979,
+    "ast_hash": "3d5acb9d031e67442f37c81f0dc63728",
+    "semantic_hash": "3d5acb9d031e67442f37c81f0dc63728"
+  },
+  "app/src/main/java/com/example/callog/core/diagnostics/DeveloperLogger.kt": {
+    "mtime": 1784021786.786299,
+    "seen": 1788628857.4044979,
+    "ast_hash": "ef31a88505c9a5293aaa6debd1542675",
+    "semantic_hash": "ef31a88505c9a5293aaa6debd1542675"
+  },
+  "app/src/main/java/com/example/callog/core/extensions/Extensions.kt": {
+    "mtime": 1782808726.3804023,
+    "seen": 1788628857.4044979,
+    "ast_hash": "fdddccc2872d35a50a2b4eeb205eb25f",
+    "semantic_hash": "fdddccc2872d35a50a2b4eeb205eb25f"
+  },
+  "app/src/main/java/com/example/callog/core/utils/ConnectivityService.kt": {
+    "mtime": 1783618766.5948029,
+    "seen": 1788628857.4044979,
+    "ast_hash": "c0ae91c4de51527e08d61e8838e7ca62",
+    "semantic_hash": "c0ae91c4de51527e08d61e8838e7ca62"
+  },
+  "app/src/main/java/com/example/callog/core/utils/PhoneNumberNormalizer.kt": {
+    "mtime": 1788461887.8445928,
+    "seen": 1788628857.4044979,
+    "ast_hash": "1e1ecbd84d01bff86959f36533c2b6e7",
+    "semantic_hash": "1e1ecbd84d01bff86959f36533c2b6e7"
+  },
+  "app/src/main/java/com/example/callog/data/local/dao/CallDao.kt": {
+    "mtime": 1788470940.9216373,
+    "seen": 1788628857.4044979,
+    "ast_hash": "17e93e0b33ffba09cc295f73cca25e67",
+    "semantic_hash": "17e93e0b33ffba09cc295f73cca25e67"
+  },
+  "app/src/main/java/com/example/callog/data/local/dao/LeadDao.kt": {
+    "mtime": 1788628455.1338148,
+    "seen": 1788628857.4044979,
+    "ast_hash": "09687d8ebe566a70ebe4861a01f07902",
+    "semantic_hash": "09687d8ebe566a70ebe4861a01f07902"
+  },
+  "app/src/main/java/com/example/callog/data/local/dao/PersonDao.kt": {
+    "mtime": 1788461849.8594499,
+    "seen": 1788628857.4044979,
+    "ast_hash": "30dc7d702dd7f9ea31d54c12596bc04f",
+    "semantic_hash": "30dc7d702dd7f9ea31d54c12596bc04f"
+  },
+  "app/src/main/java/com/example/callog/data/local/dao/RecordingDao.kt": {
+    "mtime": 1784290773.9694498,
+    "seen": 1788628857.4044979,
+    "ast_hash": "cdb6a66eaecd39e27cb5f7a25ae588b3",
+    "semantic_hash": "cdb6a66eaecd39e27cb5f7a25ae588b3"
+  },
+  "app/src/main/java/com/example/callog/data/local/dao/RecordingLogDao.kt": {
+    "mtime": 1784274060.3921077,
+    "seen": 1788628857.4044979,
+    "ast_hash": "688b01f4396bb0c743aa51af1b99bd2f",
+    "semantic_hash": "688b01f4396bb0c743aa51af1b99bd2f"
+  },
+  "app/src/main/java/com/example/callog/data/local/dao/ReminderDao.kt": {
+    "mtime": 1782808750.399204,
+    "seen": 1788628857.4044979,
+    "ast_hash": "8bda542e78334ab5be2f309ddc4e08f3",
+    "semantic_hash": "8bda542e78334ab5be2f309ddc4e08f3"
+  },
+  "app/src/main/java/com/example/callog/data/local/dao/SalesCallDao.kt": {
+    "mtime": 1783763531.0265172,
+    "seen": 1788628857.4044979,
+    "ast_hash": "db6fa2dbc5d7bf445b673f94b6c1395c",
+    "semantic_hash": "db6fa2dbc5d7bf445b673f94b6c1395c"
+  },
+  "app/src/main/java/com/example/callog/data/local/dao/SyncLogDao.kt": {
+    "mtime": 1784021585.9354386,
+    "seen": 1788628857.4044979,
+    "ast_hash": "a8dd52ef4d79524473cf42083d0cb03e",
+    "semantic_hash": "a8dd52ef4d79524473cf42083d0cb03e"
+  },
+  "app/src/main/java/com/example/callog/data/local/dao/TracebackDao.kt": {
+    "mtime": 1783680352.5793204,
+    "seen": 1788628857.4044979,
+    "ast_hash": "c747eeb95d65eca011ad31cfbaf39fdf",
+    "semantic_hash": "c747eeb95d65eca011ad31cfbaf39fdf"
+  },
+  "app/src/main/java/com/example/callog/data/local/database/CallDatabase.kt": {
+    "mtime": 1782748547.6644626,
+    "seen": 1788628857.4044979,
+    "ast_hash": "8a5ec873fa655bab919eeb22cfca431b",
+    "semantic_hash": "8a5ec873fa655bab919eeb22cfca431b"
+  },
+  "app/src/main/java/com/example/callog/data/local/database/CallVaultDatabase.kt": {
+    "mtime": 1788628461.9147036,
+    "seen": 1788628857.4044979,
+    "ast_hash": "db3fad5236a30ef57a6994512c67cbf4",
+    "semantic_hash": "db3fad5236a30ef57a6994512c67cbf4"
+  },
+  "app/src/main/java/com/example/callog/data/local/database/Converters.kt": {
+    "mtime": 1784286517.695518,
+    "seen": 1788628857.4044979,
+    "ast_hash": "572abdd205828ab4c42828251eefab37",
+    "semantic_hash": "572abdd205828ab4c42828251eefab37"
+  },
+  "app/src/main/java/com/example/callog/data/local/entity/CallEntity.kt": {
+    "mtime": 1788470918.650383,
+    "seen": 1788628857.4044979,
+    "ast_hash": "b6defdc8510df2ae666641f1958bf95e",
+    "semantic_hash": "b6defdc8510df2ae666641f1958bf95e"
+  },
+  "app/src/main/java/com/example/callog/data/local/entity/ContactAliasEntity.kt": {
+    "mtime": 1788461834.779097,
+    "seen": 1788628857.4044979,
+    "ast_hash": "4c12cec2ae6bd75cce6d28611acd714a",
+    "semantic_hash": "4c12cec2ae6bd75cce6d28611acd714a"
+  },
+  "app/src/main/java/com/example/callog/data/local/entity/DeviceEntity.kt": {
+    "mtime": 1788461818.9909928,
+    "seen": 1788628857.4044979,
+    "ast_hash": "7c2af9145b5881284acfe50e346e8006",
+    "semantic_hash": "7c2af9145b5881284acfe50e346e8006"
+  },
+  "app/src/main/java/com/example/callog/data/local/entity/LeadEntity.kt": {
+    "mtime": 1788628449.5805855,
+    "seen": 1788628857.4044979,
+    "ast_hash": "9990fdd58218519639e2b3e05b05ba61",
+    "semantic_hash": "9990fdd58218519639e2b3e05b05ba61"
+  },
+  "app/src/main/java/com/example/callog/data/local/entity/MatchStatus.kt": {
+    "mtime": 1784286507.0396955,
+    "seen": 1788628857.4044979,
+    "ast_hash": "9f0c5e9a0f412e27afd5b46f5f918c41",
+    "semantic_hash": "9f0c5e9a0f412e27afd5b46f5f918c41"
+  },
+  "app/src/main/java/com/example/callog/data/local/entity/PersonEntity.kt": {
+    "mtime": 1788461824.1483717,
+    "seen": 1788628857.4044979,
+    "ast_hash": "bde1837160fb580fd1ed18362f6926a4",
+    "semantic_hash": "bde1837160fb580fd1ed18362f6926a4"
+  },
+  "app/src/main/java/com/example/callog/data/local/entity/PersonWithDetails.kt": {
+    "mtime": 1788461839.6629238,
+    "seen": 1788628857.4044979,
+    "ast_hash": "b26e941e7b918e5dd33e9aaae46ff648",
+    "semantic_hash": "b26e941e7b918e5dd33e9aaae46ff648"
+  },
+  "app/src/main/java/com/example/callog/data/local/entity/PhoneNumberEntity.kt": {
+    "mtime": 1788461829.3759084,
+    "seen": 1788628857.4044979,
+    "ast_hash": "92ea92b11e0b8904bc05510202b0d5dd",
+    "semantic_hash": "92ea92b11e0b8904bc05510202b0d5dd"
+  },
+  "app/src/main/java/com/example/callog/data/local/entity/RecordingEntity.kt": {
+    "mtime": 1784293030.3657327,
+    "seen": 1788628857.4044979,
+    "ast_hash": "5bb44e319d1ca5cf0e6191f70a073bf2",
+    "semantic_hash": "5bb44e319d1ca5cf0e6191f70a073bf2"
+  },
+  "app/src/main/java/com/example/callog/data/local/entity/RecordingLogEntity.kt": {
+    "mtime": 1784274058.264549,
+    "seen": 1788628857.4044979,
+    "ast_hash": "30cb3ee5b42aad496dc4cccf6b3ed39d",
+    "semantic_hash": "30cb3ee5b42aad496dc4cccf6b3ed39d"
+  },
+  "app/src/main/java/com/example/callog/data/local/entity/ReminderEntity.kt": {
+    "mtime": 1782808734.7983768,
+    "seen": 1788628857.4044979,
+    "ast_hash": "032820d80f309fc5cfe97efa35bdee5b",
+    "semantic_hash": "032820d80f309fc5cfe97efa35bdee5b"
+  },
+  "app/src/main/java/com/example/callog/data/local/entity/SalesCallEntity.kt": {
+    "mtime": 1788471026.3828342,
+    "seen": 1788628857.4044979,
+    "ast_hash": "15b3b9f093bc5095a977b8637004d9fb",
+    "semantic_hash": "15b3b9f093bc5095a977b8637004d9fb"
+  },
+  "app/src/main/java/com/example/callog/data/local/entity/SyncLogEntity.kt": {
+    "mtime": 1784021574.013011,
+    "seen": 1788628857.4044979,
+    "ast_hash": "74d2218f7fcb7de78680c2e99af8e19d",
+    "semantic_hash": "74d2218f7fcb7de78680c2e99af8e19d"
+  },
+  "app/src/main/java/com/example/callog/data/local/entity/TracebackEntity.kt": {
+    "mtime": 1783680347.11168,
+    "seen": 1788628857.4044979,
+    "ast_hash": "fa1439fa6b1ea925f27daf5644d3d93f",
+    "semantic_hash": "fa1439fa6b1ea925f27daf5644d3d93f"
+  },
+  "app/src/main/java/com/example/callog/data/local/entity/UploadStatus.kt": {
+    "mtime": 1784286508.8273976,
+    "seen": 1788628857.4044979,
+    "ast_hash": "af6ad5bac9b29e2546083597bb8c0c43",
+    "semantic_hash": "af6ad5bac9b29e2546083597bb8c0c43"
+  },
+  "app/src/main/java/com/example/callog/data/provider/CallLogProvider.kt": {
+    "mtime": 1784293989.7840052,
+    "seen": 1788628857.4044979,
+    "ast_hash": "42fd47eab9d4f89fd84fa6b2f551d552",
+    "semantic_hash": "42fd47eab9d4f89fd84fa6b2f551d552"
+  },
+  "app/src/main/java/com/example/callog/data/provider/ContactsProvider.kt": {
+    "mtime": 1783677692.1240177,
+    "seen": 1788628857.4044979,
+    "ast_hash": "473113096f43b970c5c95662273b47a2",
+    "semantic_hash": "473113096f43b970c5c95662273b47a2"
+  },
+  "app/src/main/java/com/example/callog/data/provider/RecordingParser.kt": {
+    "mtime": 1784274085.3156538,
+    "seen": 1788628857.4044979,
+    "ast_hash": "94a43d02840700d8f134a23d0bdcfc99",
+    "semantic_hash": "94a43d02840700d8f134a23d0bdcfc99"
+  },
+  "app/src/main/java/com/example/callog/data/provider/RecordingScanner.kt": {
+    "mtime": 1784274091.3613062,
+    "seen": 1788628857.4044979,
+    "ast_hash": "db51c273df832002e264e5e098bd4494",
+    "semantic_hash": "db51c273df832002e264e5e098bd4494"
+  },
+  "app/src/main/java/com/example/callog/data/provider/SimManager.kt": {
+    "mtime": 1784029568.2441373,
+    "seen": 1788628857.4044979,
+    "ast_hash": "563eb299f82f3f9da784b958d660b746",
+    "semantic_hash": "563eb299f82f3f9da784b958d660b746"
+  },
+  "app/src/main/java/com/example/callog/data/receiver/CallReceiver.kt": {
+    "mtime": 1783678744.0341477,
+    "seen": 1788628857.4044979,
+    "ast_hash": "6edcbdd409bc040096e0d2f722f8a10f",
+    "semantic_hash": "6edcbdd409bc040096e0d2f722f8a10f"
+  },
+  "app/src/main/java/com/example/callog/data/remote/FirestoreService.kt": {
+    "mtime": 1784021723.2520316,
+    "seen": 1788628857.4044979,
+    "ast_hash": "0c8f306a9fc1af23cc5fba3b14eabdcc",
+    "semantic_hash": "0c8f306a9fc1af23cc5fba3b14eabdcc"
+  },
+  "app/src/main/java/com/example/callog/data/remote/SupabaseService.kt": {
+    "mtime": 1788628507.419409,
+    "seen": 1788628857.4044979,
+    "ast_hash": "cb3ae3d7020292abdd0aa833385fb479",
+    "semantic_hash": "cb3ae3d7020292abdd0aa833385fb479"
+  },
+  "app/src/main/java/com/example/callog/data/remote/model/SupabaseIdentityModels.kt": {
+    "mtime": 1788469998.2987652,
+    "seen": 1788628857.4044979,
+    "ast_hash": "c20e247941a8ce6a26189b146b80d066",
+    "semantic_hash": "c20e247941a8ce6a26189b146b80d066"
+  },
+  "app/src/main/java/com/example/callog/data/remote/model/SupabaseLead.kt": {
+    "mtime": 1788628493.029764,
+    "seen": 1788628857.4044979,
+    "ast_hash": "d0c88ba4255beddb1ae7dd1eb5effec0",
+    "semantic_hash": "d0c88ba4255beddb1ae7dd1eb5effec0"
+  },
+  "app/src/main/java/com/example/callog/data/remote/model/SupabaseSalesCall.kt": {
+    "mtime": 1788471019.244126,
+    "seen": 1788628857.4044979,
+    "ast_hash": "cb0d07eeea836e206803485d8aa3a618",
+    "semantic_hash": "cb0d07eeea836e206803485d8aa3a618"
+  },
+  "app/src/main/java/com/example/callog/data/repository/CallRepositoryImpl.kt": {
+    "mtime": 1788471227.8516107,
+    "seen": 1788628857.4044979,
+    "ast_hash": "59a855ce335718b219d1e868fbb3babf",
+    "semantic_hash": "59a855ce335718b219d1e868fbb3babf"
+  },
+  "app/src/main/java/com/example/callog/data/repository/FirestoreRepositoryImpl.kt": {
+    "mtime": 1784019559.0705826,
+    "seen": 1788628857.4044979,
+    "ast_hash": "64cd1d6c8763e76f20fe6b488ae92489",
+    "semantic_hash": "64cd1d6c8763e76f20fe6b488ae92489"
+  },
+  "app/src/main/java/com/example/callog/data/repository/LeadRepositoryImpl.kt": {
+    "mtime": 1788628482.5225816,
+    "seen": 1788628857.4044979,
+    "ast_hash": "7da4e06ac74493c43463f34be5d2b80c",
+    "semantic_hash": "7da4e06ac74493c43463f34be5d2b80c"
+  },
+  "app/src/main/java/com/example/callog/data/repository/PersonRepositoryImpl.kt": {
+    "mtime": 1788467863.785357,
+    "seen": 1788628857.4044979,
+    "ast_hash": "36efd0a5a55db8922b90b8aa37b5a60a",
+    "semantic_hash": "36efd0a5a55db8922b90b8aa37b5a60a"
+  },
+  "app/src/main/java/com/example/callog/data/repository/RecordingRepositoryImpl.kt": {
+    "mtime": 1784293069.5618043,
+    "seen": 1788628857.4044979,
+    "ast_hash": "eda7d85f0842f21226a4a69ee17c0dae",
+    "semantic_hash": "eda7d85f0842f21226a4a69ee17c0dae"
+  },
+  "app/src/main/java/com/example/callog/data/repository/SyncRepositoryImpl.kt": {
+    "mtime": 1783617501.0208607,
+    "seen": 1788628857.4044979,
+    "ast_hash": "482b303e5b016f1da48cfe8ecf142215",
+    "semantic_hash": "482b303e5b016f1da48cfe8ecf142215"
+  },
+  "app/src/main/java/com/example/callog/data/service/SyncManagerImpl.kt": {
+    "mtime": 1783617529.5267453,
+    "seen": 1788628857.4044979,
+    "ast_hash": "905e072084626325e9fe01d092bcf210",
+    "semantic_hash": "905e072084626325e9fe01d092bcf210"
+  },
+  "app/src/main/java/com/example/callog/data/service/UploadServiceImpl.kt": {
+    "mtime": 1783968568.7637603,
+    "seen": 1788628857.4044979,
+    "ast_hash": "8b145201c53d2548198b61d4969da568",
+    "semantic_hash": "8b145201c53d2548198b61d4969da568"
+  },
+  "app/src/main/java/com/example/callog/data/worker/SyncWorker.kt": {
+    "mtime": 1788628529.4166927,
+    "seen": 1788628857.4044979,
+    "ast_hash": "681104dada303a2cdda813533bf2ffb2",
+    "semantic_hash": "681104dada303a2cdda813533bf2ffb2"
+  },
+  "app/src/main/java/com/example/callog/data/worker/UploadRecordingWorker.kt": {
+    "mtime": 1783363592.735633,
+    "seen": 1788628857.4044979,
+    "ast_hash": "b6e246044a1247615aa52894e71f6ee3",
+    "semantic_hash": "b6e246044a1247615aa52894e71f6ee3"
+  },
+  "app/src/main/java/com/example/callog/di/AppModule.kt": {
+    "mtime": 1788628488.4414208,
+    "seen": 1788628857.4044979,
+    "ast_hash": "55741edc2a10ab209579da6d99fa6a8b",
+    "semantic_hash": "55741edc2a10ab209579da6d99fa6a8b"
+  },
+  "app/src/main/java/com/example/callog/di/DatabaseModule.kt": {
+    "mtime": 1788628475.2569616,
+    "seen": 1788628857.4044979,
+    "ast_hash": "a500575e2c6e287b1ed44bfd5837eeaf",
+    "semantic_hash": "a500575e2c6e287b1ed44bfd5837eeaf"
+  },
+  "app/src/main/java/com/example/callog/di/FirestoreModule.kt": {
+    "mtime": 1783617507.2367673,
+    "seen": 1788628857.4044979,
+    "ast_hash": "a84af56b1b738efa5df793cabc697402",
+    "semantic_hash": "a84af56b1b738efa5df793cabc697402"
+  },
+  "app/src/main/java/com/example/callog/di/NetworkModule.kt": {
+    "mtime": 1783765555.2407987,
+    "seen": 1788628857.4044979,
+    "ast_hash": "86c8558f2e3b8c274c25c0b0b493b529",
+    "semantic_hash": "86c8558f2e3b8c274c25c0b0b493b529"
+  },
+  "app/src/main/java/com/example/callog/di/ServiceModule.kt": {
+    "mtime": 1783617535.7305152,
+    "seen": 1788628857.4044979,
+    "ast_hash": "99465288ea037b0c495b927a67283999",
+    "semantic_hash": "99465288ea037b0c495b927a67283999"
+  },
+  "app/src/main/java/com/example/callog/domain/model/Call.kt": {
+    "mtime": 1782748586.5511022,
+    "seen": 1788628857.4044979,
+    "ast_hash": "26e07acf7ae2f888798304e8dcdc06e3",
+    "semantic_hash": "26e07acf7ae2f888798304e8dcdc06e3"
+  },
+  "app/src/main/java/com/example/callog/domain/model/CallLogEntry.kt": {
+    "mtime": 1788470947.7052343,
+    "seen": 1788628857.4044979,
+    "ast_hash": "68dba46b13c87a19ce7223b52983ffff",
+    "semantic_hash": "68dba46b13c87a19ce7223b52983ffff"
+  },
+  "app/src/main/java/com/example/callog/domain/model/FirebaseConfig.kt": {
+    "mtime": 1783157463.8344343,
+    "seen": 1788628857.4044979,
+    "ast_hash": "e2bed3f37e2bf0f8a3f80a0a278a6a5f",
+    "semantic_hash": "e2bed3f37e2bf0f8a3f80a0a278a6a5f"
+  },
+  "app/src/main/java/com/example/callog/domain/model/Lead.kt": {
+    "mtime": 1788628440.1236851,
+    "seen": 1788628857.4044979,
+    "ast_hash": "47d5ae4e0b06648c0fcb0aacc2b0c180",
+    "semantic_hash": "47d5ae4e0b06648c0fcb0aacc2b0c180"
+  },
+  "app/src/main/java/com/example/callog/domain/model/Person.kt": {
+    "mtime": 1788467838.7640057,
+    "seen": 1788628857.4044979,
+    "ast_hash": "6850e746cf363b8a60a6ed4b5a7f767e",
+    "semantic_hash": "6850e746cf363b8a60a6ed4b5a7f767e"
+  },
+  "app/src/main/java/com/example/callog/domain/model/SupabaseConfig.kt": {
+    "mtime": 1788422601.5134158,
+    "seen": 1788628857.4044979,
+    "ast_hash": "1c6b29078af07bcbffb151c6f2fe548e",
+    "semantic_hash": "1c6b29078af07bcbffb151c6f2fe548e"
+  },
+  "app/src/main/java/com/example/callog/domain/repository/CallRepository.kt": {
+    "mtime": 1788470957.318432,
+    "seen": 1788628857.4044979,
+    "ast_hash": "771e05c5e6368f5714ee70a189886305",
+    "semantic_hash": "771e05c5e6368f5714ee70a189886305"
+  },
+  "app/src/main/java/com/example/callog/domain/repository/FirestoreRepository.kt": {
+    "mtime": 1783683851.6132882,
+    "seen": 1788628857.4044979,
+    "ast_hash": "debd64a34a4be72e6ab0e83cd74c2012",
+    "semantic_hash": "debd64a34a4be72e6ab0e83cd74c2012"
+  },
+  "app/src/main/java/com/example/callog/domain/repository/LeadRepository.kt": {
+    "mtime": 1788628444.5527687,
+    "seen": 1788628857.4044979,
+    "ast_hash": "28a8a0e0eef72dc736370ae3a7088090",
+    "semantic_hash": "28a8a0e0eef72dc736370ae3a7088090"
+  },
+  "app/src/main/java/com/example/callog/domain/repository/PersonRepository.kt": {
+    "mtime": 1788467845.373151,
+    "seen": 1788628857.4044979,
+    "ast_hash": "7780f6fda37c27d5b076a644c563ed77",
+    "semantic_hash": "7780f6fda37c27d5b076a644c563ed77"
+  },
+  "app/src/main/java/com/example/callog/domain/repository/RecordingRepository.kt": {
+    "mtime": 1784286866.616356,
+    "seen": 1788628857.4044979,
+    "ast_hash": "41ff21a0f109de5487e9e6367b57374c",
+    "semantic_hash": "41ff21a0f109de5487e9e6367b57374c"
+  },
+  "app/src/main/java/com/example/callog/domain/repository/SyncRepository.kt": {
+    "mtime": 1783617496.0786903,
+    "seen": 1788628857.4044979,
+    "ast_hash": "290e8fc8852a7cc4e792659f68adf40a",
+    "semantic_hash": "290e8fc8852a7cc4e792659f68adf40a"
+  },
+  "app/src/main/java/com/example/callog/domain/service/SyncManager.kt": {
+    "mtime": 1783617524.1925857,
+    "seen": 1788628857.4044979,
+    "ast_hash": "5b36a55f280afe52945af062795d739b",
+    "semantic_hash": "5b36a55f280afe52945af062795d739b"
+  },
+  "app/src/main/java/com/example/callog/domain/service/UploadService.kt": {
+    "mtime": 1783617478.0713212,
+    "seen": 1788628857.4044979,
+    "ast_hash": "39a0ece4abf31f2064074fcafb79fd4f",
+    "semantic_hash": "39a0ece4abf31f2064074fcafb79fd4f"
+  },
+  "app/src/main/java/com/example/callog/domain/usecase/ResolveAndAttachContactUseCase.kt": {
+    "mtime": 1788461895.713979,
+    "seen": 1788628857.4044979,
+    "ast_hash": "0bd8a5c63d767a795e88aab29cbe38cc",
+    "semantic_hash": "0bd8a5c63d767a795e88aab29cbe38cc"
+  },
+  "app/src/main/java/com/example/callog/domain/usecase/SyncPendingCallsUseCase.kt": {
+    "mtime": 1783103295.6738856,
+    "seen": 1788628857.4044979,
+    "ast_hash": "3892ff5b78569a03800cf2dcf1d0d7cc",
+    "semantic_hash": "3892ff5b78569a03800cf2dcf1d0d7cc"
+  },
+  "app/src/main/java/com/example/callog/domain/usecase/UseCases.kt": {
+    "mtime": 1783677941.0799198,
+    "seen": 1788628857.4044979,
+    "ast_hash": "e3929107ba31558cdfe8bd18f420a139",
+    "semantic_hash": "e3929107ba31558cdfe8bd18f420a139"
+  },
+  "app/src/main/java/com/example/callog/presentation/components/BusinessSimWizardDialog.kt": {
+    "mtime": 1784025405.1976595,
+    "seen": 1788628857.4044979,
+    "ast_hash": "1383ff8bcb5481f17038a405289561bb",
+    "semantic_hash": "1383ff8bcb5481f17038a405289561bb"
+  },
+  "app/src/main/java/com/example/callog/presentation/components/CallCard.kt": {
+    "mtime": 1782809482.2414432,
+    "seen": 1788628857.4044979,
+    "ast_hash": "53870450f24ef167b8b6ad31836ff795",
+    "semantic_hash": "53870450f24ef167b8b6ad31836ff795"
+  },
+  "app/src/main/java/com/example/callog/presentation/components/CommonComponents.kt": {
+    "mtime": 1784017461.8325768,
+    "seen": 1788628857.4044979,
+    "ast_hash": "572492602a98c5687a5ff9d46c76d06f",
+    "semantic_hash": "572492602a98c5687a5ff9d46c76d06f"
+  },
+  "app/src/main/java/com/example/callog/presentation/components/EmptyState.kt": {
+    "mtime": 1782748330.4572992,
+    "seen": 1788628857.4044979,
+    "ast_hash": "53870450f24ef167b8b6ad31836ff795",
+    "semantic_hash": "53870450f24ef167b8b6ad31836ff795"
+  },
+  "app/src/main/java/com/example/callog/presentation/components/LoadingView.kt": {
+    "mtime": 1782748341.1241813,
+    "seen": 1788628857.4044979,
+    "ast_hash": "53870450f24ef167b8b6ad31836ff795",
+    "semantic_hash": "53870450f24ef167b8b6ad31836ff795"
+  },
+  "app/src/main/java/com/example/callog/presentation/components/PermissionDialog.kt": {
+    "mtime": 1782748352.6671476,
+    "seen": 1788628857.4044979,
+    "ast_hash": "53870450f24ef167b8b6ad31836ff795",
+    "semantic_hash": "53870450f24ef167b8b6ad31836ff795"
+  },
+  "app/src/main/java/com/example/callog/presentation/components/SearchBar.kt": {
+    "mtime": 1782748319.5073607,
+    "seen": 1788628857.4044979,
+    "ast_hash": "53870450f24ef167b8b6ad31836ff795",
+    "semantic_hash": "53870450f24ef167b8b6ad31836ff795"
+  },
+  "app/src/main/java/com/example/callog/presentation/navigation3/AuthNav3Container.kt": {
+    "mtime": 1788457725.821091,
+    "seen": 1788628857.4044979,
+    "ast_hash": "02821b5c006719e74f0a024b60f5b629",
+    "semantic_hash": "02821b5c006719e74f0a024b60f5b629"
+  },
+  "app/src/main/java/com/example/callog/presentation/navigation3/CrmNav3Container.kt": {
+    "mtime": 1788462430.2476325,
+    "seen": 1788628857.4044979,
+    "ast_hash": "35612b654e064d419aa032caafd8d6af",
+    "semantic_hash": "35612b654e064d419aa032caafd8d6af"
+  },
+  "app/src/main/java/com/example/callog/presentation/navigation3/Nav3BackStack.kt": {
+    "mtime": 1788457612.7368999,
+    "seen": 1788628857.4044979,
+    "ast_hash": "e9e12f0bb65022a7be9f7ac209388726",
+    "semantic_hash": "e9e12f0bb65022a7be9f7ac209388726"
+  },
+  "app/src/main/java/com/example/callog/presentation/navigation3/Nav3DeepLinkHandler.kt": {
+    "mtime": 1788457858.968533,
+    "seen": 1788628857.4044979,
+    "ast_hash": "f4feefb2185428bd51c5231c8398674d",
+    "semantic_hash": "f4feefb2185428bd51c5231c8398674d"
+  },
+  "app/src/main/java/com/example/callog/presentation/navigation3/Nav3Display.kt": {
+    "mtime": 1788457626.7249935,
+    "seen": 1788628857.4044979,
+    "ast_hash": "e3d328f3ce33cfc839ab95dee57ec6f5",
+    "semantic_hash": "e3d328f3ce33cfc839ab95dee57ec6f5"
+  },
+  "app/src/main/java/com/example/callog/presentation/navigation3/Nav3Key.kt": {
+    "mtime": 1788461988.7746809,
+    "seen": 1788628857.4044979,
+    "ast_hash": "af635fa6202b190ae4364dcd33ade484",
+    "semantic_hash": "af635fa6202b190ae4364dcd33ade484"
+  },
+  "app/src/main/java/com/example/callog/presentation/navigation3/Nav3MultiBackStack.kt": {
+    "mtime": 1788457619.659086,
+    "seen": 1788628857.4044979,
+    "ast_hash": "c43f963071fa049a5dc79d5befff4678",
+    "semantic_hash": "c43f963071fa049a5dc79d5befff4678"
+  },
+  "app/src/main/java/com/example/callog/presentation/navigation3/allset/AdaptiveContactsPane.kt": {
+    "mtime": 1788458617.8842216,
+    "seen": 1788628857.4044979,
+    "ast_hash": "de10b61a30d5d34b0a215214ab4e3d0a",
+    "semantic_hash": "de10b61a30d5d34b0a215214ab4e3d0a"
+  },
+  "app/src/main/java/com/example/callog/presentation/navigation3/allset/AllSetAuthRouter.kt": {
+    "mtime": 1788458589.2663894,
+    "seen": 1788628857.4044979,
+    "ast_hash": "6afd1949d976ab9f378ebe63f3d642a0",
+    "semantic_hash": "6afd1949d976ab9f378ebe63f3d642a0"
+  },
+  "app/src/main/java/com/example/callog/presentation/navigation3/allset/AllSetBackStack.kt": {
+    "mtime": 1788458559.586674,
+    "seen": 1788628857.4044979,
+    "ast_hash": "7a84ec0366ff24d37b0525525c188ef9",
+    "semantic_hash": "7a84ec0366ff24d37b0525525c188ef9"
+  },
+  "app/src/main/java/com/example/callog/presentation/navigation3/allset/AllSetCrmHost.kt": {
+    "mtime": 1788462436.280937,
+    "seen": 1788628857.4044979,
+    "ast_hash": "ebdb0661d8ad8b8db9195029c56afbc7",
+    "semantic_hash": "ebdb0661d8ad8b8db9195029c56afbc7"
+  },
+  "app/src/main/java/com/example/callog/presentation/navigation3/allset/AllSetDeepLinkParser.kt": {
+    "mtime": 1788462027.9049344,
+    "seen": 1788628857.4044979,
+    "ast_hash": "3f3b2cabe6f5dd9270742f186d590a12",
+    "semantic_hash": "3f3b2cabe6f5dd9270742f186d590a12"
+  },
+  "app/src/main/java/com/example/callog/presentation/navigation3/allset/AllSetMultiBackStack.kt": {
+    "mtime": 1788458567.3935359,
+    "seen": 1788628857.4044979,
+    "ast_hash": "dc5e77d595e3506eead185375666c4d3",
+    "semantic_hash": "dc5e77d595e3506eead185375666c4d3"
+  },
+  "app/src/main/java/com/example/callog/presentation/navigation3/allset/AllSetNavDisplay.kt": {
+    "mtime": 1788458580.9150584,
+    "seen": 1788628857.4044979,
+    "ast_hash": "33b30286636401673ec29d4a840f69c4",
+    "semantic_hash": "33b30286636401673ec29d4a840f69c4"
+  },
+  "app/src/main/java/com/example/callog/presentation/navigation3/allset/AllSetNavKey.kt": {
+    "mtime": 1788461992.889027,
+    "seen": 1788628857.4044979,
+    "ast_hash": "d2ede60a6773483238cd7e229d0c325f",
+    "semantic_hash": "d2ede60a6773483238cd7e229d0c325f"
+  },
+  "app/src/main/java/com/example/callog/presentation/navigation/BottomNavigationBar.kt": {
+    "mtime": 1782751274.6654584,
+    "seen": 1788628857.4044979,
+    "ast_hash": "50930878dfe74d215f6d92371388bf4e",
+    "semantic_hash": "50930878dfe74d215f6d92371388bf4e"
+  },
+  "app/src/main/java/com/example/callog/presentation/navigation/NavGraph.kt": {
+    "mtime": 1788457755.392949,
+    "seen": 1788628857.4044979,
+    "ast_hash": "cb6c809672a5256766fbd0384b65d4d6",
+    "semantic_hash": "cb6c809672a5256766fbd0384b65d4d6"
+  },
+  "app/src/main/java/com/example/callog/presentation/navigation/Screen.kt": {
+    "mtime": 1788457741.281885,
+    "seen": 1788628857.4044979,
+    "ast_hash": "6bb87cfefb13f0af4741aae1adb0798b",
+    "semantic_hash": "6bb87cfefb13f0af4741aae1adb0798b"
+  },
+  "app/src/main/java/com/example/callog/presentation/screens/analytics/AnalyticsScreen.kt": {
+    "mtime": 1784018411.5971332,
+    "seen": 1788628857.4044979,
+    "ast_hash": "5dc574238367d3c4272c7367100f108b",
+    "semantic_hash": "5dc574238367d3c4272c7367100f108b"
+  },
+  "app/src/main/java/com/example/callog/presentation/screens/auth/AuthScreens.kt": {
+    "mtime": 1788457705.4896882,
+    "seen": 1788628857.4044979,
+    "ast_hash": "00195dd63975af72c005ab66814cff2d",
+    "semantic_hash": "00195dd63975af72c005ab66814cff2d"
+  },
+  "app/src/main/java/com/example/callog/presentation/screens/contacts/ContactDetailsScreen.kt": {
+    "mtime": 1788628746.0493238,
+    "seen": 1788628857.4044979,
+    "ast_hash": "d27aba20e2dda078ad8a2cd390d31acd",
+    "semantic_hash": "d27aba20e2dda078ad8a2cd390d31acd"
+  },
+  "app/src/main/java/com/example/callog/presentation/screens/contacts/ContactSubScreens.kt": {
+    "mtime": 1788458751.1499803,
+    "seen": 1788628857.4044979,
+    "ast_hash": "41fa911dbc388cf9a25848d8cf8ea02a",
+    "semantic_hash": "41fa911dbc388cf9a25848d8cf8ea02a"
+  },
+  "app/src/main/java/com/example/callog/presentation/screens/contacts/ContactsScreen.kt": {
+    "mtime": 1788457873.161712,
+    "seen": 1788628857.4044979,
+    "ast_hash": "b13e041dfe37cd3017fe08169956feb8",
+    "semantic_hash": "b13e041dfe37cd3017fe08169956feb8"
+  },
+  "app/src/main/java/com/example/callog/presentation/screens/contacts/GlobalSearchScreen.kt": {
+    "mtime": 1788458600.8016593,
+    "seen": 1788628857.4044979,
+    "ast_hash": "6a74c0ae857b0358776444063846a683",
+    "semantic_hash": "6a74c0ae857b0358776444063846a683"
+  },
+  "app/src/main/java/com/example/callog/presentation/screens/dashboard/DashboardScreen.kt": {
+    "mtime": 1784025411.6304667,
+    "seen": 1788628857.4044979,
+    "ast_hash": "be95c589f3da6b3e8afc819583a40bb9",
+    "semantic_hash": "be95c589f3da6b3e8afc819583a40bb9"
+  },
+  "app/src/main/java/com/example/callog/presentation/screens/details/CallDetailsScreen.kt": {
+    "mtime": 1783684686.0375917,
+    "seen": 1788628857.4044979,
+    "ast_hash": "e92ec7e51d69dde4f9f73707a9fe7be1",
+    "semantic_hash": "e92ec7e51d69dde4f9f73707a9fe7be1"
+  },
+  "app/src/main/java/com/example/callog/presentation/screens/details/DetailsScreen.kt": {
+    "mtime": 1782749014.3426814,
+    "seen": 1788628857.4044979,
+    "ast_hash": "b18a07cd7f35166f12f9ca47d3149f21",
+    "semantic_hash": "b18a07cd7f35166f12f9ca47d3149f21"
+  },
+  "app/src/main/java/com/example/callog/presentation/screens/developer/DeveloperDashboardScreen.kt": {
+    "mtime": 1788422680.6214,
+    "seen": 1788628857.4044979,
+    "ast_hash": "8d09a0ae568f1f7abf353a2204671e3e",
+    "semantic_hash": "8d09a0ae568f1f7abf353a2204671e3e"
+  },
+  "app/src/main/java/com/example/callog/presentation/screens/developer/RecordingDiagnosticsScreen.kt": {
+    "mtime": 1784293076.5081134,
+    "seen": 1788628857.4044979,
+    "ast_hash": "88a1cab7f835e2ed37a166272f4f278d",
+    "semantic_hash": "88a1cab7f835e2ed37a166272f4f278d"
+  },
+  "app/src/main/java/com/example/callog/presentation/screens/developer/SyncLogsScreen.kt": {
+    "mtime": 1784027828.256712,
+    "seen": 1788628857.4044979,
+    "ast_hash": "e0075973ecbecde05000aae5b28968d7",
+    "semantic_hash": "e0075973ecbecde05000aae5b28968d7"
+  },
+  "app/src/main/java/com/example/callog/presentation/screens/favorites/FavoritesScreen.kt": {
+    "mtime": 1782749055.192304,
+    "seen": 1788628857.4044979,
+    "ast_hash": "401e26fab0e1f61312182cb774c7282b",
+    "semantic_hash": "401e26fab0e1f61312182cb774c7282b"
+  },
+  "app/src/main/java/com/example/callog/presentation/screens/home/HomeScreen.kt": {
+    "mtime": 1782748989.4189475,
+    "seen": 1788628857.4044979,
+    "ast_hash": "302b1726b3820b5342a4464a5eb337ee",
+    "semantic_hash": "302b1726b3820b5342a4464a5eb337ee"
+  },
+  "app/src/main/java/com/example/callog/presentation/screens/logs/CallLogsScreen.kt": {
+    "mtime": 1788462423.9499247,
+    "seen": 1788628857.4044979,
+    "ast_hash": "bfe64c968dd445a16c859cd0473c7d53",
+    "semantic_hash": "bfe64c968dd445a16c859cd0473c7d53"
+  },
+  "app/src/main/java/com/example/callog/presentation/screens/meetings/MeetingScreens.kt": {
+    "mtime": 1788457896.3406496,
+    "seen": 1788628857.4044979,
+    "ast_hash": "86879d9273a587a5290571d7e44e47e9",
+    "semantic_hash": "86879d9273a587a5290571d7e44e47e9"
+  },
+  "app/src/main/java/com/example/callog/presentation/screens/onboarding/OnboardingScreen.kt": {
+    "mtime": 1784029926.1972456,
+    "seen": 1788628857.4044979,
+    "ast_hash": "ab7c35f667e2f8142e2fe769af388a9a",
+    "semantic_hash": "ab7c35f667e2f8142e2fe769af388a9a"
+  },
+  "app/src/main/java/com/example/callog/presentation/screens/permission/PermissionScreen.kt": {
+    "mtime": 1784024326.903086,
+    "seen": 1788628857.4044979,
+    "ast_hash": "564f4b586b3e5f59c2386f41c65d5192",
+    "semantic_hash": "564f4b586b3e5f59c2386f41c65d5192"
+  },
+  "app/src/main/java/com/example/callog/presentation/screens/recordings/RecordingManagerScreen.kt": {
+    "mtime": 1784295084.727207,
+    "seen": 1788628857.4044979,
+    "ast_hash": "4b151fbd594a9ddf231b2f3a1b8df741",
+    "semantic_hash": "4b151fbd594a9ddf231b2f3a1b8df741"
+  },
+  "app/src/main/java/com/example/callog/presentation/screens/settings/SettingsScreen.kt": {
+    "mtime": 1788422701.1276531,
+    "seen": 1788628857.4044979,
+    "ast_hash": "255ed59cd42895f5a1998c033b0ae86d",
+    "semantic_hash": "255ed59cd42895f5a1998c033b0ae86d"
+  },
+  "app/src/main/java/com/example/callog/presentation/screens/splash/SplashScreen.kt": {
+    "mtime": 1784273848.3922148,
+    "seen": 1788628857.4044979,
+    "ast_hash": "0578609a1130fe1e868af1c81b78b21e",
+    "semantic_hash": "0578609a1130fe1e868af1c81b78b21e"
+  },
+  "app/src/main/java/com/example/callog/presentation/screens/tasks/TaskScreens.kt": {
+    "mtime": 1788457885.3690617,
+    "seen": 1788628857.4044979,
+    "ast_hash": "311b1ec35d5e236a65da48e1f29b8e91",
+    "semantic_hash": "311b1ec35d5e236a65da48e1f29b8e91"
+  },
+  "app/src/main/java/com/example/callog/presentation/theme/Color.kt": {
+    "mtime": 1784295049.5380666,
+    "seen": 1788628857.4044979,
+    "ast_hash": "5a880bd2c6b67d303cd8461fd8c1e63e",
+    "semantic_hash": "5a880bd2c6b67d303cd8461fd8c1e63e"
+  },
+  "app/src/main/java/com/example/callog/presentation/theme/Theme.kt": {
+    "mtime": 1784027795.3737915,
+    "seen": 1788628857.4044979,
+    "ast_hash": "0e3dc2fed1516d5b6ffbc6df25df20f2",
+    "semantic_hash": "0e3dc2fed1516d5b6ffbc6df25df20f2"
+  },
+  "app/src/main/java/com/example/callog/presentation/theme/Type.kt": {
+    "mtime": 1783536127.0796359,
+    "seen": 1788628857.4044979,
+    "ast_hash": "54db1508ccc178635bc2de83b805e168",
+    "semantic_hash": "54db1508ccc178635bc2de83b805e168"
+  },
+  "app/src/main/java/com/example/callog/presentation/viewmodel/AnalyticsViewModel.kt": {
+    "mtime": 1782808820.689395,
+    "seen": 1788628857.4044979,
+    "ast_hash": "5f001981a454e0a2380e389ed99923c8",
+    "semantic_hash": "5f001981a454e0a2380e389ed99923c8"
+  },
+  "app/src/main/java/com/example/callog/presentation/viewmodel/CallViewModel.kt": {
+    "mtime": 1788422653.9236655,
+    "seen": 1788628857.4044979,
+    "ast_hash": "ced0194cebf95911cecb62dd3b333c7b",
+    "semantic_hash": "ced0194cebf95911cecb62dd3b333c7b"
+  },
+  "app/src/main/java/com/example/callog/presentation/viewmodel/ContactDetailsViewModel.kt": {
+    "mtime": 1788628539.9967027,
+    "seen": 1788628857.4044979,
+    "ast_hash": "df33c970583321c1660a5db0b30b0129",
+    "semantic_hash": "df33c970583321c1660a5db0b30b0129"
+  },
+  "app/src/main/java/com/example/callog/presentation/viewmodel/FavoritesViewModel.kt": {
+    "mtime": 1782748447.3058062,
+    "seen": 1788628857.4044979,
+    "ast_hash": "387eedc58b433605625683f46280b2c1",
+    "semantic_hash": "387eedc58b433605625683f46280b2c1"
+  },
+  "app/src/main/java/com/example/callog/presentation/viewmodel/HomeViewModel.kt": {
+    "mtime": 1782748427.6433089,
+    "seen": 1788628857.4044979,
+    "ast_hash": "387eedc58b433605625683f46280b2c1",
+    "semantic_hash": "387eedc58b433605625683f46280b2c1"
+  },
+  "app/src/main/java/com/example/callog/presentation/viewmodel/SettingsViewModel.kt": {
+    "mtime": 1782748457.0013971,
+    "seen": 1788628857.4044979,
+    "ast_hash": "387eedc58b433605625683f46280b2c1",
+    "semantic_hash": "387eedc58b433605625683f46280b2c1"
+  },
+  "app/src/main/java/com/example/callog/sim/SimInfo.kt": {
+    "mtime": 1784029423.7827163,
+    "seen": 1788628857.4044979,
+    "ast_hash": "3dd4a06d80c07d05bbe362879b8ebd6d",
+    "semantic_hash": "3dd4a06d80c07d05bbe362879b8ebd6d"
+  },
+  "app/src/main/java/com/example/callog/sim/SimManager.kt": {
+    "mtime": 1784029470.6740644,
+    "seen": 1788628857.4044979,
+    "ast_hash": "bd74eaf7449109d082cc729892e2147f",
+    "semantic_hash": "bd74eaf7449109d082cc729892e2147f"
+  },
+  "app/src/main/java/com/example/callog/sim/SimRepository.kt": {
+    "mtime": 1784029493.1995475,
+    "seen": 1788628857.4044979,
+    "ast_hash": "155e94763b8c7359de11bf34fd214e03",
+    "semantic_hash": "155e94763b8c7359de11bf34fd214e03"
+  },
+  "app/src/main/res/Assets.xcassets/AppIcon.appiconset/Contents.json": {
+    "mtime": 1783764307.6149757,
+    "seen": 1788628857.4044979,
+    "ast_hash": "72975d7c41c2bca19e483d8d81fc7d48",
+    "semantic_hash": "72975d7c41c2bca19e483d8d81fc7d48"
+  },
+  "app/src/test/java/com/example/callog/AutoSyncTest.kt": {
+    "mtime": 1783617588.5064025,
+    "seen": 1788628857.4044979,
+    "ast_hash": "4c51f962e8d8d3f9533039084bf00486",
+    "semantic_hash": "4c51f962e8d8d3f9533039084bf00486"
+  },
+  "app/src/test/java/com/example/callog/ExampleUnitTest.kt": {
+    "mtime": 1783961946.0425563,
+    "seen": 1788628857.4044979,
+    "ast_hash": "e44362d5a5256629f22f0f47da77fd6f",
+    "semantic_hash": "e44362d5a5256629f22f0f47da77fd6f"
+  },
+  "app/src/test/java/com/example/callog/FirestoreMappingTest.kt": {
+    "mtime": 1783361458.6421764,
+    "seen": 1788628857.4044979,
+    "ast_hash": "c37d900e001da498e656695d473755b6",
+    "semantic_hash": "c37d900e001da498e656695d473755b6"
+  },
+  "app/src/test/java/com/example/callog/identity/CallPersonIdentityResolutionTest.kt": {
+    "mtime": 1788472200.7652824,
+    "seen": 1788628857.4044979,
+    "ast_hash": "c0803e672ed6ff229016b36abf5521a2",
+    "semantic_hash": "c0803e672ed6ff229016b36abf5521a2"
+  },
+  "app/src/test/java/com/example/callog/identity/CentralPersonIdentityTest.kt": {
+    "mtime": 1788462412.2965045,
+    "seen": 1788628857.4044979,
+    "ast_hash": "9b46174888bfd239fb94f0c1455089fb",
+    "semantic_hash": "9b46174888bfd239fb94f0c1455089fb"
+  },
+  "app/src/test/java/com/example/callog/identity/ServerIdentityResolutionTest.kt": {
+    "mtime": 1788467873.4629433,
+    "seen": 1788628857.4044979,
+    "ast_hash": "ec476f2c250656d168d428fd4be9dfc6",
+    "semantic_hash": "ec476f2c250656d168d428fd4be9dfc6"
+  },
+  "app/src/test/java/com/example/callog/lead/LeadLifecycleTest.kt": {
+    "mtime": 1788628598.5919957,
+    "seen": 1788628857.4044979,
+    "ast_hash": "e407da88a5807f011197a0059bf19a5e",
+    "semantic_hash": "e407da88a5807f011197a0059bf19a5e"
+  },
+  "app/src/test/java/com/example/callog/navigation3/AllSetAuthRoutingTest.kt": {
+    "mtime": 1788458660.7190056,
+    "seen": 1788628857.4044979,
+    "ast_hash": "8004dd482e2a4d2b08cc1bc42db34189",
+    "semantic_hash": "8004dd482e2a4d2b08cc1bc42db34189"
+  },
+  "app/src/test/java/com/example/callog/navigation3/AllSetBackNavigationTest.kt": {
+    "mtime": 1788458641.8205764,
+    "seen": 1788628857.4044979,
+    "ast_hash": "381ddb21e720ab2858a9a1dfb421a2d7",
+    "semantic_hash": "381ddb21e720ab2858a9a1dfb421a2d7"
+  },
+  "app/src/test/java/com/example/callog/navigation3/AllSetContactNavigationTest.kt": {
+    "mtime": 1788458667.2503724,
+    "seen": 1788628857.4044979,
+    "ast_hash": "e7777ea8f1989c62bee838c47162feda",
+    "semantic_hash": "e7777ea8f1989c62bee838c47162feda"
+  },
+  "app/src/test/java/com/example/callog/navigation3/AllSetDeepLinkTest.kt": {
+    "mtime": 1788458655.256575,
+    "seen": 1788628857.4044979,
+    "ast_hash": "569723a2b3faba40c74ec00e988ede77",
+    "semantic_hash": "569723a2b3faba40c74ec00e988ede77"
+  },
+  "app/src/test/java/com/example/callog/navigation3/AllSetMultiBackStackTest.kt": {
+    "mtime": 1788458674.1986122,
+    "seen": 1788628857.4044979,
+    "ast_hash": "631b291d9cbcf7f5e3fa7d9b75f92ada",
+    "semantic_hash": "631b291d9cbcf7f5e3fa7d9b75f92ada"
+  },
+  "app/src/test/java/com/example/callog/navigation3/AllSetResultPassingTest.kt": {
+    "mtime": 1788458680.1071687,
+    "seen": 1788628857.4044979,
+    "ast_hash": "f9bfab998fb83b49f5d577374ccf2a8e",
+    "semantic_hash": "f9bfab998fb83b49f5d577374ccf2a8e"
+  },
+  "build.gradle.kts": {
+    "mtime": 1783760851.815126,
+    "seen": 1788628857.4044979,
+    "ast_hash": "2590a192bb787270f4d378be5de59d31",
+    "semantic_hash": "2590a192bb787270f4d378be5de59d31"
+  },
+  "gradlew": {
+    "mtime": 1782746913.2816553,
+    "seen": 1788628857.4044979,
+    "ast_hash": "266606e78242737ef3da02a80ea0564d",
+    "semantic_hash": "266606e78242737ef3da02a80ea0564d"
+  },
+  "settings.gradle.kts": {
+    "mtime": 1782746914.5417795,
+    "seen": 1788628857.4044979,
+    "ast_hash": "114c48602751d6a07f4bba34d6c61228",
+    "semantic_hash": "114c48602751d6a07f4bba34d6c61228"
+  }
+}

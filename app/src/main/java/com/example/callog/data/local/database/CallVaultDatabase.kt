@@ -18,9 +18,12 @@ import com.example.callog.data.local.entity.*
         DeviceEntity::class,
         PersonEntity::class,
         PhoneNumberEntity::class,
-        ContactAliasEntity::class
+        ContactAliasEntity::class,
+        LeadEntity::class,
+        ConversationEntity::class,
+        ConversationMessageEntity::class
     ],
-    version = 17,
+    version = 19,
     exportSchema = false
 )
 @TypeConverters(Converters::class)
@@ -33,4 +36,6 @@ abstract class CallVaultDatabase : RoomDatabase() {
     abstract fun recordingLogDao(): RecordingLogDao
     abstract fun recordingDao(): RecordingDao
     abstract fun personDao(): PersonDao
+    abstract fun leadDao(): LeadDao
+    abstract fun conversationDao(): ConversationDao
 }

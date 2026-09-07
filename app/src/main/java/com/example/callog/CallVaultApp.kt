@@ -23,19 +23,33 @@ class CallVaultApp : Application() {
 
     private fun createNotificationChannels() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel(
+            val manager = getSystemService(NotificationManager::class.java)
+
+            val reminderChannel = NotificationChannel(
                 NOTIFICATION_CHANNEL_ID,
                 "Callback Reminders",
                 NotificationManager.IMPORTANCE_HIGH
             ).apply {
                 description = "Used for callback reminders scheduled for call history logs."
             }
-            val manager = getSystemService(NotificationManager::class.java)
-            manager.createNotificationChannel(channel)
+
+            val callsChannel = NotificationChannel(
+                CALLS_NOTIFICATION_CHANNEL_ID,
+                "Incoming & Active Calls",
+                NotificationManager.IMPORTANCE_HIGH
+            ).apply {
+                description = "Displays live in-call controls, caller ID, and incoming call heads-up notifications."
+                setBypassDnd(true)
+                lockscreenVisibility = android.app.Notification.VISIBILITY_PUBLIC
+            }
+
+            manager.createNotificationChannel(reminderChannel)
+            manager.createNotificationChannel(callsChannel)
         }
     }
 
     companion object {
         const val NOTIFICATION_CHANNEL_ID = "call_vault_reminders"
+        const val CALLS_NOTIFICATION_CHANNEL_ID = "callog_incoming_calls"
     }
 }

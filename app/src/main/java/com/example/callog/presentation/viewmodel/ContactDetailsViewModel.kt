@@ -4,10 +4,9 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.callog.core.utils.PhoneNumberNormalizer
 import com.example.callog.data.provider.ContactDto
-import com.example.callog.domain.model.CallLogEntry
-import com.example.callog.domain.model.ContactAlias
-import com.example.callog.domain.model.Person
+import com.example.callog.domain.model.*
 import com.example.callog.domain.repository.CallRepository
+import com.example.callog.domain.repository.LeadRepository
 import com.example.callog.domain.repository.PersonRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -22,6 +21,7 @@ sealed interface ContactDetailUiState {
     data class Success(
         val contact: ContactDto,
         val person: Person? = null,
+        val lead: Lead? = null,
         val aliases: List<ContactAlias> = emptyList(),
         val interactionHistory: List<CallLogEntry> = emptyList(),
         val lastFeedbackRating: Int? = null,
@@ -33,16 +33,19 @@ sealed interface ContactDetailUiState {
 /**
  * ViewModel for Contact Details screen.
  * Receives the canonical [contactId] / Person ID (String) as its navigation identity,
- * resolves the canonical Person model, and queries data via repositories.
+ * resolves the canonical Person model, observes its CRM Lead model, and queries data via repositories.
  */
 @HiltViewModel
 class ContactDetailsViewModel @Inject constructor(
     private val callRepository: CallRepository,
-    private val personRepository: PersonRepository
+    private val personRepository: PersonRepository,
+    private val leadRepository: LeadRepository
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow<ContactDetailUiState>(ContactDetailUiState.Loading)
     val uiState: StateFlow<ContactDetailUiState> = _uiState.asStateFlow()
+
+    private var currentPersonId: String? = null
 
     fun loadContact(contactId: String) {
         viewModelScope.launch {
@@ -68,6 +71,7 @@ class ContactDetailsViewModel @Inject constructor(
                 val allLogs = callRepository.getCallLogsFlow().first()
 
                 if (person != null) {
+                    currentPersonId = person.id
                     val phoneList = person.phoneNumbers.map { it.phoneNumber }.ifEmpty { listOf("+91 98765 43210") }
                     val normalizedSet = person.phoneNumbers.map { it.normalizedNumber }.toSet()
                     
@@ -79,6 +83,9 @@ class ContactDetailsViewModel @Inject constructor(
                             log.personId == person.id || normalizedSet.contains(PhoneNumberNormalizer.normalize(log.number))
                         }
                     }
+
+                    // Phase 4: Fetch or create CRM Lead for canonical Person
+                    val lead = leadRepository.getOrCreateLeadForPerson(person.id)
 
                     val dto = ContactDto(
                         contactId = person.id,
@@ -92,8 +99,11 @@ class ContactDetailsViewModel @Inject constructor(
                     _uiState.value = ContactDetailUiState.Success(
                         contact = dto,
                         person = person,
+                        lead = lead,
                         aliases = person.aliases,
-                        interactionHistory = matchedLogs
+                        interactionHistory = matchedLogs,
+                        lastFeedbackRating = lead.feedbackRating,
+                        feedbackNotes = lead.feedback ?: lead.notes
                     )
                 } else {
                     // Fallback to legacy contact lookup
@@ -119,13 +129,83 @@ class ContactDetailsViewModel @Inject constructor(
         }
     }
 
-    fun applyFeedbackResult(rating: Int, notes: String) {
-        val current = _uiState.value
-        if (current is ContactDetailUiState.Success) {
-            _uiState.value = current.copy(
-                lastFeedbackRating = rating,
-                feedbackNotes = notes
-            )
+    fun updateLeadStatus(status: LeadStatus) {
+        val pId = currentPersonId ?: return
+        viewModelScope.launch {
+            leadRepository.updateLeadStatus(pId, status)
+            val updatedLead = leadRepository.getLeadForPerson(pId)
+            val current = _uiState.value
+            if (current is ContactDetailUiState.Success && updatedLead != null) {
+                _uiState.value = current.copy(lead = updatedLead)
+            }
         }
+    }
+
+    fun updateLeadPriority(priority: LeadPriority) {
+        val pId = currentPersonId ?: return
+        viewModelScope.launch {
+            leadRepository.updateLeadPriority(pId, priority)
+            val updatedLead = leadRepository.getLeadForPerson(pId)
+            val current = _uiState.value
+            if (current is ContactDetailUiState.Success && updatedLead != null) {
+                _uiState.value = current.copy(lead = updatedLead)
+            }
+        }
+    }
+
+    fun updateLeadNotes(notes: String) {
+        val pId = currentPersonId ?: return
+        viewModelScope.launch {
+            leadRepository.updateLeadNotes(pId, notes)
+            val updatedLead = leadRepository.getLeadForPerson(pId)
+            val current = _uiState.value
+            if (current is ContactDetailUiState.Success && updatedLead != null) {
+                _uiState.value = current.copy(lead = updatedLead)
+            }
+        }
+    }
+
+    fun updateLeadFeedback(feedback: String, rating: Int? = null) {
+        val pId = currentPersonId ?: return
+        viewModelScope.launch {
+            leadRepository.updateLeadFeedback(pId, feedback, rating)
+            val updatedLead = leadRepository.getLeadForPerson(pId)
+            val current = _uiState.value
+            if (current is ContactDetailUiState.Success && updatedLead != null) {
+                _uiState.value = current.copy(
+                    lead = updatedLead,
+                    lastFeedbackRating = rating,
+                    feedbackNotes = feedback
+                )
+            }
+        }
+    }
+
+    fun updateLeadFollowUp(nextFollowUpAt: Long?) {
+        val pId = currentPersonId ?: return
+        viewModelScope.launch {
+            leadRepository.updateLeadFollowUp(pId, nextFollowUpAt)
+            val updatedLead = leadRepository.getLeadForPerson(pId)
+            val current = _uiState.value
+            if (current is ContactDetailUiState.Success && updatedLead != null) {
+                _uiState.value = current.copy(lead = updatedLead)
+            }
+        }
+    }
+
+    fun archiveLead() {
+        val pId = currentPersonId ?: return
+        viewModelScope.launch {
+            leadRepository.archiveLead(pId)
+            val updatedLead = leadRepository.getLeadForPerson(pId)
+            val current = _uiState.value
+            if (current is ContactDetailUiState.Success && updatedLead != null) {
+                _uiState.value = current.copy(lead = updatedLead)
+            }
+        }
+    }
+
+    fun applyFeedbackResult(rating: Int, notes: String) {
+        updateLeadFeedback(notes, rating)
     }
 }

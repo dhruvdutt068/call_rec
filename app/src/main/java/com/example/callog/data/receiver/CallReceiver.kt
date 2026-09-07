@@ -11,18 +11,50 @@ import androidx.work.NetworkType
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
 import com.example.callog.data.worker.SyncWorker
+import com.example.callog.domain.call.CallDirection
+import com.example.callog.domain.call.CallState
+import com.example.callog.domain.service.CallSessionManager
+import dagger.hilt.android.AndroidEntryPoint
 import java.util.concurrent.TimeUnit
+import javax.inject.Inject
 
+@AndroidEntryPoint
 class CallReceiver : BroadcastReceiver() {
     private val TAG = "CallReceiver"
+
+    @Inject
+    lateinit var callSessionManager: CallSessionManager
 
     override fun onReceive(context: Context, intent: Intent) {
         if (intent.action == TelephonyManager.ACTION_PHONE_STATE_CHANGED) {
             val state = intent.getStringExtra(TelephonyManager.EXTRA_STATE)
-            Log.d(TAG, "Phone state changed: $state")
-            if (state == TelephonyManager.EXTRA_STATE_IDLE) {
-                Log.d(TAG, "Call ended (IDLE state). Triggering background sync with 5 seconds delay.")
-                triggerBackgroundSync(context)
+            val incomingNumber = intent.getStringExtra(TelephonyManager.EXTRA_INCOMING_NUMBER) ?: ""
+            Log.d(TAG, "Phone state changed: $state, number: $incomingNumber")
+
+            when (state) {
+                TelephonyManager.EXTRA_STATE_RINGING -> {
+                    callSessionManager.onTelephonyCallStateChanged(
+                        state = CallState.RINGING,
+                        number = incomingNumber,
+                        direction = CallDirection.INCOMING
+                    )
+                }
+                TelephonyManager.EXTRA_STATE_OFFHOOK -> {
+                    callSessionManager.onTelephonyCallStateChanged(
+                        state = CallState.ACTIVE,
+                        number = incomingNumber,
+                        direction = CallDirection.UNKNOWN
+                    )
+                }
+                TelephonyManager.EXTRA_STATE_IDLE -> {
+                    callSessionManager.onTelephonyCallStateChanged(
+                        state = CallState.DISCONNECTED,
+                        number = incomingNumber,
+                        direction = CallDirection.UNKNOWN
+                    )
+                    Log.d(TAG, "Call ended (IDLE state). Triggering background sync with 5 seconds delay.")
+                    triggerBackgroundSync(context)
+                }
             }
         }
     }

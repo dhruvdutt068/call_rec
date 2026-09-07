@@ -107,6 +107,13 @@ fun SettingsScreen(
     val selectedSimDisplayName by viewModel.selectedSimDisplayName.collectAsState()
     val selectedSimPhoneNumber by viewModel.selectedSimPhoneNumber.collectAsState()
 
+    var isDefaultDialer by remember { mutableStateOf(com.example.callog.core.telecom.TelecomRoleHelper.isDefaultDialer(context)) }
+    val roleLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) {
+        isDefaultDialer = com.example.callog.core.telecom.TelecomRoleHelper.isDefaultDialer(context)
+    }
+
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -166,6 +173,97 @@ fun SettingsScreen(
                             uncheckedThumbColor = Slate400,
                             uncheckedTrackColor = Slate800
                         )
+                    )
+                }
+            }
+        }
+
+        // 1.2. Call Experience & Default Phone Role
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(
+                text = "Call Experience",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = Slate50
+            )
+
+            GlassyCard(modifier = Modifier.fillMaxWidth()) {
+                Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(36.dp)
+                                    .clip(CircleShape)
+                                    .background(if (isDefaultDialer) Green500.copy(alpha = 0.15f) else Amber500.copy(alpha = 0.15f)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.PhoneInTalk,
+                                    contentDescription = null,
+                                    tint = if (isDefaultDialer) Green500 else Amber500,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Column {
+                                Text("Default Phone App", color = Slate50, fontWeight = FontWeight.SemiBold)
+                                Text(
+                                    text = if (isDefaultDialer) "Enabled — Custom CRM call UI & status ringtones active" else "Not default — Required for custom call screen",
+                                    color = if (isDefaultDialer) Green500 else Slate400,
+                                    style = MaterialTheme.typography.bodySmall
+                                )
+                            }
+                        }
+
+                        if (!isDefaultDialer) {
+                            Button(
+                                onClick = {
+                                    val intent = com.example.callog.core.telecom.TelecomRoleHelper.createRequestDialerRoleIntent(context)
+                                    if (intent != null) {
+                                        roleLauncher.launch(intent)
+                                    } else {
+                                        Toast.makeText(context, "Role manager not available", Toast.LENGTH_SHORT).show()
+                                    }
+                                },
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = MaterialTheme.colorScheme.primary,
+                                    contentColor = MaterialTheme.colorScheme.onPrimary
+                                ),
+                                shape = RoundedCornerShape(8.dp),
+                                contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp),
+                                modifier = Modifier.height(36.dp)
+                            ) {
+                                Text("Set Default", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+                            }
+                        } else {
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(6.dp))
+                                    .background(Green500.copy(alpha = 0.15f))
+                                    .padding(horizontal = 10.dp, vertical = 6.dp)
+                            ) {
+                                Text(
+                                    text = "Active",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Green500
+                                )
+                            }
+                        }
+                    }
+
+                    Text(
+                        text = "Set Callog as your default phone app to enable custom CRM caller identification, active in-call controls, locked-screen overlay, and status-based ringtones. Emergency calls will always route normally.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Slate400
                     )
                 }
             }
