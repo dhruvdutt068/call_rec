@@ -1,0 +1,1961 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Callog - Interactive UI Wireframes & Architecture Prototype</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400..800;1,400..800&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <style>
+    :root {
+      --bg-canvas: #0b1326;
+      --bg-panel: #131b2e;
+      --bg-surface: #171f33;
+      --bg-surface-high: #222a3d;
+      --border-color: rgba(255, 255, 255, 0.08);
+      --border-focus: #45f1bf;
+      --text-main: #dae2fd;
+      --text-muted: #85948c;
+      --text-highlight: #ffffff;
+      
+      --primary: #4a4fd8;
+      --primary-light: #b8bcff;
+      --primary-hover: #3d417b;
+      --teal: #45c79a;
+      --teal-light: #7cf9c9;
+      --amber: #f4b544;
+      --red: #e85c5c;
+      --green: #45c79a;
+      --slate-900: #0f172a;
+      --slate-800: #1e293b;
+      --slate-700: #334155;
+      --slate-400: #94a3b8;
+      
+      --font-display: 'EB Garamond', Georgia, serif;
+      --font-body: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      --font-mono: 'JetBrains Mono', monospace;
+      --font-heading: 'Space Grotesk', sans-serif;
+      
+      --radius-sm: 6px;
+      --radius-md: 12px;
+      --radius-lg: 18px;
+      --radius-full: 9999px;
+    }
+
+    body.wireframe-mode {
+      --bg-canvas: #e5e7eb;
+      --bg-panel: #f3f4f6;
+      --bg-surface: #ffffff;
+      --bg-surface-high: #e5e7eb;
+      --border-color: #9ca3af;
+      --border-focus: #111827;
+      --text-main: #111827;
+      --text-muted: #6b7280;
+      --text-highlight: #000000;
+      --primary: #4b5563;
+      --primary-light: #9ca3af;
+      --teal: #6b7280;
+      --amber: #9ca3af;
+      --red: #4b5563;
+      --green: #6b7280;
+      --slate-900: #f9fafb;
+      --slate-800: #e5e7eb;
+      --slate-700: #d1d5db;
+      --slate-400: #6b7280;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      background-color: var(--bg-canvas);
+      color: var(--text-main);
+      font-family: var(--font-body);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow-x: hidden;
+      transition: background-color 0.25s ease, color 0.25s ease;
+    }
+
+    /* Top Global Header */
+    header.global-header {
+      background: rgba(19, 27, 46, 0.85);
+      backdrop-filter: blur(16px);
+      border-bottom: 1px solid var(--border-color);
+      padding: 14px 28px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      position: sticky;
+      top: 0;
+      z-index: 1000;
+    }
+
+    .brand-group {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .brand-logo {
+      width: 38px;
+      height: 38px;
+      border-radius: var(--radius-md);
+      background: linear-gradient(135deg, #4a4fd8, #45c79a);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      font-size: 18px;
+      box-shadow: 0 4px 12px rgba(74, 79, 216, 0.35);
+    }
+
+    .brand-title h1 {
+      font-family: var(--font-heading);
+      font-size: 1.15rem;
+      font-weight: 700;
+      letter-spacing: -0.01em;
+      color: var(--text-highlight);
+    }
+
+    .brand-title p {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+    }
+
+    .toolbar-controls {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .btn-control {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-color);
+      color: var(--text-main);
+      padding: 8px 14px;
+      border-radius: var(--radius-sm);
+      font-size: 0.82rem;
+      font-weight: 600;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      transition: all 0.2s ease;
+    }
+
+    .btn-control:hover {
+      background: var(--bg-surface-high);
+      border-color: var(--teal);
+    }
+
+    .btn-control.active {
+      background: var(--primary);
+      color: #ffffff;
+      border-color: var(--primary);
+    }
+
+    .screen-selector {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-color);
+      color: var(--text-main);
+      padding: 8px 12px;
+      border-radius: var(--radius-sm);
+      font-size: 0.82rem;
+      font-weight: 500;
+      outline: none;
+      cursor: pointer;
+    }
+
+    /* Main Workspace Layout */
+    .workspace-layout {
+      display: grid;
+      grid-template-columns: 280px 1fr 340px;
+      gap: 24px;
+      padding: 24px;
+      max-width: 1750px;
+      margin: 0 auto;
+      width: 100%;
+      flex: 1;
+    }
+
+    @media (max-width: 1280px) {
+      .workspace-layout {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    /* Sidebar 1: Screen Navigation Catalog */
+    .sidebar-nav {
+      background: var(--bg-panel);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-lg);
+      padding: 18px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      height: fit-content;
+      max-height: calc(100vh - 120px);
+      overflow-y: auto;
+      position: sticky;
+      top: 88px;
+    }
+
+    .sidebar-title {
+      font-size: 0.8rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--text-muted);
+      margin-bottom: 4px;
+    }
+
+    .screen-nav-list {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .screen-nav-item {
+      padding: 10px 12px;
+      border-radius: var(--radius-sm);
+      font-size: 0.84rem;
+      color: var(--text-main);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      transition: all 0.15s ease;
+      border: 1px solid transparent;
+    }
+
+    .screen-nav-item:hover {
+      background: var(--bg-surface);
+    }
+
+    .screen-nav-item.active {
+      background: rgba(74, 79, 216, 0.18);
+      color: var(--teal-light);
+      border-color: rgba(74, 79, 216, 0.4);
+      font-weight: 600;
+    }
+
+    .screen-nav-item .badge {
+      font-size: 0.68rem;
+      padding: 2px 6px;
+      border-radius: var(--radius-sm);
+      background: var(--bg-surface-high);
+      color: var(--text-muted);
+    }
+
+    /* Center Stage: Phone Simulator Frame */
+    .simulator-stage {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-start;
+      gap: 16px;
+    }
+
+    .phone-wrapper {
+      position: relative;
+      width: 390px;
+      height: 844px;
+      background: #0f172a;
+      border-radius: 48px;
+      box-shadow: 0 25px 60px -15px rgba(0, 0, 0, 0.7), 0 0 0 10px #1e293b, 0 0 0 12px #334155;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    body.wireframe-mode .phone-wrapper {
+      background: #ffffff;
+      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.15), 0 0 0 4px #4b5563, 0 0 0 6px #9ca3af;
+      border: 2px dashed #9ca3af;
+    }
+
+    /* Notch / Dynamic Island */
+    .phone-notch {
+      position: absolute;
+      top: 10px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 120px;
+      height: 28px;
+      background: #000000;
+      border-radius: var(--radius-full);
+      z-index: 500;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 12px;
+    }
+
+    .phone-notch .lens {
+      width: 10px;
+      height: 10px;
+      background: #111e38;
+      border-radius: 50%;
+    }
+
+    .phone-notch .sensor {
+      width: 6px;
+      height: 6px;
+      background: #090f1d;
+      border-radius: 50%;
+    }
+
+    /* Status Bar */
+    .phone-status-bar {
+      height: 44px;
+      padding: 10px 24px 0 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: #94a3b8;
+      z-index: 400;
+    }
+
+    /* Phone Screen Content Container */
+    .phone-screen-content {
+      flex: 1;
+      overflow-y: auto;
+      overflow-x: hidden;
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      background: #0b1326;
+      color: #dae2fd;
+    }
+
+    body.wireframe-mode .phone-screen-content {
+      background: #fafafa;
+      color: #111827;
+    }
+
+    /* Drawer Overlay in Phone */
+    .phone-drawer {
+      position: absolute;
+      top: 0;
+      left: -100%;
+      width: 82%;
+      height: 100%;
+      background: #0f172a;
+      z-index: 600;
+      transition: left 0.28s cubic-bezier(0.4, 0, 0.2, 1);
+      box-shadow: 10px 0 30px rgba(0,0,0,0.6);
+      display: flex;
+      flex-direction: column;
+      padding: 20px 16px;
+    }
+
+    .phone-drawer.open {
+      left: 0;
+    }
+
+    .phone-drawer-backdrop {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.6);
+      backdrop-filter: blur(4px);
+      z-index: 590;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.25s ease;
+    }
+
+    .phone-drawer-backdrop.open {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    /* Bottom Navigation Bar in Phone */
+    .phone-bottom-nav {
+      height: 64px;
+      background: #131b2e;
+      border-top: 1px solid rgba(255, 255, 255, 0.08);
+      display: flex;
+      align-items: center;
+      justify-content: space-around;
+      z-index: 300;
+    }
+
+    body.wireframe-mode .phone-bottom-nav {
+      background: #f3f4f6;
+      border-top: 1px solid #d1d5db;
+    }
+
+    .bottom-tab-item {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 3px;
+      font-size: 0.65rem;
+      font-weight: 600;
+      color: #85948c;
+      cursor: pointer;
+      padding: 6px 10px;
+      border-radius: var(--radius-sm);
+      transition: all 0.15s ease;
+    }
+
+    .bottom-tab-item i {
+      font-size: 1.05rem;
+    }
+
+    .bottom-tab-item.active {
+      color: #45f1bf;
+    }
+
+    body.wireframe-mode .bottom-tab-item.active {
+      color: #111827;
+      font-weight: 700;
+    }
+
+    /* Sidebar 2: Architecture & Inspector Specs */
+    .sidebar-inspector {
+      background: var(--bg-panel);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-lg);
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+      height: fit-content;
+      max-height: calc(100vh - 120px);
+      overflow-y: auto;
+      position: sticky;
+      top: 88px;
+    }
+
+    .inspector-card {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-md);
+      padding: 14px;
+    }
+
+    .inspector-card h3 {
+      font-size: 0.85rem;
+      font-family: var(--font-heading);
+      font-weight: 700;
+      color: var(--teal-light);
+      margin-bottom: 8px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .spec-item {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.78rem;
+      padding: 5px 0;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+    }
+
+    .spec-item span.label {
+      color: var(--text-muted);
+    }
+
+    .spec-item span.value {
+      color: var(--text-highlight);
+      font-family: var(--font-mono);
+      font-size: 0.74rem;
+    }
+
+    /* Screen UI Styles inside Phone Simulator */
+    .screen-view {
+      display: none;
+      flex: 1;
+      flex-direction: column;
+      padding: 12px 16px 20px 16px;
+      gap: 12px;
+      animation: fadeIn 0.2s ease;
+    }
+
+    .screen-view.active {
+      display: flex;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(4px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    /* App Header in Phone */
+    .phone-app-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 4px 0 8px 0;
+    }
+
+    .phone-app-header .title {
+      font-size: 1.15rem;
+      font-weight: 700;
+      color: #ffffff;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    body.wireframe-mode .phone-app-header .title {
+      color: #111827;
+    }
+
+    .icon-btn {
+      width: 36px;
+      height: 36px;
+      border-radius: var(--radius-full);
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #dae2fd;
+      cursor: pointer;
+      font-size: 0.9rem;
+    }
+
+    body.wireframe-mode .icon-btn {
+      background: #e5e7eb;
+      border-color: #9ca3af;
+      color: #111827;
+    }
+
+    /* Glassy Card in Phone */
+    .phone-card {
+      background: rgba(23, 31, 51, 0.8);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: var(--radius-md);
+      padding: 12px 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      transition: all 0.2s ease;
+    }
+
+    body.wireframe-mode .phone-card {
+      background: #ffffff;
+      border: 1px solid #9ca3af;
+    }
+
+    /* T9 Dialer UI */
+    .dialer-input-display {
+      height: 52px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+      margin: 4px 0;
+    }
+
+    .dialer-number {
+      font-size: 1.6rem;
+      font-weight: 700;
+      color: #ffffff;
+      letter-spacing: 0.03em;
+      text-align: center;
+    }
+
+    body.wireframe-mode .dialer-number {
+      color: #111827;
+    }
+
+    .backspace-btn {
+      position: absolute;
+      right: 0;
+      color: #94a3b8;
+      cursor: pointer;
+      font-size: 1.1rem;
+      padding: 6px;
+    }
+
+    .keypad-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+      margin: 8px 0;
+      justify-items: center;
+    }
+
+    .keypad-key {
+      width: 64px;
+      height: 64px;
+      border-radius: var(--radius-full);
+      background: #171f33;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      user-select: none;
+      transition: transform 0.1s ease, background 0.15s ease;
+    }
+
+    .keypad-key:active {
+      transform: scale(0.92);
+      background: #222a3d;
+    }
+
+    body.wireframe-mode .keypad-key {
+      background: #f3f4f6;
+      border: 1px solid #9ca3af;
+    }
+
+    .keypad-key .digit {
+      font-size: 1.35rem;
+      font-weight: 700;
+      color: #ffffff;
+      line-height: 1;
+    }
+
+    body.wireframe-mode .keypad-key .digit {
+      color: #111827;
+    }
+
+    .keypad-key .letters {
+      font-size: 0.55rem;
+      font-weight: 600;
+      letter-spacing: 0.1em;
+      color: #94a3b8;
+      margin-top: 2px;
+    }
+
+    .dual-sim-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-top: 4px;
+    }
+
+    .sim-call-btn {
+      padding: 10px;
+      border-radius: var(--radius-md);
+      border: none;
+      font-weight: 600;
+      font-size: 0.8rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      cursor: pointer;
+      color: white;
+    }
+
+    .sim-call-btn.sim1 {
+      background: #45c79a;
+    }
+
+    .sim-call-btn.sim2 {
+      background: #4a4fd8;
+    }
+
+    body.wireframe-mode .sim-call-btn {
+      background: #374151 !important;
+      color: white;
+    }
+
+    /* T9 Search Result Chip */
+    .t9-match-card {
+      background: #171f33;
+      border: 1px solid rgba(69, 199, 154, 0.3);
+      border-radius: var(--radius-md);
+      padding: 8px 12px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      cursor: pointer;
+    }
+
+    body.wireframe-mode .t9-match-card {
+      background: #ffffff;
+      border: 1px solid #9ca3af;
+    }
+
+    .avatar {
+      width: 38px;
+      height: 38px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #4a4fd8, #45c79a);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      font-weight: 700;
+      font-size: 0.85rem;
+    }
+
+    /* Tag & Badge Styles */
+    .lead-badge {
+      font-size: 0.62rem;
+      font-weight: 700;
+      padding: 2px 6px;
+      border-radius: 4px;
+      text-transform: uppercase;
+    }
+
+    .lead-badge.hot { background: rgba(232, 92, 92, 0.2); color: #ff8080; border: 1px solid rgba(232, 92, 92, 0.3); }
+    .lead-badge.warm { background: rgba(244, 181, 68, 0.2); color: #ffc069; border: 1px solid rgba(244, 181, 68, 0.3); }
+    .lead-badge.cold { background: rgba(74, 79, 216, 0.2); color: #85a5ff; border: 1px solid rgba(74, 79, 216, 0.3); }
+
+    /* Search Bar */
+    .search-input-box {
+      background: #131b2e;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: var(--radius-md);
+      padding: 8px 12px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: #94a3b8;
+    }
+
+    body.wireframe-mode .search-input-box {
+      background: #ffffff;
+      border-color: #9ca3af;
+      color: #4b5563;
+    }
+
+    .search-input-box input {
+      background: transparent;
+      border: none;
+      outline: none;
+      color: #dae2fd;
+      font-size: 0.82rem;
+      width: 100%;
+    }
+
+    body.wireframe-mode .search-input-box input {
+      color: #111827;
+    }
+
+    /* Filter Chips Row */
+    .filter-chips-row {
+      display: flex;
+      gap: 6px;
+      overflow-x: auto;
+      padding-bottom: 4px;
+      scrollbar-width: none;
+    }
+
+    .chip-filter {
+      padding: 4px 10px;
+      background: #171f33;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: var(--radius-full);
+      font-size: 0.7rem;
+      color: #94a3b8;
+      white-space: nowrap;
+      cursor: pointer;
+    }
+
+    .chip-filter.active {
+      background: #4a4fd8;
+      color: #ffffff;
+      border-color: #4a4fd8;
+    }
+
+    body.wireframe-mode .chip-filter.active {
+      background: #111827;
+      color: #ffffff;
+    }
+
+    /* Waveform Audio Mock */
+    .waveform-visual {
+      display: flex;
+      align-items: center;
+      gap: 2px;
+      height: 28px;
+      padding: 0 4px;
+    }
+
+    .waveform-bar {
+      width: 3px;
+      background: #45c79a;
+      border-radius: 2px;
+    }
+
+    body.wireframe-mode .waveform-bar {
+      background: #4b5563;
+    }
+
+    /* In-Call HUD Specifics */
+    .incall-pulse-avatar {
+      position: relative;
+      width: 100px;
+      height: 100px;
+      margin: 10px auto;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .pulse-ring {
+      position: absolute;
+      width: 100%;
+      height: 100%;
+      border-radius: 50%;
+      background: rgba(74, 79, 216, 0.25);
+      animation: pulse 1.8s infinite;
+    }
+
+    @keyframes pulse {
+      0% { transform: scale(0.95); opacity: 0.8; }
+      50% { transform: scale(1.2); opacity: 0.3; }
+      100% { transform: scale(0.95); opacity: 0.8; }
+    }
+
+    .incall-grid-buttons {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 16px;
+      margin: 16px 0;
+      justify-items: center;
+    }
+
+    .incall-action-btn {
+      width: 56px;
+      height: 56px;
+      border-radius: 50%;
+      background: #171f33;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      cursor: pointer;
+      font-size: 1.1rem;
+    }
+
+    .incall-action-btn.active {
+      background: #4a4fd8;
+      border-color: #b8bcff;
+    }
+
+    .incall-action-btn.hangup {
+      background: #e85c5c;
+      width: 64px;
+      height: 64px;
+      font-size: 1.4rem;
+    }
+
+    .incall-action-btn.answer {
+      background: #45c79a;
+      width: 64px;
+      height: 64px;
+      font-size: 1.4rem;
+    }
+
+    /* Kanban Pipeline Styles */
+    .kanban-stages-tabs {
+      display: flex;
+      gap: 8px;
+      overflow-x: auto;
+      padding-bottom: 6px;
+      scrollbar-width: none;
+    }
+
+    .kanban-tab {
+      padding: 6px 12px;
+      border-radius: var(--radius-sm);
+      background: #171f33;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      font-size: 0.72rem;
+      color: #94a3b8;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+
+    .kanban-tab.active {
+      background: rgba(74, 79, 216, 0.25);
+      border-color: #4a4fd8;
+      color: #ffffff;
+      font-weight: 600;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Global Header Toolbar -->
+  <header class="global-header">
+    <div class="brand-group">
+      <div class="brand-logo"><i class="fa-solid fa-phone-volume"></i></div>
+      <div class="brand-title">
+        <h1>Callog UI Wireframe Simulator</h1>
+        <p>Android Telephony &bull; Jetpack Compose &bull; Room &bull; Supabase CRM &bull; Audio Vault</p>
+      </div>
+    </div>
+
+    <div class="toolbar-controls">
+      <select id="screenSelect" class="screen-selector" onchange="switchScreen(this.value)">
+        <optgroup label="1. Core Telephony">
+          <option value="dialer">Dialer & T9 Speed Dial</option>
+          <option value="call_logs" selected>Call Logs & Vault History</option>
+          <option value="call_details">Call Details & Audio Player</option>
+          <option value="recordings">Audio Recordings Vault</option>
+        </optgroup>
+        <optgroup label="2. In-Call Telephony HUD">
+          <option value="incoming_call">Incoming Ringing HUD (CRM Context)</option>
+          <option value="active_call">Active Call Screen (Hold/Swap/DTMF)</option>
+          <option value="post_call_summary">Post-Call Wrap-up & Notes</option>
+        </optgroup>
+        <optgroup label="3. CRM & Productivity">
+          <option value="crm_pipeline">CRM Sales Pipeline (Kanban)</option>
+          <option value="contacts">Contacts & Lead Directory</option>
+          <option value="tasks">Task & Follow-up Manager</option>
+          <option value="analytics">Telephony & CRM Analytics</option>
+        </optgroup>
+        <optgroup label="4. System & Tools">
+          <option value="settings">Settings, Multi-SIM & Ringtone Policy</option>
+        </optgroup>
+      </select>
+
+      <button class="btn-control" id="wireframeToggleBtn" onclick="toggleWireframeMode()">
+        <i class="fa-solid fa-drafting-compass"></i> Wireframe Blueprint
+      </button>
+
+      <button class="btn-control" id="triggerIncomingCallBtn" onclick="switchScreen('incoming_call')">
+        <i class="fa-solid fa-phone-incoming"></i> Simulate Inbound Call
+      </button>
+    </div>
+  </header>
+
+  <!-- Workspace Grid Layout -->
+  <div class="workspace-layout">
+
+    <!-- Left Sidebar: Screen Catalog -->
+    <aside class="sidebar-nav">
+      <div class="sidebar-title">Screen Architecture</div>
+      <ul class="screen-nav-list">
+        <li class="screen-nav-item" onclick="switchScreen('dialer')" data-screen="dialer">
+          <span><i class="fa-solid fa-calculator" style="margin-right:8px;"></i> Dialer & T9</span>
+          <span class="badge">Telephony</span>
+        </li>
+        <li class="screen-nav-item active" onclick="switchScreen('call_logs')" data-screen="call_logs">
+          <span><i class="fa-solid fa-clock-rotate-left" style="margin-right:8px;"></i> Call Logs</span>
+          <span class="badge">Main</span>
+        </li>
+        <li class="screen-nav-item" onclick="switchScreen('call_details')" data-screen="call_details">
+          <span><i class="fa-solid fa-headphones" style="margin-right:8px;"></i> Call Details</span>
+          <span class="badge">Player</span>
+        </li>
+        <li class="screen-nav-item" onclick="switchScreen('recordings')" data-screen="recordings">
+          <span><i class="fa-solid fa-file-audio" style="margin-right:8px;"></i> Recording Vault</span>
+          <span class="badge">Audio</span>
+        </li>
+        <li class="screen-nav-item" onclick="switchScreen('incoming_call')" data-screen="incoming_call">
+          <span><i class="fa-solid fa-phone-arrow-down-left" style="margin-right:8px;"></i> Incoming HUD</span>
+          <span class="badge">Telecom</span>
+        </li>
+        <li class="screen-nav-item" onclick="switchScreen('active_call')" data-screen="active_call">
+          <span><i class="fa-solid fa-phone" style="margin-right:8px;"></i> Active Call HUD</span>
+          <span class="badge">In-Call</span>
+        </li>
+        <li class="screen-nav-item" onclick="switchScreen('post_call_summary')" data-screen="post_call_summary">
+          <span><i class="fa-solid fa-clipboard-check" style="margin-right:8px;"></i> Post-Call Summary</span>
+          <span class="badge">CRM</span>
+        </li>
+        <li class="screen-nav-item" onclick="switchScreen('crm_pipeline')" data-screen="crm_pipeline">
+          <span><i class="fa-solid fa-chart-kanban" style="margin-right:8px;"></i> Sales Pipeline</span>
+          <span class="badge">CRM Hub</span>
+        </li>
+        <li class="screen-nav-item" onclick="switchScreen('contacts')" data-screen="contacts">
+          <span><i class="fa-solid fa-address-book" style="margin-right:8px;"></i> Contacts</span>
+          <span class="badge">Leads</span>
+        </li>
+        <li class="screen-nav-item" onclick="switchScreen('tasks')" data-screen="tasks">
+          <span><i class="fa-solid fa-list-check" style="margin-right:8px;"></i> Tasks & Reminders</span>
+          <span class="badge">Schedule</span>
+        </li>
+        <li class="screen-nav-item" onclick="switchScreen('analytics')" data-screen="analytics">
+          <span><i class="fa-solid fa-chart-pie" style="margin-right:8px;"></i> Analytics</span>
+          <span class="badge">Reports</span>
+        </li>
+        <li class="screen-nav-item" onclick="switchScreen('settings')" data-screen="settings">
+          <span><i class="fa-solid fa-sliders" style="margin-right:8px;"></i> Settings & Dual-SIM</span>
+          <span class="badge">System</span>
+        </li>
+      </ul>
+    </aside>
+
+    <!-- Center Stage: Mobile Phone Simulator -->
+    <main class="simulator-stage">
+
+      <div class="phone-wrapper" id="phoneWrapper">
+        <!-- Phone Hardware Top Notch / Island -->
+        <div class="phone-notch">
+          <div class="lens"></div>
+          <div class="sensor"></div>
+        </div>
+
+        <!-- Phone Status Bar -->
+        <div class="phone-status-bar">
+          <span id="statusBarClock">10:42</span>
+          <div style="display:flex; gap:6px; align-items:center;">
+            <span style="font-size:0.68rem;">5G</span>
+            <i class="fa-solid fa-signal" style="font-size:0.7rem;"></i>
+            <i class="fa-solid fa-wifi" style="font-size:0.7rem;"></i>
+            <i class="fa-solid fa-battery-full" style="font-size:0.75rem;"></i>
+          </div>
+        </div>
+
+        <!-- Drawer Backdrop -->
+        <div class="phone-drawer-backdrop" id="drawerBackdrop" onclick="toggleDrawer(false)"></div>
+
+        <!-- Side Navigation Drawer inside Phone -->
+        <div class="phone-drawer" id="phoneDrawer">
+          <div style="background: linear-gradient(135deg, #4a4fd8, #1e293b); padding: 14px; border-radius: 12px; margin-bottom: 14px;">
+            <div style="font-weight: 700; font-size: 0.95rem; color: white;">Callog Enterprise</div>
+            <div style="font-size: 0.72rem; color: rgba(255,255,255,0.8);">Call Vault & CRM Hub</div>
+            <div style="margin-top: 6px; font-size: 0.65rem; color: #45c79a; font-weight: 600;">Active: Jio 4G (SIM 1), Airtel (SIM 2)</div>
+          </div>
+
+          <div style="display: flex; flex-direction: column; gap: 6px; flex: 1; overflow-y: auto;">
+            <div style="font-size: 0.68rem; color: #85948c; text-transform: uppercase; font-weight: 700; margin: 4px 0;">Telephony</div>
+            <div class="screen-nav-item" onclick="switchScreen('dialer'); toggleDrawer(false);"><i class="fa-solid fa-calculator"></i> Dialer</div>
+            <div class="screen-nav-item" onclick="switchScreen('call_logs'); toggleDrawer(false);"><i class="fa-solid fa-clock-rotate-left"></i> Call Logs</div>
+            <div class="screen-nav-item" onclick="switchScreen('recordings'); toggleDrawer(false);"><i class="fa-solid fa-file-audio"></i> Recording Vault</div>
+
+            <div style="font-size: 0.68rem; color: #85948c; text-transform: uppercase; font-weight: 700; margin: 8px 0 4px 0;">CRM & Pipeline</div>
+            <div class="screen-nav-item" onclick="switchScreen('crm_pipeline'); toggleDrawer(false);"><i class="fa-solid fa-chart-kanban"></i> Sales Pipeline</div>
+            <div class="screen-nav-item" onclick="switchScreen('contacts'); toggleDrawer(false);"><i class="fa-solid fa-address-book"></i> Contacts & Leads</div>
+            <div class="screen-nav-item" onclick="switchScreen('tasks'); toggleDrawer(false);"><i class="fa-solid fa-list-check"></i> Tasks</div>
+            <div class="screen-nav-item" onclick="switchScreen('analytics'); toggleDrawer(false);"><i class="fa-solid fa-chart-pie"></i> Analytics</div>
+
+            <div style="font-size: 0.68rem; color: #85948c; text-transform: uppercase; font-weight: 700; margin: 8px 0 4px 0;">System</div>
+            <div class="screen-nav-item" onclick="switchScreen('settings'); toggleDrawer(false);"><i class="fa-solid fa-sliders"></i> Settings & Rules</div>
+          </div>
+
+          <div style="padding-top: 10px; border-top: 1px solid rgba(255,255,255,0.08);">
+            <button class="btn-control" style="width: 100%; justify-content: center; background: rgba(69, 199, 154, 0.2); color: #45c79a; border-color: rgba(69, 199, 154, 0.4);" onclick="triggerSyncNotification()">
+              <i class="fa-solid fa-cloud-arrow-up"></i> Sync Vault Now
+            </button>
+          </div>
+        </div>
+
+        <!-- Phone Dynamic Screen Container -->
+        <div class="phone-screen-content">
+
+          <!-- SCREEN 1: DIALER -->
+          <div class="screen-view" id="view-dialer">
+            <div class="phone-app-header">
+              <div class="title"><i class="fa-solid fa-bars" style="font-size: 0.95rem; cursor: pointer;" onclick="toggleDrawer(true)"></i> Dialer</div>
+              <span class="lead-badge cold"><i class="fa-solid fa-shield-check"></i> Default Phone</span>
+            </div>
+
+            <!-- T9 Match Result Box -->
+            <div class="t9-match-card" id="t9MatchPreview" onclick="setDialerNumber('9876543210')">
+              <div class="avatar">SJ</div>
+              <div style="flex:1;">
+                <div style="font-weight: 600; font-size: 0.82rem;">Sarah <span style="color:#45c79a; font-weight:700;">Jen</span>kins</div>
+                <div style="font-size: 0.68rem; color: #94a3b8;">TechCorp Solutions &bull; +91 98765 43210</div>
+              </div>
+              <span class="lead-badge hot">Hot Lead</span>
+            </div>
+
+            <div class="dialer-input-display">
+              <div class="dialer-number" id="dialerDisplay"></div>
+              <div class="backspace-btn" id="dialerBackspace" onclick="backspaceDigit()" style="display:none;">
+                <i class="fa-solid fa-delete-left"></i>
+              </div>
+            </div>
+
+            <!-- T9 Keypad -->
+            <div class="keypad-grid">
+              <div class="keypad-key" onclick="pressDigit('1')"><span class="digit">1</span><span class="letters"></span></div>
+              <div class="keypad-key" onclick="pressDigit('2')"><span class="digit">2</span><span class="letters">ABC</span></div>
+              <div class="keypad-key" onclick="pressDigit('3')"><span class="digit">3</span><span class="letters">DEF</span></div>
+              <div class="keypad-key" onclick="pressDigit('4')"><span class="digit">4</span><span class="letters">GHI</span></div>
+              <div class="keypad-key" onclick="pressDigit('5')"><span class="digit">5</span><span class="letters">JKL</span></div>
+              <div class="keypad-key" onclick="pressDigit('6')"><span class="digit">6</span><span class="letters">MNO</span></div>
+              <div class="keypad-key" onclick="pressDigit('7')"><span class="digit">7</span><span class="letters">PQRS</span></div>
+              <div class="keypad-key" onclick="pressDigit('8')"><span class="digit">8</span><span class="letters">TUV</span></div>
+              <div class="keypad-key" onclick="pressDigit('9')"><span class="digit">9</span><span class="letters">WXYZ</span></div>
+              <div class="keypad-key" onclick="pressDigit('*')"><span class="digit">*</span><span class="letters"></span></div>
+              <div class="keypad-key" onclick="pressDigit('0')"><span class="digit">0</span><span class="letters">+</span></div>
+              <div class="keypad-key" onclick="pressDigit('#')"><span class="digit">#</span><span class="letters"></span></div>
+            </div>
+
+            <!-- Dual SIM Call Buttons -->
+            <div class="dual-sim-row">
+              <button class="sim-call-btn sim1" onclick="initiateSimCall('SIM 1 (Jio 4G)')">
+                <i class="fa-solid fa-phone"></i>
+                <div style="text-align: left;">
+                  <div style="font-size:0.75rem; font-weight:700;">SIM 1</div>
+                  <div style="font-size:0.62rem; opacity:0.85;">Jio 4G</div>
+                </div>
+              </button>
+              <button class="sim-call-btn sim2" onclick="initiateSimCall('SIM 2 (Airtel)')">
+                <i class="fa-solid fa-phone"></i>
+                <div style="text-align: left;">
+                  <div style="font-size:0.75rem; font-weight:700;">SIM 2</div>
+                  <div style="font-size:0.62rem; opacity:0.85;">Airtel</div>
+                </div>
+              </button>
+            </div>
+          </div>
+
+          <!-- SCREEN 2: CALL LOGS (DEFAULT) -->
+          <div class="screen-view active" id="view-call_logs">
+            <div class="phone-app-header">
+              <div class="title"><i class="fa-solid fa-bars" style="font-size: 0.95rem; cursor: pointer;" onclick="toggleDrawer(true)"></i> Call Logs</div>
+              <div class="icon-btn" onclick="triggerSyncNotification()"><i class="fa-solid fa-rotate"></i></div>
+            </div>
+
+            <!-- Search Bar -->
+            <div class="search-input-box">
+              <i class="fa-solid fa-magnifying-glass"></i>
+              <input type="text" placeholder="Search caller, company, notes..." />
+            </div>
+
+            <!-- Filter Chips -->
+            <div class="filter-chips-row">
+              <div class="chip-filter active">All (48)</div>
+              <div class="chip-filter">Incoming</div>
+              <div class="chip-filter">Outgoing</div>
+              <div class="chip-filter">Missed</div>
+              <div class="chip-filter">Recorded</div>
+            </div>
+
+            <!-- Call Log List Items -->
+            <div style="display: flex; flex-direction: column; gap: 8px;">
+
+              <!-- Item 1: Hot Lead with Audio & Firestore Synced -->
+              <div class="phone-card" onclick="switchScreen('call_details')">
+                <div style="display: flex; align-items: center; justify-content: space-between;">
+                  <div style="display: flex; align-items: center; gap: 10px;">
+                    <div class="avatar">SJ</div>
+                    <div>
+                      <div style="font-weight: 700; font-size: 0.86rem; color: #ffffff;">Sarah Jenkins</div>
+                      <div style="font-size: 0.68rem; color: #45c79a; display: flex; align-items: center; gap: 4px;">
+                        <i class="fa-solid fa-phone-arrow-down-left"></i> 04:32 min &bull; 10 mins ago &bull; SIM 1
+                      </div>
+                    </div>
+                  </div>
+                  <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 4px;">
+                    <span class="lead-badge hot">Hot Lead</span>
+                    <div style="display:flex; gap:6px; font-size:0.75rem;">
+                      <i class="fa-solid fa-microphone" style="color: #45c79a;" title="Recorded"></i>
+                      <i class="fa-solid fa-cloud-check" style="color: #4a4fd8;" title="Synced to CRM"></i>
+                    </div>
+                  </div>
+                </div>
+                <div style="font-size: 0.72rem; color: #94a3b8; background: rgba(0,0,0,0.2); padding: 4px 8px; border-radius: 4px;">
+                  "Agreed to review ₹2.5L proposal by Thursday 3 PM"
+                </div>
+              </div>
+
+              <!-- Item 2: Warm Lead Outgoing -->
+              <div class="phone-card" onclick="switchScreen('call_details')">
+                <div style="display: flex; align-items: center; justify-content: space-between;">
+                  <div style="display: flex; align-items: center; gap: 10px;">
+                    <div class="avatar" style="background: linear-gradient(135deg, #f4b544, #e85c5c);">AK</div>
+                    <div>
+                      <div style="font-weight: 700; font-size: 0.86rem; color: #ffffff;">Amit Khanna</div>
+                      <div style="font-size: 0.68rem; color: #94a3b8; display: flex; align-items: center; gap: 4px;">
+                        <i class="fa-solid fa-phone-arrow-up-right" style="color:#b8bcff;"></i> 02:15 min &bull; Today 09:30 AM &bull; SIM 2
+                      </div>
+                    </div>
+                  </div>
+                  <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 4px;">
+                    <span class="lead-badge warm">Warm</span>
+                    <i class="fa-solid fa-microphone" style="color: #45c79a;"></i>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Item 3: Missed Call Cold Lead -->
+              <div class="phone-card" onclick="switchScreen('incoming_call')">
+                <div style="display: flex; align-items: center; justify-content: space-between;">
+                  <div style="display: flex; align-items: center; gap: 10px;">
+                    <div class="avatar" style="background: linear-gradient(135deg, #334155, #64748b);">VR</div>
+                    <div>
+                      <div style="font-weight: 700; font-size: 0.86rem; color: #ffffff;">Vikram Rathore</div>
+                      <div style="font-size: 0.68rem; color: #e85c5c; display: flex; align-items: center; gap: 4px;">
+                        <i class="fa-solid fa-phone-slash"></i> Missed &bull; Yesterday &bull; SIM 1
+                      </div>
+                    </div>
+                  </div>
+                  <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 4px;">
+                    <span class="lead-badge cold">Cold</span>
+                    <i class="fa-solid fa-arrow-rotate-left" style="color: #e85c5c;"></i>
+                  </div>
+                </div>
+              </div>
+
+            </div>
+          </div>
+
+          <!-- SCREEN 3: CALL DETAILS & AUDIO PLAYER -->
+          <div class="screen-view" id="view-call_details">
+            <div class="phone-app-header">
+              <div class="title"><i class="fa-solid fa-arrow-left" style="font-size: 0.95rem; cursor: pointer;" onclick="switchScreen('call_logs')"></i> Call Details</div>
+              <div class="icon-btn"><i class="fa-solid fa-star" style="color: #f4b544;"></i></div>
+            </div>
+
+            <!-- Caller Info Block -->
+            <div class="phone-card" style="align-items: center; text-align: center; padding: 18px;">
+              <div class="avatar" style="width: 60px; height: 60px; font-size: 1.2rem;">SJ</div>
+              <div style="font-size: 1.1rem; font-weight: 700; color: #ffffff; margin-top: 6px;">Sarah Jenkins</div>
+              <div style="font-size: 0.76rem; color: #b8bcff;">VP Enterprise &bull; TechCorp Solutions</div>
+              <div style="font-size: 0.74rem; color: #94a3b8; margin-top: 2px;">+91 98765 43210 &bull; SIM 1 (Jio)</div>
+
+              <div style="display: flex; gap: 8px; margin-top: 10px;">
+                <span class="lead-badge hot">Hot Lead</span>
+                <span class="lead-badge cold"><i class="fa-solid fa-cloud-arrow-up"></i> Firestore Synced</span>
+              </div>
+            </div>
+
+            <!-- Audio Recording Player Card -->
+            <div class="phone-card">
+              <div style="display: flex; justify-content: space-between; align-items: center;">
+                <span style="font-size: 0.75rem; font-weight: 700; color: #45c79a;"><i class="fa-solid fa-waveform-lines"></i> Call Audio Recording</span>
+                <span style="font-size: 0.68rem; color: #94a3b8;">04:32 min &bull; 4.2 MB</span>
+              </div>
+
+              <!-- Audio Waveform -->
+              <div style="background: #0f172a; border-radius: 8px; padding: 8px 12px; display: flex; align-items: center; gap: 10px;">
+                <div class="icon-btn" style="background: #45c79a; color: #0b1326; border: none; width: 32px; height: 32px;" onclick="toggleAudioPlay(this)">
+                  <i class="fa-solid fa-play" style="font-size: 0.8rem;"></i>
+                </div>
+
+                <div class="waveform-visual" style="flex: 1;">
+                  <div class="waveform-bar" style="height: 40%;"></div>
+                  <div class="waveform-bar" style="height: 70%;"></div>
+                  <div class="waveform-bar" style="height: 100%;"></div>
+                  <div class="waveform-bar" style="height: 60%;"></div>
+                  <div class="waveform-bar" style="height: 30%;"></div>
+                  <div class="waveform-bar" style="height: 80%;"></div>
+                  <div class="waveform-bar" style="height: 90%;"></div>
+                  <div class="waveform-bar" style="height: 50%;"></div>
+                  <div class="waveform-bar" style="height: 75%;"></div>
+                  <div class="waveform-bar" style="height: 40%;"></div>
+                  <div class="waveform-bar" style="height: 60%;"></div>
+                  <div class="waveform-bar" style="height: 95%;"></div>
+                  <div class="waveform-bar" style="height: 70%;"></div>
+                </div>
+
+                <span style="font-size: 0.68rem; font-family: var(--font-mono); color: #45c79a;">01:24</span>
+              </div>
+            </div>
+
+            <!-- Notes Section -->
+            <div class="phone-card">
+              <span style="font-size: 0.78rem; font-weight: 700; color: #ffffff;">CRM Discussion Notes</span>
+              <p style="font-size: 0.74rem; color: #dae2fd; line-height: 1.4;">
+                Client requested annual tier pricing for 50 licenses. Emphasized compliance with automatic call backup and multi-SIM routing.
+              </p>
+            </div>
+          </div>
+
+          <!-- SCREEN 4: INCOMING CALL SCREEN (TELECOM RINGING) -->
+          <div class="screen-view" id="view-incoming_call">
+            <div style="text-align: center; margin-top: 14px;">
+              <span style="font-size: 0.7rem; font-weight: 700; letter-spacing: 0.15em; color: #b8bcff; text-transform: uppercase;">Incoming Call</span>
+            </div>
+
+            <!-- Pulsing Avatar -->
+            <div class="incall-pulse-avatar">
+              <div class="pulse-ring"></div>
+              <div class="avatar" style="width: 76px; height: 76px; font-size: 1.5rem;">SJ</div>
+            </div>
+
+            <div style="text-align: center;">
+              <h2 style="font-family: var(--font-display); font-size: 1.6rem; font-weight: 700; color: #ffffff;">Sarah Jenkins</h2>
+              <div style="font-size: 0.8rem; color: #45c79a; font-weight: 600;">TechCorp Solutions &bull; VP Enterprise</div>
+              <div style="font-size: 0.74rem; color: #94a3b8; margin-top: 2px;">+91 98765 43210 &bull; SIM 1 (Jio 4G)</div>
+            </div>
+
+            <!-- CRM Context Card in Incoming Screen -->
+            <div class="phone-card" style="background: rgba(74, 79, 216, 0.15); border-color: rgba(74, 79, 216, 0.35); margin-top: 12px;">
+              <div style="font-size: 0.74rem; font-weight: 700; color: #b8bcff; display: flex; align-items: center; gap: 6px;">
+                <i class="fa-solid fa-sparkles"></i> CRM Real-Time Context
+              </div>
+              <div style="font-size: 0.72rem; color: #dae2fd;">
+                &bull; Deal Stage: <strong>Proposal Review (₹2,50,000)</strong><br />
+                &bull; Last Talk: <strong>2 days ago (08:14 min)</strong><br />
+                &bull; Follow-up Note: <strong>Awaiting procurement sign-off</strong>
+              </div>
+            </div>
+
+            <!-- Bottom Inbound Actions -->
+            <div style="display: flex; justify-content: space-around; align-items: center; margin-top: auto; padding-bottom: 20px;">
+              <div style="display:flex; flex-direction:column; align-items:center; gap:6px;">
+                <div class="incall-action-btn hangup" onclick="switchScreen('call_logs')">
+                  <i class="fa-solid fa-phone-slash"></i>
+                </div>
+                <span style="font-size:0.68rem; color:#94a3b8;">Decline</span>
+              </div>
+
+              <div style="display:flex; flex-direction:column; align-items:center; gap:6px;">
+                <div class="incall-action-btn" onclick="alert('Quick SMS sent: In a meeting, calling you back in 10 mins.')">
+                  <i class="fa-solid fa-message-dots"></i>
+                </div>
+                <span style="font-size:0.68rem; color:#94a3b8;">Reply SMS</span>
+              </div>
+
+              <div style="display:flex; flex-direction:column; align-items:center; gap:6px;">
+                <div class="incall-action-btn answer" onclick="switchScreen('active_call')">
+                  <i class="fa-solid fa-phone"></i>
+                </div>
+                <span style="font-size:0.68rem; color:#94a3b8;">Answer</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- SCREEN 5: ACTIVE CALL SCREEN (CONNECTED HUD) -->
+          <div class="screen-view" id="view-active_call">
+            <div style="text-align: center; margin-top: 8px;">
+              <span id="activeCallTimer" style="font-size: 0.95rem; font-weight: 700; color: #45c79a; font-family: var(--font-mono);">00:42</span>
+            </div>
+
+            <div style="text-align: center; margin-top: 10px;">
+              <div class="avatar" style="width: 68px; height: 68px; font-size: 1.3rem; margin: 0 auto 8px auto;">SJ</div>
+              <h2 style="font-size: 1.3rem; font-weight: 700; color: #ffffff;">Sarah Jenkins</h2>
+              <div style="font-size: 0.75rem; color: #94a3b8;">TechCorp Solutions &bull; SIM 1 (Jio 4G)</div>
+            </div>
+
+            <!-- In-Call Controls Grid -->
+            <div class="incall-grid-buttons">
+              <div class="incall-action-btn" id="btnMute" onclick="toggleCallBtn('btnMute')">
+                <i class="fa-solid fa-microphone-slash"></i>
+                <span style="font-size:0.58rem; margin-top:2px;">Mute</span>
+              </div>
+              <div class="incall-action-btn" onclick="alert('DTMF Keypad bottom sheet opened')">
+                <i class="fa-solid fa-dialpad"></i>
+                <span style="font-size:0.58rem; margin-top:2px;">Keypad</span>
+              </div>
+              <div class="incall-action-btn" id="btnSpeaker" onclick="toggleCallBtn('btnSpeaker')">
+                <i class="fa-solid fa-volume-high"></i>
+                <span style="font-size:0.58rem; margin-top:2px;">Speaker</span>
+              </div>
+              <div class="incall-action-btn" id="btnHold" onclick="toggleCallBtn('btnHold')">
+                <i class="fa-solid fa-pause"></i>
+                <span style="font-size:0.58rem; margin-top:2px;">Hold</span>
+              </div>
+              <div class="incall-action-btn active" title="Recording enabled">
+                <i class="fa-solid fa-record-vinyl" style="color:#e85c5c;"></i>
+                <span style="font-size:0.58rem; margin-top:2px;">Rec</span>
+              </div>
+              <div class="incall-action-btn" onclick="switchScreen('contacts')">
+                <i class="fa-solid fa-user-tag"></i>
+                <span style="font-size:0.58rem; margin-top:2px;">CRM</span>
+              </div>
+            </div>
+
+            <!-- Live Note Quick Taker inside Call -->
+            <div class="phone-card" style="margin-top: 6px;">
+              <span style="font-size: 0.72rem; font-weight: 700; color: #b8bcff;">In-Call Rapid Note</span>
+              <input type="text" placeholder="Type key bullet point..." style="background:transparent; border:none; color:white; font-size:0.75rem; outline:none;" />
+            </div>
+
+            <!-- End Call Red Button -->
+            <div style="margin-top: auto; padding-bottom: 24px; text-align: center;">
+              <div class="incall-action-btn hangup" style="margin: 0 auto;" onclick="switchScreen('post_call_summary')">
+                <i class="fa-solid fa-phone-slash"></i>
+              </div>
+            </div>
+          </div>
+
+          <!-- SCREEN 6: POST-CALL SUMMARY WRAP-UP -->
+          <div class="screen-view" id="view-post_call_summary">
+            <div class="phone-app-header">
+              <div class="title">Call Summary</div>
+              <span class="lead-badge hot"><i class="fa-solid fa-check"></i> Connected</span>
+            </div>
+
+            <div class="phone-card">
+              <div style="font-weight: 700; font-size: 0.88rem; color: #ffffff;">Sarah Jenkins &bull; 04:32 min</div>
+              <div style="font-size: 0.7rem; color: #94a3b8;">Call finished &bull; Audio file saved to Vault</div>
+            </div>
+
+            <!-- Disposition Outcomes -->
+            <div style="display: flex; flex-direction: column; gap: 6px;">
+              <span style="font-size: 0.75rem; font-weight: 700; color: #ffffff;">Call Outcome</span>
+              <div style="display: flex; flex-wrap: wrap; gap: 6px;">
+                <div class="chip-filter active">Connected</div>
+                <div class="chip-filter">Callback Required</div>
+                <div class="chip-filter">Follow-up Needed</div>
+                <div class="chip-filter">Busy</div>
+                <div class="chip-filter">Not Interested</div>
+              </div>
+            </div>
+
+            <!-- Interaction Notes Area -->
+            <div style="display: flex; flex-direction: column; gap: 6px;">
+              <span style="font-size: 0.75rem; font-weight: 700; color: #ffffff;">Discussion Notes</span>
+              <textarea style="background: #171f33; border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; color: white; padding: 8px; font-size: 0.75rem; height: 68px; outline: none; font-family: var(--font-body);" placeholder="Add details from the call..."></textarea>
+            </div>
+
+            <!-- Schedule Follow-Up -->
+            <div style="display: flex; flex-direction: column; gap: 6px;">
+              <span style="font-size: 0.75rem; font-weight: 700; color: #ffffff;">Schedule Next Follow-Up</span>
+              <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px;">
+                <button class="btn-control" style="font-size: 0.7rem; justify-content: center;">Tomorrow</button>
+                <button class="btn-control active" style="font-size: 0.7rem; justify-content: center;">In 3 Days</button>
+                <button class="btn-control" style="font-size: 0.7rem; justify-content: center;">In 1 Week</button>
+              </div>
+            </div>
+
+            <button class="btn-control active" style="margin-top: auto; padding: 12px; justify-content: center; font-size: 0.85rem;" onclick="switchScreen('call_logs')">
+              <i class="fa-solid fa-floppy-disk"></i> Save & Log to Supabase
+            </button>
+          </div>
+
+          <!-- SCREEN 7: SALES PIPELINE (KANBAN) -->
+          <div class="screen-view" id="view-crm_pipeline">
+            <div class="phone-app-header">
+              <div class="title"><i class="fa-solid fa-bars" style="font-size: 0.95rem; cursor: pointer;" onclick="toggleDrawer(true)"></i> Sales Pipeline</div>
+              <div class="icon-btn" onclick="alert('New deal creation dialog')"><i class="fa-solid fa-plus"></i></div>
+            </div>
+
+            <!-- Volume Summary Card -->
+            <div class="phone-card" style="background: linear-gradient(135deg, rgba(74, 79, 216, 0.25), rgba(69, 199, 154, 0.15));">
+              <div style="display: flex; justify-content: space-between; align-items: center;">
+                <div>
+                  <div style="font-size: 0.68rem; color: #94a3b8;">Pipeline Total</div>
+                  <div style="font-size: 1.3rem; font-weight: 700; color: #45c79a;">₹8,35,000</div>
+                </div>
+                <div style="text-align: right;">
+                  <div style="font-size: 0.68rem; color: #94a3b8;">Win Rate</div>
+                  <div style="font-size: 1.1rem; font-weight: 700; color: #b8bcff;">68%</div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Stage Filter Tabs -->
+            <div class="kanban-stages-tabs">
+              <div class="kanban-tab active"><i class="fa-solid fa-sparkles"></i> New (4)</div>
+              <div class="kanban-tab"><i class="fa-solid fa-phone-volume"></i> Contacted (6)</div>
+              <div class="kanban-tab"><i class="fa-solid fa-badge-check"></i> Qualified (3)</div>
+              <div class="kanban-tab"><i class="fa-solid fa-file-invoice"></i> Proposal (2)</div>
+              <div class="kanban-tab"><i class="fa-solid fa-trophy"></i> Won (5)</div>
+            </div>
+
+            <!-- Deals List in Stage -->
+            <div style="display: flex; flex-direction: column; gap: 8px;">
+              <div class="phone-card" onclick="switchScreen('call_details')">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                  <span style="font-weight: 700; font-size: 0.84rem; color: white;">Sarah Jenkins</span>
+                  <span class="lead-badge hot">High Priority</span>
+                </div>
+                <div style="font-size: 0.72rem; color: #94a3b8;">TechCorp Solutions &bull; Enterprise 50-Seat</div>
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 4px; border-top: 1px solid rgba(255,255,255,0.06); padding-top: 6px;">
+                  <span style="font-weight: 700; color: #45c79a; font-size: 0.82rem;">₹2,50,000</span>
+                  <div class="icon-btn" style="width:28px; height:28px;" onclick="event.stopPropagation(); initiateSimCall('Sarah Jenkins');"><i class="fa-solid fa-phone" style="font-size:0.7rem;"></i></div>
+                </div>
+              </div>
+
+              <div class="phone-card">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                  <span style="font-weight: 700; font-size: 0.84rem; color: white;">Amit Khanna</span>
+                  <span class="lead-badge warm">Medium</span>
+                </div>
+                <div style="font-size: 0.72rem; color: #94a3b8;">Apex Retail &bull; 15-Seat Setup</div>
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 4px; border-top: 1px solid rgba(255,255,255,0.06); padding-top: 6px;">
+                  <span style="font-weight: 700; color: #45c79a; font-size: 0.82rem;">₹85,000</span>
+                  <div class="icon-btn" style="width:28px; height:28px;"><i class="fa-solid fa-phone" style="font-size:0.7rem;"></i></div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- SCREEN 8: RECORDING VAULT -->
+          <div class="screen-view" id="view-recordings">
+            <div class="phone-app-header">
+              <div class="title"><i class="fa-solid fa-bars" style="font-size: 0.95rem; cursor: pointer;" onclick="toggleDrawer(true)"></i> Recording Vault</div>
+              <div class="icon-btn" onclick="alert('Rescanning local recordings folder')"><i class="fa-solid fa-arrows-rotate"></i></div>
+            </div>
+
+            <div class="phone-card">
+              <div style="display:flex; justify-content:space-between; align-items:center;">
+                <span style="font-size:0.75rem; color:#94a3b8;">Vault Storage</span>
+                <span style="font-size:0.75rem; color:#45c79a; font-weight:700;">142 Files &bull; 1.2 GB</span>
+              </div>
+            </div>
+
+            <!-- Grouped Contact Audio Thread -->
+            <div class="phone-card">
+              <div style="display:flex; align-items:center; justify-content:space-between;">
+                <div style="display:flex; align-items:center; gap:10px;">
+                  <div class="avatar">SJ</div>
+                  <div>
+                    <div style="font-weight:700; font-size:0.85rem; color:white;">Sarah Jenkins</div>
+                    <div style="font-size:0.68rem; color:#45c79a;">3 audio recordings linked</div>
+                  </div>
+                </div>
+                <i class="fa-solid fa-chevron-up" style="font-size:0.8rem; color:#94a3b8;"></i>
+              </div>
+
+              <!-- Nested child recordings -->
+              <div style="display:flex; flex-direction:column; gap:6px; margin-top:8px; padding-left:10px; border-left:2px solid #4a4fd8;">
+                <div style="background:#0f172a; padding:6px 10px; border-radius:6px; font-size:0.7rem; display:flex; justify-content:space-between;">
+                  <span><i class="fa-solid fa-play" style="color:#45c79a; margin-right:4px;"></i> REC_20260915_1430.m4a</span>
+                  <span style="color:#b8bcff;">04:32</span>
+                </div>
+                <div style="background:#0f172a; padding:6px 10px; border-radius:6px; font-size:0.7rem; display:flex; justify-content:space-between;">
+                  <span><i class="fa-solid fa-play" style="color:#45c79a; margin-right:4px;"></i> REC_20260912_1115.m4a</span>
+                  <span style="color:#b8bcff;">08:14</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- SCREEN 9: CONTACTS -->
+          <div class="screen-view" id="view-contacts">
+            <div class="phone-app-header">
+              <div class="title"><i class="fa-solid fa-bars" style="font-size: 0.95rem; cursor: pointer;" onclick="toggleDrawer(true)"></i> Contacts & Leads</div>
+              <div class="icon-btn"><i class="fa-solid fa-user-plus"></i></div>
+            </div>
+
+            <div class="search-input-box">
+              <i class="fa-solid fa-magnifying-glass"></i>
+              <input type="text" placeholder="Search 284 contacts..." />
+            </div>
+
+            <div style="display: flex; flex-direction: column; gap: 8px;">
+              <div class="phone-card" onclick="switchScreen('call_details')">
+                <div style="display: flex; align-items: center; justify-content: space-between;">
+                  <div style="display:flex; gap:10px; align-items:center;">
+                    <div class="avatar">SJ</div>
+                    <div>
+                      <div style="font-weight:700; font-size:0.85rem; color:white;">Sarah Jenkins</div>
+                      <div style="font-size:0.68rem; color:#94a3b8;">TechCorp Solutions &bull; +91 98765 43210</div>
+                    </div>
+                  </div>
+                  <span class="lead-badge hot">Hot</span>
+                </div>
+              </div>
+
+              <div class="phone-card">
+                <div style="display: flex; align-items: center; justify-content: space-between;">
+                  <div style="display:flex; gap:10px; align-items:center;">
+                    <div class="avatar" style="background:#f4b544; color:#0b1326;">AK</div>
+                    <div>
+                      <div style="font-weight:700; font-size:0.85rem; color:white;">Amit Khanna</div>
+                      <div style="font-size:0.68rem; color:#94a3b8;">Apex Retail &bull; +91 91234 56789</div>
+                    </div>
+                  </div>
+                  <span class="lead-badge warm">Warm</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- SCREEN 10: TASKS -->
+          <div class="screen-view" id="view-tasks">
+            <div class="phone-app-header">
+              <div class="title"><i class="fa-solid fa-bars" style="font-size: 0.95rem; cursor: pointer;" onclick="toggleDrawer(true)"></i> Tasks & Follow-ups</div>
+              <div class="icon-btn"><i class="fa-solid fa-plus"></i></div>
+            </div>
+
+            <div style="display: flex; flex-direction: column; gap: 8px;">
+              <div class="phone-card">
+                <div style="display:flex; align-items:center; gap:8px;">
+                  <input type="checkbox" checked style="accent-color:#45c79a; width:16px; height:16px;" />
+                  <div style="flex:1;">
+                    <div style="font-weight:700; font-size:0.82rem; color:white;">Send proposal draft to Sarah</div>
+                    <div style="font-size:0.68rem; color:#45c79a;">Due: Today 05:00 PM &bull; High Priority</div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="phone-card">
+                <div style="display:flex; align-items:center; gap:8px;">
+                  <input type="checkbox" style="accent-color:#45c79a; width:16px; height:16px;" />
+                  <div style="flex:1;">
+                    <div style="font-weight:700; font-size:0.82rem; color:white;">Follow-up callback with Amit</div>
+                    <div style="font-size:0.68rem; color:#f4b544;">Due: Tomorrow 11:00 AM</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- SCREEN 11: ANALYTICS -->
+          <div class="screen-view" id="view-analytics">
+            <div class="phone-app-header">
+              <div class="title"><i class="fa-solid fa-bars" style="font-size: 0.95rem; cursor: pointer;" onclick="toggleDrawer(true)"></i> Call Analytics</div>
+            </div>
+
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+              <div class="phone-card">
+                <div style="font-size:0.68rem; color:#94a3b8;">Total Calls</div>
+                <div style="font-size:1.2rem; font-weight:700; color:white;">384</div>
+              </div>
+              <div class="phone-card">
+                <div style="font-size:0.68rem; color:#94a3b8;">Avg Talk Time</div>
+                <div style="font-size:1.2rem; font-weight:700; color:#45c79a;">03:45m</div>
+              </div>
+            </div>
+
+            <div class="phone-card">
+              <span style="font-size:0.75rem; font-weight:700; color:white;">Call Heatmap (Peak Hours)</span>
+              <div style="display:flex; justify-content:space-between; align-items:flex-end; height:70px; padding-top:10px;">
+                <div style="width:14%; height:30%; background:#4a4fd8; border-radius:4px; text-align:center;"><span style="font-size:0.55rem;">10am</span></div>
+                <div style="width:14%; height:80%; background:#45c79a; border-radius:4px; text-align:center;"><span style="font-size:0.55rem;">12pm</span></div>
+                <div style="width:14%; height:60%; background:#4a4fd8; border-radius:4px; text-align:center;"><span style="font-size:0.55rem;">2pm</span></div>
+                <div style="width:14%; height:100%; background:#45c79a; border-radius:4px; text-align:center;"><span style="font-size:0.55rem;">4pm</span></div>
+                <div style="width:14%; height:45%; background:#4a4fd8; border-radius:4px; text-align:center;"><span style="font-size:0.55rem;">6pm</span></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- SCREEN 12: SETTINGS & DUAL-SIM -->
+          <div class="screen-view" id="view-settings">
+            <div class="phone-app-header">
+              <div class="title"><i class="fa-solid fa-bars" style="font-size: 0.95rem; cursor: pointer;" onclick="toggleDrawer(true)"></i> Settings</div>
+            </div>
+
+            <div class="phone-card">
+              <div style="font-weight:700; font-size:0.84rem; color:white;"><i class="fa-solid fa-sim-card" style="color:#45c79a; margin-right:6px;"></i> Business SIM Routing</div>
+              <div style="font-size:0.72rem; color:#94a3b8;">Route CRM leads through business lines automatically</div>
+              <div style="display:flex; justify-content:space-between; align-items:center; margin-top:8px;">
+                <span style="font-size:0.74rem;">Default Business Line</span>
+                <select style="background:#0f172a; color:white; border:1px solid #334155; padding:4px 8px; border-radius:4px; font-size:0.7rem;">
+                  <option>SIM 1 (Jio 4G)</option>
+                  <option>SIM 2 (Airtel)</option>
+                  <option>Ask Every Time</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="phone-card">
+              <div style="font-weight:700; font-size:0.84rem; color:white;"><i class="fa-solid fa-music" style="color:#b8bcff; margin-right:6px;"></i> CRM Ringtone Policy</div>
+              <div style="font-size:0.72rem; color:#94a3b8;">Distinct ringing audio per Lead Status</div>
+              <div style="margin-top:6px; font-size:0.7rem; color:#dae2fd;">
+                &bull; Hot VIP Lead: <strong>Executive Chime</strong><br />
+                &bull; Cold / Unknown: <strong>Standard Ring</strong>
+              </div>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- Phone Bottom Navigation Bar -->
+        <div class="phone-bottom-nav">
+          <div class="bottom-tab-item" onclick="switchScreen('dialer')" data-tab="dialer">
+            <i class="fa-solid fa-calculator"></i>
+            <span>Dialer</span>
+          </div>
+          <div class="bottom-tab-item active" onclick="switchScreen('call_logs')" data-tab="call_logs">
+            <i class="fa-solid fa-clock-rotate-left"></i>
+            <span>Logs</span>
+          </div>
+          <div class="bottom-tab-item" onclick="switchScreen('contacts')" data-tab="contacts">
+            <i class="fa-solid fa-address-book"></i>
+            <span>Contacts</span>
+          </div>
+          <div class="bottom-tab-item" onclick="switchScreen('recordings')" data-tab="recordings">
+            <i class="fa-solid fa-file-audio"></i>
+            <span>Vault</span>
+          </div>
+          <div class="bottom-tab-item" onclick="switchScreen('crm_pipeline')" data-tab="crm_pipeline">
+            <i class="fa-solid fa-chart-kanban"></i>
+            <span>CRM</span>
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <!-- Right Sidebar: Architectural Specs & Compose Code Inspector -->
+    <aside class="sidebar-inspector">
+      <div class="sidebar-title">Screen Diagnostics & Architecture</div>
+
+      <div class="inspector-card">
+        <h3 id="specTitle"><i class="fa-solid fa-cube"></i> CallLogsScreen.kt</h3>
+        <div class="spec-item">
+          <span class="label">Jetpack Compose Route:</span>
+          <span class="value" id="specRoute">Nav3Key.CrmTab.CallLogs</span>
+        </div>
+        <div class="spec-item">
+          <span class="label">Architecture Layer:</span>
+          <span class="value">MVVM + Clean Architecture</span>
+        </div>
+        <div class="spec-item">
+          <span class="label">State Management:</span>
+          <span class="value">StateFlow&lt;List&lt;CallLogEntry&gt;&gt;</span>
+        </div>
+        <div class="spec-item">
+          <span class="label">Local Cache:</span>
+          <span class="value">Room (CallDao, SalesCallDao)</span>
+        </div>
+        <div class="spec-item">
+          <span class="label">Cloud Sync:</span>
+          <span class="value">Firebase Firestore / Supabase</span>
+        </div>
+      </div>
+
+      <div class="inspector-card">
+        <h3><i class="fa-solid fa-code-branch"></i> Core Design Tokens</h3>
+        <div class="spec-item">
+          <span class="label">Primary Cobalt:</span>
+          <span class="value">#4A4FD8 (AllSetBlue)</span>
+        </div>
+        <div class="spec-item">
+          <span class="label">Electric Teal:</span>
+          <span class="value">#45C79A (Teal500)</span>
+        </div>
+        <div class="spec-item">
+          <span class="label">Velvet Surface:</span>
+          <span class="value">#0B1326 / #171F33</span>
+        </div>
+        <div class="spec-item">
+          <span class="label">Display Serif:</span>
+          <span class="value">EB Garamond</span>
+        </div>
+        <div class="spec-item">
+          <span class="label">UI Sans Font:</span>
+          <span class="value">Inter &bull; Space Grotesk</span>
+        </div>
+      </div>
+
+      <div class="inspector-card">
+        <h3><i class="fa-solid fa-bolt"></i> Interactive Features</h3>
+        <ul style="font-size: 0.74rem; color: var(--text-muted); list-style: square; padding-left: 16px; line-height: 1.5;">
+          <li>Interactive T9 keypad typing & backspace</li>
+          <li>Dual-SIM outgoing call routing simulator</li>
+          <li>Inbound Telecom ringing HUD with live CRM context</li>
+          <li>Active in-call timer & Hold/Swap simulator</li>
+          <li>Post-call CRM disposition wrap-up card</li>
+          <li>Audio waveform playback simulation</li>
+        </ul>
+      </div>
+    </aside>
+
+  </div>
+
+  <script>
+    let currentScreen = 'call_logs';
+    let dialerNumber = '';
+    let isWireframe = false;
+    let timerInterval = null;
+    let timerSeconds = 42;
+
+    const screenMeta = {
+      dialer: {
+        file: 'DialerScreen.kt',
+        route: 'Nav3Key.CrmTab.Dialer',
+        tab: 'dialer'
+      },
+      call_logs: {
+        file: 'CallLogsScreen.kt',
+        route: 'Nav3Key.CrmTab.CallLogs',
+        tab: 'call_logs'
+      },
+      call_details: {
+        file: 'CallDetailsScreen.kt',
+        route: 'Screen.CallDetails',
+        tab: 'call_logs'
+      },
+      recordings: {
+        file: 'RecordingManagerScreen.kt',
+        route: 'Nav3Key.CrmTab.Recordings',
+        tab: 'recordings'
+      },
+      incoming_call: {
+        file: 'IncomingCallScreen.kt',
+        route: 'Telecom ConnectionService',
+        tab: null
+      },
+      active_call: {
+        file: 'ActiveCallScreen.kt',
+        route: 'InCallActivity.kt',
+        tab: null
+      },
+      post_call_summary: {
+        file: 'PostCallSummaryScreen.kt',
+        route: 'PostCallSummaryScreen.kt',
+        tab: null
+      },
+      crm_pipeline: {
+        file: 'CrmHubScreen.kt (Pipeline)',
+        route: 'Nav3Key.CrmTab.Dashboard',
+        tab: 'crm_pipeline'
+      },
+      contacts: {
+        file: 'ContactsScreen.kt',
+        route: 'Nav3Key.Contacts.ContactList',
+        tab: 'contacts'
+      },
+      tasks: {
+        file: 'TaskListScreen.kt',
+        route: 'Nav3Key.Task.TaskList',
+        tab: 'crm_pipeline'
+      },
+      analytics: {
+        file: 'AnalyticsScreen.kt',
+        route: 'Nav3Key.CrmTab.Analytics',
+        tab: 'crm_pipeline'
+      },
+      settings: {
+        file: 'SettingsScreen.kt',
+        route: 'Nav3Key.CrmTab.Settings',
+        tab: null
+      }
+    };
+
+    function switchScreen(screenId) {
+      currentScreen = screenId;
+      document.getElementById('screenSelect').value = screenId;
+
+      // Update screen views
+      document.querySelectorAll('.screen-view').forEach(view => {
+        view.classList.remove('active');
+      });
+      const targetView = document.getElementById(`view-${screenId}`);
+      if (targetView) targetView.classList.add('active');
+
+      // Update sidebar nav items
+      document.querySelectorAll('.screen-nav-item').forEach(item => {
+        item.classList.remove('active');
+        if (item.getAttribute('data-screen') === screenId) item.classList.add('active');
+      });
+
+      // Update bottom tabs
+      document.querySelectorAll('.bottom-tab-item').forEach(tab => {
+        tab.classList.remove('active');
+        if (screenMeta[screenId] && tab.getAttribute('data-tab') === screenMeta[screenId].tab) {
+          tab.classList.add('active');
+        }
+      });
+
+      // Update Inspector meta
+      if (screenMeta[screenId]) {
+        document.getElementById('specTitle').innerHTML = `<i class="fa-solid fa-cube"></i> ${screenMeta[screenId].file}`;
+        document.getElementById('specRoute').innerText = screenMeta[screenId].route;
+      }
+
+      // If active call screen, start timer
+      if (screenId === 'active_call') {
+        startCallTimer();
+      } else {
+        clearInterval(timerInterval);
+      }
+    }
+
+    function toggleDrawer(open) {
+      const drawer = document.getElementById('phoneDrawer');
+      const backdrop = document.getElementById('drawerBackdrop');
+      if (open) {
+        drawer.classList.add('open');
+        backdrop.classList.add('open');
+      } else {
+        drawer.classList.remove('open');
+        backdrop.classList.remove('open');
+      }
+    }
+
+    function pressDigit(digit) {
+      dialerNumber += digit;
+      updateDialerDisplay();
+    }
+
+    function backspaceDigit() {
+      dialerNumber = dialerNumber.slice(0, -1);
+      updateDialerDisplay();
+    }
+
+    function setDialerNumber(num) {
+      dialerNumber = num;
+      updateDialerDisplay();
+    }
+
+    function updateDialerDisplay() {
+      const display = document.getElementById('dialerDisplay');
+      const backspace = document.getElementById('dialerBackspace');
+      const matchPreview = document.getElementById('t9MatchPreview');
+
+      display.innerText = dialerNumber || '';
+      backspace.style.display = dialerNumber ? 'block' : 'none';
+
+      // Show match preview when typing
+      if (dialerNumber.length > 0) {
+        matchPreview.style.display = 'flex';
+      }
+    }
+
+    function initiateSimCall(simName) {
+      alert(`Initiating call to ${dialerNumber || 'Sarah Jenkins'} via ${simName}...`);
+      switchScreen('active_call');
+    }
+
+    function toggleWireframeMode() {
+      isWireframe = !isWireframe;
+      document.body.classList.toggle('wireframe-mode', isWireframe);
+      const btn = document.getElementById('wireframeToggleBtn');
+      if (isWireframe) {
+        btn.classList.add('active');
+        btn.innerHTML = '<i class="fa-solid fa-palette"></i> High-Fi Color Mode';
+      } else {
+        btn.classList.remove('active');
+        btn.innerHTML = '<i class="fa-solid fa-drafting-compass"></i> Wireframe Blueprint';
+      }
+    }
+
+    function startCallTimer() {
+      clearInterval(timerInterval);
+      timerSeconds = 42;
+      timerInterval = setInterval(() => {
+        timerSeconds++;
+        const mins = String(Math.floor(timerSeconds / 60)).padStart(2, '0');
+        const secs = String(timerSeconds % 60).padStart(2, '0');
+        const timerEl = document.getElementById('activeCallTimer');
+        if (timerEl) timerEl.innerText = `${mins}:${secs}`;
+      }, 1000);
+    }
+
+    function toggleCallBtn(btnId) {
+      const el = document.getElementById(btnId);
+      if (el) el.classList.toggle('active');
+    }
+
+    function toggleAudioPlay(btn) {
+      const icon = btn.querySelector('i');
+      if (icon.classList.contains('fa-play')) {
+        icon.classList.remove('fa-play');
+        icon.classList.add('fa-pause');
+      } else {
+        icon.classList.remove('fa-pause');
+        icon.classList.add('fa-play');
+      }
+    }
+
+    function triggerSyncNotification() {
+      alert('Syncing call logs, audio recordings & CRM leads with Supabase and Firebase Firestore...');
+    }
+
+    // Initialize clock
+    function updateClock() {
+      const now = new Date();
+      const hours = String(now.getHours()).padStart(2, '0');
+      const mins = String(now.getMinutes()).padStart(2, '0');
+      document.getElementById('statusBarClock').innerText = `${hours}:${mins}`;
+    }
+    updateClock();
+    setInterval(updateClock, 30000);
+  </script>
+</body>
+</html>
