@@ -10,9 +10,13 @@ import android.telecom.TelecomManager
 import android.util.Log
 import com.example.callog.core.diagnostics.DeveloperLogger
 import com.example.callog.core.extensions.toRelativeTimeSpan
+import com.example.callog.core.telecom.CallAudioController
+import com.example.callog.core.telecom.CallHapticManager
+import com.example.callog.core.telecom.DtmfTonePlayer
+import com.example.callog.core.telecom.ProximityController
+import com.example.callog.core.telecom.RingtoneController
 import com.example.callog.core.utils.PhoneNumberNormalizer
 import com.example.callog.data.telecom.CallNotificationManager
-import com.example.callog.data.telecom.CallRingtoneManager
 import com.example.callog.data.telecom.TelecomCallController
 import com.example.callog.domain.call.*
 import com.example.callog.domain.model.LeadPriority
@@ -36,8 +40,12 @@ class CallSessionManager @Inject constructor(
     private val leadRepository: LeadRepository,
     private val callRepository: CallRepository,
     private val simRepository: SimRepository,
-    private val ringtoneManager: CallRingtoneManager,
-    private val notificationManager: CallNotificationManager
+    private val ringtoneController: RingtoneController,
+    private val callAudioController: CallAudioController,
+    private val proximityController: ProximityController,
+    private val notificationManager: CallNotificationManager,
+    private val callHapticManager: CallHapticManager,
+    private val dtmfTonePlayer: DtmfTonePlayer
 ) {
     companion object {
         private const val TAG = "CallSessionManager"
@@ -73,12 +81,22 @@ class CallSessionManager @Inject constructor(
 
     fun registerTelecomController(controller: TelecomCallController) {
         telecomController = controller
+        callAudioController.attachTelecomController(controller)
     }
 
     fun unregisterTelecomController(controller: TelecomCallController) {
         if (telecomController === controller) {
             telecomController = null
+            callAudioController.detachTelecomController(controller)
         }
+    }
+
+    /**
+     * Silences the active incoming ringtone without rejecting or ending the call.
+     */
+    fun silenceRinger() {
+        DeveloperLogger.info("RING_SILENCED", "Silencing incoming ringtone upon Telecom onSilenceRinger event.")
+        ringtoneController.silenceRinger()
     }
 
     /**
@@ -158,8 +176,8 @@ class CallSessionManager @Inject constructor(
             state = initialState,
             callerDisplayName = existingPreSession?.callerDisplayName ?: initialDisplayName,
             companyName = existingPreSession?.companyName,
-            crmStatus = existingPreSession?.crmStatus ?: com.example.callog.domain.model.LeadStatus.UNKNOWN,
-            priority = existingPreSession?.priority ?: com.example.callog.domain.model.LeadPriority.MEDIUM,
+            crmStatus = existingPreSession?.crmStatus ?: LeadStatus.UNKNOWN,
+            priority = existingPreSession?.priority ?: LeadPriority.MEDIUM,
             initials = existingPreSession?.initials ?: computeInitials(initialDisplayName),
             recentInteractionSummary = existingPreSession?.recentInteractionSummary,
             pendingFollowUp = existingPreSession?.pendingFollowUp,
@@ -233,7 +251,7 @@ class CallSessionManager @Inject constructor(
                 // If currently ringing, update ringtone and notification with resolved CRM metadata
                 val currentSession = _sessionsMap.value[callId]
                 if (currentSession?.state == CallState.RINGING) {
-                    ringtoneManager.startRingtone(person, lead)
+                    ringtoneController.startRingtone(person, lead)
                     notificationManager.showIncomingCallNotification(currentSession)
                 } else if (currentSession?.state == CallState.ACTIVE) {
                     notificationManager.showActiveCallNotification(currentSession)
@@ -245,7 +263,7 @@ class CallSessionManager @Inject constructor(
                 )
                 val currentSession = _sessionsMap.value[callId]
                 if (currentSession?.state == CallState.RINGING) {
-                    ringtoneManager.startRingtone(null, null)
+                    ringtoneController.startRingtone(null, null)
                     notificationManager.showIncomingCallNotification(currentSession)
                 }
             }
@@ -297,12 +315,14 @@ class CallSessionManager @Inject constructor(
                 scope.launch {
                     val person = session?.personId?.let { personRepository.getPersonById(it) }
                     val lead = person?.let { leadRepository.getLeadForPerson(it.id) }
-                    ringtoneManager.startRingtone(person, lead)
+                    ringtoneController.startRingtone(person, lead)
                 }
                 launchInCallActivity()
             }
             CallState.ACTIVE -> {
-                ringtoneManager.stopRingtone()
+                ringtoneController.stopRingtone()
+                callHapticManager.vibrateCallConnected()
+                proximityController.onCallStateOrRouteChanged(true, _audioState.value.route)
                 if (session != null) {
                     notificationManager.showActiveCallNotification(session)
                 }
@@ -315,8 +335,16 @@ class CallSessionManager @Inject constructor(
                 launchInCallActivity()
             }
             CallState.DISCONNECTED -> {
-                ringtoneManager.stopRingtone()
+                ringtoneController.stopRingtone()
+                callHapticManager.vibrateCallEnded()
+                proximityController.release()
                 notificationManager.cancelCallNotification()
+
+                // If incoming call was never answered, show missed call notification
+                if (session != null && session.direction == CallDirection.INCOMING && session.connectTimeMillis == 0L) {
+                    notificationManager.showMissedCallNotification(session)
+                }
+
                 // Auto clean up after brief timeout so UI can show "Call Ended"
                 scope.launch {
                     delay(1500)
@@ -324,7 +352,7 @@ class CallSessionManager @Inject constructor(
                 }
             }
             else -> {
-                ringtoneManager.stopRingtone()
+                ringtoneController.stopRingtone()
             }
         }
     }
@@ -337,7 +365,7 @@ class CallSessionManager @Inject constructor(
         _sessionsMap.update { current -> current - callId }
 
         if (_sessionsMap.value.none { it.value.state == CallState.RINGING }) {
-            ringtoneManager.stopRingtone()
+            ringtoneController.stopRingtone()
         }
 
         if (_sessionsMap.value.isEmpty()) {
@@ -355,6 +383,8 @@ class CallSessionManager @Inject constructor(
             it.copy(isMuted = isMuted, route = route, supportedRoutes = supportedRoutes)
         }
 
+        proximityController.onCallStateOrRouteChanged(activeCallSession.value?.state == CallState.ACTIVE, route)
+
         _sessionsMap.update { current ->
             current.mapValues { (_, session) ->
                 session.copy(
@@ -362,6 +392,14 @@ class CallSessionManager @Inject constructor(
                     isSpeakerOn = route == AudioRoute.SPEAKER
                 )
             }
+        }
+
+        val active = activeCallSession.value
+        if (active != null && active.state == CallState.ACTIVE) {
+            notificationManager.showActiveCallNotification(active.copy(
+                isMuted = isMuted,
+                isSpeakerOn = route == AudioRoute.SPEAKER
+            ))
         }
     }
 
@@ -455,7 +493,14 @@ class CallSessionManager @Inject constructor(
 
         when (action) {
             is CallAction.Answer -> {
-                ringtoneManager.stopRingtone()
+                ringtoneController.stopRingtone()
+                // Auto-hold active call if answering an incoming call while already on a call
+                val currentActive = _sessionsMap.value.values.find { it.state == CallState.ACTIVE && it.callId != action.callId }
+                if (currentActive != null) {
+                    DeveloperLogger.info("AUTO_HOLD", "Auto-holding call ${currentActive.callId} to answer incoming ${action.callId}")
+                    controller?.holdCall(currentActive.callId)
+                }
+
                 if (controller != null) {
                     controller.answerCall(action.callId)
                 } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -468,7 +513,7 @@ class CallSessionManager @Inject constructor(
                 }
             }
             is CallAction.Reject -> {
-                ringtoneManager.stopRingtone()
+                ringtoneController.stopRingtone()
                 if (controller != null) {
                     controller.rejectCall(action.callId)
                 } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
@@ -480,8 +525,21 @@ class CallSessionManager @Inject constructor(
                     }
                 }
             }
+            is CallAction.RejectWithMessage -> {
+                ringtoneController.stopRingtone()
+                if (controller != null) {
+                    controller.rejectCallWithMessage(action.callId, action.message)
+                } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                    val telecomManager = context.getSystemService(Context.TELECOM_SERVICE) as? TelecomManager
+                    try {
+                        telecomManager?.endCall()
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Failed to endCall", e)
+                    }
+                }
+            }
             is CallAction.Disconnect -> {
-                ringtoneManager.stopRingtone()
+                ringtoneController.stopRingtone()
                 if (controller != null) {
                     controller.disconnectCall(action.callId)
                 } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
@@ -494,29 +552,27 @@ class CallSessionManager @Inject constructor(
                 }
             }
             is CallAction.ToggleMute -> {
-                val currentMute = _audioState.value.isMuted
-                val targetMute = !currentMute
-                if (controller != null) {
-                    controller.setCallMuted(targetMute)
-                } else {
-                    val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
-                    audioManager?.isMicrophoneMute = targetMute
-                    _audioState.update { it.copy(isMuted = targetMute) }
-                }
+                callHapticManager.vibrateActionToggle()
+                callAudioController.toggleMute()
             }
             is CallAction.ToggleSpeaker -> {
-                val isSpeaker = _audioState.value.route == AudioRoute.SPEAKER
-                val targetRoute = if (isSpeaker) AudioRoute.EARPIECE else AudioRoute.SPEAKER
-                if (controller != null) {
-                    controller.setAudioRoute(targetRoute)
-                } else {
-                    val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
-                    val newSpeaker = !isSpeaker
-                    audioManager?.isSpeakerphoneOn = newSpeaker
-                    _audioState.update { it.copy(route = if (newSpeaker) AudioRoute.SPEAKER else AudioRoute.EARPIECE) }
-                }
+                callHapticManager.vibrateActionToggle()
+                callAudioController.toggleSpeaker()
+                proximityController.onCallStateOrRouteChanged(
+                    activeCallSession.value?.state == CallState.ACTIVE,
+                    callAudioController.audioUiState.value.route
+                )
+            }
+            is CallAction.SetAudioRoute -> {
+                callHapticManager.vibrateActionToggle()
+                callAudioController.setAudioRoute(action.route)
+                proximityController.onCallStateOrRouteChanged(
+                    activeCallSession.value?.state == CallState.ACTIVE,
+                    action.route
+                )
             }
             is CallAction.ToggleHold -> {
+                callHapticManager.vibrateActionToggle()
                 val session = _sessionsMap.value[action.callId]
                 if (session != null) {
                     if (session.isOnHold) {
@@ -526,6 +582,14 @@ class CallSessionManager @Inject constructor(
                     }
                 }
             }
+            is CallAction.SwapCalls -> {
+                callHapticManager.vibrateActionToggle()
+                controller?.swapCalls()
+            }
+            is CallAction.MergeCalls -> {
+                callHapticManager.vibrateActionToggle()
+                controller?.mergeCalls(action.callId1, action.callId2)
+            }
             is CallAction.SetKeypadVisibility -> {
                 _sessionsMap.update { current ->
                     val existing = current[action.callId] ?: return@update current
@@ -533,9 +597,10 @@ class CallSessionManager @Inject constructor(
                 }
             }
             is CallAction.SendDtmf -> {
+                dtmfTonePlayer.playTone(action.digit)
                 controller?.playDtmfTone(action.callId, action.digit)
                 scope.launch {
-                    delay(200)
+                    delay(180)
                     controller?.stopDtmfTone(action.callId)
                 }
             }

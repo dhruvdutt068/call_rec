@@ -35,22 +35,24 @@ import android.widget.Toast
 import com.example.callog.core.diagnostics.DeveloperLogger
 import java.io.File
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
     viewModel: CallViewModel,
     darkTheme: Boolean,
     onDarkThemeChange: (Boolean) -> Unit,
     onNavigateToDeveloperDashboard: () -> Unit,
+    onNavigateToRingtoneSettings: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val coroutineScope = rememberCoroutineScope()
     val context = LocalContext.current
-    
+
     var developerModeClicks by remember { mutableStateOf(0) }
     var showDeveloperPinDialog by remember { mutableStateOf(false) }
     var developerPinInput by remember { mutableStateOf("") }
     val isDeveloperModeActive by viewModel.isDeveloperModeActive.collectAsState()
-    
+
     val folderPickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocumentTree()
     ) { uri ->
@@ -114,21 +116,27 @@ fun SettingsScreen(
         isDefaultDialer = com.example.callog.core.telecom.TelecomRoleHelper.isDefaultDialer(context)
     }
 
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(20.dp)
-    ) {
-        Text(
-            text = "Settings",
-            style = MaterialTheme.typography.headlineMedium,
-            fontWeight = FontWeight.Bold,
-            color = Slate50
-        )
-
-        // 1. Theme Configuration
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("Settings", fontWeight = FontWeight.Bold) },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                    titleContentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            )
+        },
+        containerColor = MaterialTheme.colorScheme.background
+    ) { innerPadding ->
+        Column(
+            modifier = modifier
+                .fillMaxSize()
+                .padding(innerPadding)
+                .verticalScroll(rememberScrollState())
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(20.dp)
+        ) {
+            // 1. Theme Configuration
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(
                 text = "Preferences",
@@ -265,6 +273,49 @@ fun SettingsScreen(
                         style = MaterialTheme.typography.bodySmall,
                         color = Slate400
                     )
+
+                    if (onNavigateToRingtoneSettings != null) {
+                        HorizontalDivider(color = Slate800)
+
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { onNavigateToRingtoneSettings() }
+                                .padding(vertical = 4.dp)
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(36.dp)
+                                        .clip(CircleShape)
+                                        .background(AllSetBlue.copy(alpha = 0.15f)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.MusicNote,
+                                        contentDescription = null,
+                                        tint = AllSetLavender,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
+                                Column {
+                                    Text("CRM Ringtone Rules", color = Slate50, fontWeight = FontWeight.SemiBold)
+                                    Text("Distinct tones for Hot, Warm & Customer calls", color = Slate400, style = MaterialTheme.typography.bodySmall)
+                                }
+                            }
+                            Icon(
+                                imageVector = Icons.Default.ChevronRight,
+                                contentDescription = null,
+                                tint = Slate400,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -661,6 +712,7 @@ fun SettingsScreen(
                     }
                 }
         )
+    }
     }
 
     if (showDeveloperPinDialog) {

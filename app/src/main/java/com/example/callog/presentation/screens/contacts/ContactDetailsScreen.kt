@@ -81,14 +81,7 @@ fun ContactDetailsScreen(
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
                 },
-                actions = {
-                    IconButton(onClick = { onScheduleMeetingClick(contactId) }) {
-                        Icon(Icons.Default.Event, contentDescription = "Schedule Meeting", tint = Teal300)
-                    }
-                    IconButton(onClick = { onCreateTaskClick(contactId) }) {
-                        Icon(Icons.Default.AddTask, contentDescription = "Create Task", tint = Amber500)
-                    }
-                },
+                actions = { },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.surfaceVariant,
                     titleContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -264,6 +257,8 @@ fun ContactDetailsScreen(
                                                 LeadStatus.HOT -> if (isSelected) Red500 to Color.White else Red500.copy(alpha = 0.15f) to Red500
                                                 LeadStatus.WARM -> if (isSelected) Amber500 to Slate900 else Amber500.copy(alpha = 0.15f) to Amber500
                                                 LeadStatus.COLD -> if (isSelected) Teal300 to Slate900 else Teal300.copy(alpha = 0.15f) to Teal300
+                                                LeadStatus.NEW -> if (isSelected) AllSetBlue to Color.White else AllSetBlue.copy(alpha = 0.15f) to AllSetBlue
+                                                LeadStatus.CUSTOMER -> if (isSelected) Color(0xFF52C41A) to Color.White else Color(0xFF52C41A).copy(alpha = 0.15f) to Color(0xFF52C41A)
                                                 LeadStatus.UNKNOWN -> if (isSelected) Slate400 to Slate900 else Slate400.copy(alpha = 0.15f) to Slate400
                                             }
 

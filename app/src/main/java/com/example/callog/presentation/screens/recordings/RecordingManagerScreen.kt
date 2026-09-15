@@ -42,11 +42,13 @@ data class MatchedRecordingItem(
     val call: CallLogEntry?
 )
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun RecordingManagerScreen(
     viewModel: CallViewModel,
     modifier: Modifier = Modifier,
-    onCallClick: ((Long) -> Unit)? = null
+    onCallClick: ((Long) -> Unit)? = null,
+    onMenuClick: (() -> Unit)? = null
 ) {
     val recordings by viewModel.recordingsFlow.collectAsState()
     val callLogs by viewModel.callLogs.collectAsState()
@@ -80,24 +82,59 @@ fun RecordingManagerScreen(
     // Detail Dialog state
     var selectedRecordingForDetail by remember { mutableStateOf<RecordingEntity?>(null) }
 
-    Box(
-        modifier = modifier
-            .fillMaxSize()
-            .padding(horizontal = 16.dp)
-    ) {
-        if (recordings.isEmpty()) {
-            EmptyStateView(
-                title = "No Recordings Found",
-                description = "Ensure that recordings are stored in the configured directory, then tap the scan button.",
-                icon = Icons.Default.MusicNote,
-                modifier = Modifier.align(Alignment.Center)
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("Recordings", fontWeight = FontWeight.Bold) },
+                navigationIcon = {
+                    if (onMenuClick != null) {
+                        IconButton(onClick = onMenuClick) {
+                            Icon(
+                                imageVector = Icons.Default.Menu,
+                                contentDescription = "Open Menu"
+                            )
+                        }
+                    }
+                },
+                actions = {
+                    IconButton(
+                        onClick = { viewModel.rescanRecordings() }
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Refresh,
+                            contentDescription = "Rescan Recordings",
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                    titleContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                    actionIconContentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             )
-        } else {
-            LazyColumn(
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-                contentPadding = PaddingValues(vertical = 16.dp),
-                modifier = Modifier.fillMaxSize()
-            ) {
+        },
+        containerColor = MaterialTheme.colorScheme.background
+    ) { innerPadding ->
+        Box(
+            modifier = modifier
+                .fillMaxSize()
+                .padding(innerPadding)
+                .padding(horizontal = 16.dp)
+        ) {
+            if (recordings.isEmpty()) {
+                EmptyStateView(
+                    title = "No Recordings Found",
+                    description = "Ensure that recordings are stored in the configured directory, then tap the scan button.",
+                    icon = Icons.Default.MusicNote,
+                    modifier = Modifier.align(Alignment.Center)
+                )
+            } else {
+                LazyColumn(
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                    contentPadding = PaddingValues(vertical = 16.dp),
+                    modifier = Modifier.fillMaxSize()
+                ) {
                 sortedGroupedKeys.forEach { number ->
                     val groupList = groupedRecordings[number] ?: emptyList()
                     val isExpanded = expandedNumbers.contains(number)
@@ -151,6 +188,7 @@ fun RecordingManagerScreen(
                 }
             }
         }
+    }
     }
 
     // Detail Dialog

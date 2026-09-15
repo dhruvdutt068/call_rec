@@ -84,8 +84,9 @@
 
         <!-- Android Telecom InCallService -->
         <service
-            android:name=".data.telecom.CallogInCallService"
+            android:name=".core.telecom.CallService"
             android:permission="android.permission.BIND_INCALL_SERVICE"
+            android:foregroundServiceType="phoneCall"
             android:exported="true">
             <meta-data
                 android:name="android.telecom.IN_CALL_SERVICE_UI"
@@ -113,6 +114,8 @@
                 <action android:name="com.example.callog.ACTION_ANSWER_CALL" />
                 <action android:name="com.example.callog.ACTION_REJECT_CALL" />
                 <action android:name="com.example.callog.ACTION_DISCONNECT_CALL" />
+                <action android:name="com.example.callog.ACTION_TOGGLE_MUTE" />
+                <action android:name="com.example.callog.ACTION_TOGGLE_SPEAKER" />
             </intent-filter>
         </receiver>
 

@@ -17,67 +17,58 @@ import io.github.jan.supabase.postgrest.postgrest
 import io.github.jan.supabase.postgrest.rpc
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import com.example.callog.core.config.EnvironmentConfigManager
+import com.example.callog.domain.model.AppEnvironment
 import javax.inject.Inject
 import javax.inject.Singleton
 
 @Singleton
 class SupabaseService @Inject constructor(
-    @ApplicationContext private val context: Context
+    @ApplicationContext private val context: Context,
+    private val environmentConfigManager: EnvironmentConfigManager
 ) {
     private val TAG = "SupabaseService"
-    private val PREFS_NAME = "supabase_config_prefs"
 
     @Volatile
     private var currentClient: SupabaseClient? = null
 
-    private fun getSharedPreferences() =
-        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+    init {
+        environmentConfigManager.addOnEnvironmentChangeListener {
+            invalidateClient()
+        }
+    }
+
+    fun invalidateClient() {
+        currentClient = null
+        Log.d(TAG, "Supabase client invalidated due to environment/config update.")
+    }
 
     fun getSavedConfig(): SupabaseConfig? {
-        val prefs = getSharedPreferences()
-        val url = prefs.getString("supabase_url", null)
-        val key = prefs.getString("supabase_key", null)
-        if (!url.isNullOrBlank() && (url.contains("qizrtmvgcwxuycbpkeua") || url.isBlank())) {
-            // Clean up legacy URL to adopt updated SupabaseDefaults
-            prefs.edit().remove("supabase_url").remove("supabase_key").apply()
-            return null
-        }
-        return if (!url.isNullOrBlank() && !key.isNullOrBlank()) {
-            SupabaseConfig(url, key)
+        val env = environmentConfigManager.getActiveEnvironment()
+        val config = environmentConfigManager.getSupabaseConfig(env)
+        return if (config.url.isNotBlank() && config.apiKey.isNotBlank()) {
+            config
         } else {
             null
         }
     }
 
     fun getActiveConfig(): SupabaseConfig {
-        val saved = getSavedConfig()
-        return saved ?: SupabaseConfig(
-            url = SupabaseDefaults.DEFAULT_URL,
-            apiKey = SupabaseDefaults.DEFAULT_ANON_KEY
-        )
+        return environmentConfigManager.getActiveSupabaseConfig()
     }
 
     fun isCustomConfigActive(): Boolean {
-        return getSavedConfig() != null
+        val env = environmentConfigManager.getActiveEnvironment()
+        return environmentConfigManager.isCustomSupabaseConfig(env)
     }
 
-    fun saveConfig(config: SupabaseConfig?) {
-        val prefs = getSharedPreferences()
-        prefs.edit().apply {
-            if (config != null) {
-                putString("supabase_url", config.url.trim())
-                putString("supabase_key", config.apiKey.trim())
-            } else {
-                remove("supabase_url")
-                remove("supabase_key")
-            }
-            apply()
-        }
-        currentClient = null // Invalidate client to force re-instantiation on next call
+    fun saveConfig(config: SupabaseConfig?, env: AppEnvironment = environmentConfigManager.getActiveEnvironment()) {
+        environmentConfigManager.saveSupabaseConfig(env, config)
+        invalidateClient()
     }
 
-    fun resetToDefaults() {
-        saveConfig(null)
+    fun resetToDefaults(env: AppEnvironment = environmentConfigManager.getActiveEnvironment()) {
+        saveConfig(null, env)
     }
 
     private fun getClient(): SupabaseClient {
@@ -277,6 +268,84 @@ class SupabaseService @Inject constructor(
             Result.success(Unit)
         } catch (e: Exception) {
             Log.e(TAG, "Error syncing leads to Supabase", e)
+            Result.failure(e)
+        }
+    }
+
+    suspend fun fetchGlobalPeople(): Result<List<com.example.callog.data.remote.model.SupabasePerson>> = withContext(Dispatchers.IO) {
+        return@withContext try {
+            val people = getClient().from(SupabaseDefaults.TABLE_PEOPLE)
+                .select()
+                .decodeList<com.example.callog.data.remote.model.SupabasePerson>()
+            Result.success(people)
+        } catch (e: Exception) {
+            Log.e(TAG, "Error fetching global people from Supabase", e)
+            Result.failure(e)
+        }
+    }
+
+    suspend fun fetchGlobalPhoneNumbers(): Result<List<com.example.callog.data.remote.model.SupabasePhoneNumber>> = withContext(Dispatchers.IO) {
+        return@withContext try {
+            val numbers = getClient().from(SupabaseDefaults.TABLE_PHONE_NUMBERS)
+                .select()
+                .decodeList<com.example.callog.data.remote.model.SupabasePhoneNumber>()
+            Result.success(numbers)
+        } catch (e: Exception) {
+            Log.e(TAG, "Error fetching global phone numbers from Supabase", e)
+            Result.failure(e)
+        }
+    }
+
+    suspend fun fetchGlobalContactAliases(): Result<List<com.example.callog.data.remote.model.SupabaseContactAlias>> = withContext(Dispatchers.IO) {
+        return@withContext try {
+            val aliases = getClient().from(SupabaseDefaults.TABLE_CONTACT_ALIASES)
+                .select()
+                .decodeList<com.example.callog.data.remote.model.SupabaseContactAlias>()
+            Result.success(aliases)
+        } catch (e: Exception) {
+            Log.e(TAG, "Error fetching global contact aliases from Supabase", e)
+            Result.failure(e)
+        }
+    }
+
+    suspend fun createGlobalPerson(
+        name: String,
+        phone: String,
+        normalizedPhone: String,
+        company: String? = null,
+        notes: String? = null
+    ): Result<com.example.callog.data.remote.model.SupabasePerson> = withContext(Dispatchers.IO) {
+        return@withContext try {
+            val now = formatTimestamp(System.currentTimeMillis())
+            val personId = "P" + java.util.UUID.randomUUID().toString().replace("-", "").take(8).uppercase()
+            val person = com.example.callog.data.remote.model.SupabasePerson(
+                id = personId,
+                displayName = name.trim(),
+                companyName = company?.trim()?.ifBlank { null },
+                notes = notes?.trim()?.ifBlank { null },
+                createdAt = now,
+                updatedAt = now
+            )
+            getClient().from(SupabaseDefaults.TABLE_PEOPLE).insert(person)
+
+            if (normalizedPhone.isNotBlank()) {
+                val phoneRecord = com.example.callog.data.remote.model.SupabasePhoneNumber(
+                    id = java.util.UUID.randomUUID().toString(),
+                    personId = personId,
+                    phoneNumber = phone.trim(),
+                    normalizedNumber = normalizedPhone,
+                    phoneType = "PRIMARY",
+                    isPrimary = true,
+                    createdAt = now
+                )
+                getClient().from(SupabaseDefaults.TABLE_PHONE_NUMBERS).upsert(phoneRecord) {
+                    onConflict = "normalized_number"
+                }
+            }
+
+            Result.success(person)
+        } catch (e: Exception) {
+            Log.e(TAG, "Error creating global person in Supabase", e)
             Result.failure(e)
         }
     }

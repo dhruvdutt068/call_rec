@@ -67,6 +67,9 @@ sealed interface Nav3Key {
 
         @Serializable
         data object DeveloperLogs : CrmTab
+
+        @Serializable
+        data object RingtoneSettings : CrmTab
     }
 
     /**

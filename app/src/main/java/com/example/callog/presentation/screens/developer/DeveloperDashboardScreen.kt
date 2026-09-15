@@ -24,8 +24,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.example.callog.core.config.SupabaseDefaults
 import com.example.callog.core.constants.Constants
+import com.example.callog.domain.model.AppEnvironment
 import com.example.callog.domain.model.FirebaseConfig
 import com.example.callog.domain.model.SupabaseConfig
+import com.example.callog.presentation.components.EnvironmentSelectorCard
 import com.example.callog.presentation.components.GlassyCard
 import com.example.callog.presentation.theme.*
 import com.example.callog.presentation.viewmodel.CallViewModel
@@ -48,6 +50,8 @@ fun DeveloperDashboardScreen(
     val allSalesCalls by viewModel.allSalesCalls.collectAsState()
     val isSyncing by viewModel.isSyncing.collectAsState()
 
+    val activeEnvironment by viewModel.activeEnvironment.collectAsState()
+
     // Firebase & Supabase credential state
     val savedFirebaseConfig by viewModel.firebaseConfig.collectAsState()
     val firebaseConnectionStatus by viewModel.connectionStatus.collectAsState()
@@ -64,15 +68,17 @@ fun DeveloperDashboardScreen(
     var isSupabaseExpanded by remember { mutableStateOf(false) }
     var isFirebaseExpanded by remember { mutableStateOf(false) }
 
-    LaunchedEffect(savedSupabaseConfig) {
-        supabaseUrlInput = savedSupabaseConfig?.url ?: SupabaseDefaults.DEFAULT_URL
-        supabaseKeyInput = savedSupabaseConfig?.apiKey ?: SupabaseDefaults.DEFAULT_ANON_KEY
+    LaunchedEffect(savedSupabaseConfig, activeEnvironment) {
+        val envConfig = viewModel.getSupabaseConfigForEnv(activeEnvironment)
+        supabaseUrlInput = envConfig.url.ifBlank { if (activeEnvironment == AppEnvironment.DEVELOPMENT) SupabaseDefaults.DEFAULT_URL else "" }
+        supabaseKeyInput = envConfig.apiKey.ifBlank { if (activeEnvironment == AppEnvironment.DEVELOPMENT) SupabaseDefaults.DEFAULT_ANON_KEY else "" }
     }
 
-    LaunchedEffect(savedFirebaseConfig) {
-        firebaseProjectIdInput = savedFirebaseConfig?.projectId ?: ""
-        firebaseApiKeyInput = savedFirebaseConfig?.apiKey ?: ""
-        firebaseAppIdInput = savedFirebaseConfig?.appId ?: ""
+    LaunchedEffect(savedFirebaseConfig, activeEnvironment) {
+        val envConfig = viewModel.getFirebaseConfigForEnv(activeEnvironment)
+        firebaseProjectIdInput = envConfig?.projectId ?: ""
+        firebaseApiKeyInput = envConfig?.apiKey ?: ""
+        firebaseAppIdInput = envConfig?.appId ?: ""
     }
 
     val pendingCallsCount = allCalls.count { it.syncStatus != "SYNCED" }
@@ -140,6 +146,16 @@ fun DeveloperDashboardScreen(
             // Section: Cloud Credentials & Environment Switcher
             DashboardSectionHeader(title = "Cloud Environments & Credentials")
 
+            // 0. Environment Switcher
+            EnvironmentSelectorCard(
+                currentEnvironment = activeEnvironment,
+                onEnvironmentSelected = { newEnv ->
+                    if (newEnv != activeEnvironment) {
+                        viewModel.setEnvironment(newEnv)
+                    }
+                }
+            )
+
             // 1. Supabase Environment Card
             GlassyCard(modifier = Modifier.fillMaxWidth()) {
                 Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
@@ -162,9 +178,9 @@ fun DeveloperDashboardScreen(
                             }
                             Spacer(modifier = Modifier.width(12.dp))
                             Column {
-                                Text("Supabase (PostgreSQL)", fontWeight = FontWeight.Bold, color = Slate50)
+                                Text("Supabase (${activeEnvironment.label})", fontWeight = FontWeight.Bold, color = Slate50)
                                 Text(
-                                    text = if (savedSupabaseConfig != null) "Active: Custom Development Instance" else "Active: Default Client Instance",
+                                    text = if (savedSupabaseConfig != null) "Active: Custom Server (${activeEnvironment.label})" else "Active: Default ${activeEnvironment.label} Server",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = if (savedSupabaseConfig != null) Teal300 else Slate400
                                 )
@@ -291,9 +307,9 @@ fun DeveloperDashboardScreen(
                             }
                             Spacer(modifier = Modifier.width(12.dp))
                             Column {
-                                Text("Firebase / Google Cloud", fontWeight = FontWeight.Bold, color = Slate50)
+                                Text("Firebase (${activeEnvironment.label})", fontWeight = FontWeight.Bold, color = Slate50)
                                 Text(
-                                    text = if (savedFirebaseConfig != null) "Active: Custom (${savedFirebaseConfig?.projectId})" else "Active: Default Client (google-services.json)",
+                                    text = if (savedFirebaseConfig != null) "Active: Custom (${savedFirebaseConfig?.projectId})" else "Active: Default ${activeEnvironment.label} (google-services.json)",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = if (savedFirebaseConfig != null) AllSetAmber else Slate400
                                 )

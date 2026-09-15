@@ -51,9 +51,28 @@ class CallViewModel @Inject constructor(
     private val recordingLogDao: RecordingLogDao,
     private val simManager: com.example.callog.data.provider.SimManager,
     private val supabaseService: SupabaseService,
+    private val personRepository: com.example.callog.domain.repository.PersonRepository,
     private val conversationRepository: com.example.callog.domain.repository.ConversationRepository,
-    private val callSessionManager: com.example.callog.domain.service.CallSessionManager
+    private val callSessionManager: com.example.callog.domain.service.CallSessionManager,
+    private val environmentConfigManager: com.example.callog.core.config.EnvironmentConfigManager
 ) : ViewModel() {
+
+    val activeEnvironment: StateFlow<com.example.callog.domain.model.AppEnvironment> = environmentConfigManager.activeEnvironment
+
+    fun setEnvironment(env: com.example.callog.domain.model.AppEnvironment) {
+        environmentConfigManager.setActiveEnvironment(env)
+        loadFirebaseConfig()
+        loadSupabaseConfig()
+        DeveloperLogger.info("CallViewModel", "Active environment switched to: ${env.label}")
+    }
+
+    fun getSupabaseConfigForEnv(env: com.example.callog.domain.model.AppEnvironment): SupabaseConfig {
+        return environmentConfigManager.getSupabaseConfig(env)
+    }
+
+    fun getFirebaseConfigForEnv(env: com.example.callog.domain.model.AppEnvironment): FirebaseConfig? {
+        return environmentConfigManager.getFirebaseConfig(env)
+    }
 
     fun startOutgoingCall(number: String, simSlot: Int = 0) {
         callSessionManager.startOutgoingCall(number, simSlot)
@@ -173,6 +192,9 @@ class CallViewModel @Inject constructor(
 
     private val _contacts = MutableStateFlow<List<ContactDto>>(emptyList())
     val contacts = _contacts.asStateFlow()
+
+    private val _contactsSyncStatus = MutableStateFlow<String?>("IDLE") // "IDLE", "SYNCING", "SUCCESS", "ERROR:<msg>"
+    val contactsSyncStatus = _contactsSyncStatus.asStateFlow()
 
     private val _firebaseConfig = MutableStateFlow<FirebaseConfig?>(null)
     val firebaseConfig = _firebaseConfig.asStateFlow()
@@ -395,12 +417,13 @@ class CallViewModel @Inject constructor(
         _customRecordingPath.value = path
     }
 
-    fun testAndSaveFirebaseConfig(config: FirebaseConfig) {
+    fun testAndSaveFirebaseConfig(config: FirebaseConfig, env: com.example.callog.domain.model.AppEnvironment = activeEnvironment.value) {
         viewModelScope.launch {
             _connectionStatus.value = "TESTING"
             val result = firestoreRepository.testFirebaseConnection(config)
             if (result.isSuccess) {
                 firestoreRepository.saveFirebaseConfig(config)
+                environmentConfigManager.saveFirebaseConfig(env, config)
                 _firebaseConfig.value = config
                 _connectionStatus.value = "SUCCESS"
             } else {
@@ -410,7 +433,8 @@ class CallViewModel @Inject constructor(
         }
     }
 
-    fun resetFirebaseConfig() {
+    fun resetFirebaseConfig(env: com.example.callog.domain.model.AppEnvironment = activeEnvironment.value) {
+        environmentConfigManager.saveFirebaseConfig(env, null)
         firestoreRepository.saveFirebaseConfig(null)
         _firebaseConfig.value = null
         _connectionStatus.value = null
@@ -420,26 +444,26 @@ class CallViewModel @Inject constructor(
         _supabaseConfig.value = supabaseService.getSavedConfig()
     }
 
-    fun saveSupabaseConfig(config: SupabaseConfig?) {
-        supabaseService.saveConfig(config)
-        _supabaseConfig.value = config
+    fun saveSupabaseConfig(config: SupabaseConfig?, env: com.example.callog.domain.model.AppEnvironment = activeEnvironment.value) {
+        supabaseService.saveConfig(config, env)
+        _supabaseConfig.value = supabaseService.getSavedConfig()
         _supabaseConnectionStatus.value = null
     }
 
-    fun resetSupabaseConfig() {
-        supabaseService.resetToDefaults()
-        _supabaseConfig.value = null
+    fun resetSupabaseConfig(env: com.example.callog.domain.model.AppEnvironment = activeEnvironment.value) {
+        supabaseService.resetToDefaults(env)
+        _supabaseConfig.value = supabaseService.getSavedConfig()
         _supabaseConnectionStatus.value = null
     }
 
-    fun testAndSaveSupabaseConfig(url: String, key: String) {
+    fun testAndSaveSupabaseConfig(url: String, key: String, env: com.example.callog.domain.model.AppEnvironment = activeEnvironment.value) {
         viewModelScope.launch {
             _supabaseConnectionStatus.value = "TESTING"
             val result = supabaseService.testSupabaseConnection(url, key)
             if (result.isSuccess) {
                 val config = SupabaseConfig(url, key)
-                supabaseService.saveConfig(config)
-                _supabaseConfig.value = config
+                supabaseService.saveConfig(config, env)
+                _supabaseConfig.value = supabaseService.getSavedConfig()
                 _supabaseConnectionStatus.value = "SUCCESS"
             } else {
                 val errorMsg = result.exceptionOrNull()?.message ?: "Unknown error"
@@ -479,7 +503,78 @@ class CallViewModel @Inject constructor(
 
     private fun loadContacts() {
         viewModelScope.launch {
-            _contacts.value = repository.getContacts()
+            // 1. Immediately load local Room cached People + device contacts for instant display
+            updateCombinedContacts()
+
+            // 2. Fetch latest from Supabase global repo in background
+            refreshGlobalContacts()
+        }
+    }
+
+    private suspend fun updateCombinedContacts() {
+        val people = personRepository.getAllPeople()
+        val deviceContacts = repository.getContacts()
+
+        val peopleDtos = people.map { person ->
+            val phoneList = person.phoneNumbers.map { it.phoneNumber }.ifEmpty {
+                person.aliases.map { it.phoneNumber }.distinct()
+            }
+            ContactDto(
+                contactId = person.id,
+                name = person.displayName,
+                phoneNumbers = phoneList,
+                emails = emptyList(),
+                photoUri = null,
+                isFavorite = false
+            )
+        }
+
+        // Merge Supabase People with device contacts (avoiding duplicates by normalized number)
+        val existingNormNumbers = people.flatMap { p -> p.phoneNumbers.map { it.normalizedNumber } }.toSet()
+        val uniqueDeviceContacts = deviceContacts.filter { dc ->
+            val firstNorm = dc.phoneNumbers.firstOrNull()?.let { com.example.callog.core.utils.PhoneNumberNormalizer.normalize(it) } ?: ""
+            firstNorm.isNotEmpty() && !existingNormNumbers.contains(firstNorm)
+        }
+
+        val combined = (peopleDtos + uniqueDeviceContacts).distinctBy { it.contactId }
+        _contacts.value = combined
+    }
+
+    fun refreshGlobalContacts() {
+        viewModelScope.launch {
+            _contactsSyncStatus.value = "SYNCING"
+            val result = personRepository.syncGlobalContactsFromSupabase()
+            if (result.isSuccess) {
+                updateCombinedContacts()
+                _contactsSyncStatus.value = "SUCCESS"
+            } else {
+                val err = result.exceptionOrNull()?.message ?: "Sync failed"
+                _contactsSyncStatus.value = "ERROR:$err"
+                // Ensure at least local device contacts & cached room people are visible
+                updateCombinedContacts()
+            }
+        }
+    }
+
+    fun createGlobalContact(
+        name: String,
+        phone: String,
+        company: String? = null,
+        notes: String? = null,
+        onComplete: ((Boolean) -> Unit)? = null
+    ) {
+        viewModelScope.launch {
+            _contactsSyncStatus.value = "SYNCING"
+            val result = personRepository.createGlobalContact(name, phone, company, notes)
+            if (result.isSuccess) {
+                updateCombinedContacts()
+                _contactsSyncStatus.value = "SUCCESS"
+                onComplete?.invoke(true)
+            } else {
+                val err = result.exceptionOrNull()?.message ?: "Creation failed"
+                _contactsSyncStatus.value = "ERROR:$err"
+                onComplete?.invoke(false)
+            }
         }
     }
 

@@ -1,9 +1,7 @@
 package com.example.callog.presentation.navigation
 
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Dashboard
-import androidx.compose.material.icons.filled.History
-import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.*
 import androidx.compose.ui.graphics.vector.ImageVector
 
 sealed class Screen(val route: String) {
@@ -22,8 +20,9 @@ sealed class Screen(val route: String) {
 
     // Tabs for Bottom Navigation under Main Screen
     sealed class Tab(val tabRoute: String, val title: String, val icon: ImageVector) {
-        object Dashboard : Tab("tab_dashboard", "Dashboard", Icons.Default.Dashboard)
-        object Logs : Tab("tab_logs", "Logs", Icons.Default.History)
-        object Recordings : Tab("tab_recordings", "Recordings", Icons.Default.Mic)
+        object Logs : Tab("tab_logs", "Call Logs", Icons.Default.History)
+        object Contacts : Tab("tab_contacts", "Contacts", Icons.Default.People)
+        object Recordings : Tab("tab_recordings", "Recordings", Icons.Default.GraphicEq)
+        object Settings : Tab("tab_settings", "Settings", Icons.Default.Settings)
     }
 }

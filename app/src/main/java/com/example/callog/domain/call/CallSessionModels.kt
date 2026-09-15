@@ -76,10 +76,14 @@ data class CallSessionState(
 sealed interface CallAction {
     data class Answer(val callId: String) : CallAction
     data class Reject(val callId: String) : CallAction
+    data class RejectWithMessage(val callId: String, val message: String) : CallAction
     data class Disconnect(val callId: String) : CallAction
     data class ToggleMute(val callId: String) : CallAction
     data class ToggleSpeaker(val callId: String) : CallAction
     data class ToggleHold(val callId: String) : CallAction
+    data object SwapCalls : CallAction
+    data class MergeCalls(val callId1: String, val callId2: String) : CallAction
+    data class SetAudioRoute(val route: AudioRoute) : CallAction
     data class SetKeypadVisibility(val callId: String, val visible: Boolean) : CallAction
     data class SendDtmf(val callId: String, val digit: Char) : CallAction
 }

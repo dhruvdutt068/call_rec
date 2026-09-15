@@ -16,44 +16,37 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
+import com.example.callog.core.config.EnvironmentConfigManager
+import com.example.callog.domain.model.AppEnvironment
 import javax.inject.Inject
 import javax.inject.Singleton
 
 @Singleton
 class FirestoreService @Inject constructor(
-    @ApplicationContext private val context: Context
+    @ApplicationContext private val context: Context,
+    private val environmentConfigManager: EnvironmentConfigManager
 ) {
     private val TAG = "FirestoreService"
 
     private val _lastUploadError = MutableStateFlow<String?>(null)
     val lastUploadError: StateFlow<String?> = _lastUploadError.asStateFlow()
 
-    fun getSavedConfig(): FirebaseConfig? {
-        val prefs = context.getSharedPreferences("firebase_config_prefs", Context.MODE_PRIVATE)
-        val projectId = prefs.getString("project_id", null)
-        val apiKey = prefs.getString("api_key", null)
-        val appId = prefs.getString("app_id", null)
-        return if (!projectId.isNullOrEmpty() && !apiKey.isNullOrEmpty() && !appId.isNullOrEmpty()) {
-            FirebaseConfig(projectId, apiKey, appId)
-        } else {
-            null
+    init {
+        environmentConfigManager.addOnEnvironmentChangeListener {
+            clearCustomApp()
         }
     }
 
-    fun saveConfig(config: FirebaseConfig?) {
-        val prefs = context.getSharedPreferences("firebase_config_prefs", Context.MODE_PRIVATE)
-        prefs.edit().apply {
-            if (config != null) {
-                putString("project_id", config.projectId)
-                putString("api_key", config.apiKey)
-                putString("app_id", config.appId)
-            } else {
-                remove("project_id")
-                remove("api_key")
-                remove("app_id")
-            }
-            apply()
-        }
+    fun getSavedConfig(): FirebaseConfig? {
+        return environmentConfigManager.getActiveFirebaseConfig()
+    }
+
+    fun getFirebaseConfig(env: AppEnvironment): FirebaseConfig? {
+        return environmentConfigManager.getFirebaseConfig(env)
+    }
+
+    fun saveConfig(config: FirebaseConfig?, env: AppEnvironment = environmentConfigManager.getActiveEnvironment()) {
+        environmentConfigManager.saveFirebaseConfig(env, config)
         clearCustomApp()
     }
 

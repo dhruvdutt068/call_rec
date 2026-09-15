@@ -16,6 +16,8 @@ import com.example.callog.domain.repository.CallRepository
 import com.example.callog.domain.repository.LeadRepository
 import com.example.callog.domain.repository.PersonRepository
 import com.example.callog.domain.service.CallSessionManager
+import com.example.callog.core.telecom.CallAudioController
+import com.example.callog.core.telecom.ProximityController
 import com.example.callog.sim.SimInfo
 import com.example.callog.sim.SimManager
 import com.example.callog.sim.SimRepository
@@ -34,7 +36,9 @@ class CallSessionManagerTest {
     private lateinit var fakeLeadRepository: FakeLeadRepository
     private lateinit var fakeCallRepository: FakeCallRepository
     private lateinit var fakeSimRepository: FakeSimRepository
-    private lateinit var fakeRingtoneManager: FakeRingtoneManager
+    private lateinit var fakeRingtoneController: FakeRingtoneController
+    private lateinit var fakeAudioController: CallAudioController
+    private lateinit var fakeProximityController: ProximityController
     private lateinit var fakeNotificationManager: FakeCallNotificationManager
     private lateinit var fakeController: FakeTelecomCallController
 
@@ -45,9 +49,13 @@ class CallSessionManagerTest {
         fakeLeadRepository = FakeLeadRepository()
         fakeCallRepository = FakeCallRepository()
         fakeSimRepository = FakeSimRepository(fakeContext)
-        fakeRingtoneManager = FakeRingtoneManager(fakeContext)
+        fakeRingtoneController = FakeRingtoneController(fakeContext)
+        fakeAudioController = CallAudioController(fakeContext)
+        fakeProximityController = ProximityController(fakeContext)
         fakeNotificationManager = FakeCallNotificationManager(fakeContext)
         fakeController = FakeTelecomCallController()
+        val fakeHapticManager = FakeCallHapticManager(fakeContext)
+        val fakeDtmfTonePlayer = FakeDtmfTonePlayer()
 
         callSessionManager = CallSessionManager(
             context = fakeContext,
@@ -55,8 +63,12 @@ class CallSessionManagerTest {
             leadRepository = fakeLeadRepository,
             callRepository = fakeCallRepository,
             simRepository = fakeSimRepository,
-            ringtoneManager = fakeRingtoneManager,
-            notificationManager = fakeNotificationManager
+            ringtoneController = fakeRingtoneController,
+            callAudioController = fakeAudioController,
+            proximityController = fakeProximityController,
+            notificationManager = fakeNotificationManager,
+            callHapticManager = fakeHapticManager,
+            dtmfTonePlayer = fakeDtmfTonePlayer
         )
 
         callSessionManager.registerTelecomController(fakeController)
@@ -118,7 +130,7 @@ class CallSessionManagerTest {
         assertEquals(LeadPriority.URGENT, active?.priority)
 
         // Verify Ringtone started for incoming ringing call
-        assertTrue(fakeRingtoneManager.started)
+        assertTrue(fakeRingtoneController.started)
     }
 
     // ─────────────────────────────────────────────────────────────
@@ -138,7 +150,7 @@ class CallSessionManagerTest {
         )
 
         kotlinx.coroutines.delay(100)
-        assertTrue(fakeRingtoneManager.started)
+        assertTrue(fakeRingtoneController.started)
 
         // User answers via UI
         callSessionManager.executeAction(CallAction.Answer("call_2"))
@@ -152,7 +164,7 @@ class CallSessionManagerTest {
         assertEquals(CallState.ACTIVE, active?.state)
 
         // Verify ringtone stopped upon answer
-        assertTrue(fakeRingtoneManager.stopped)
+        assertTrue(fakeRingtoneController.stopped)
     }
 
     // ─────────────────────────────────────────────────────────────
@@ -172,7 +184,7 @@ class CallSessionManagerTest {
         )
 
         kotlinx.coroutines.delay(100)
-        assertTrue(fakeRingtoneManager.started)
+        assertTrue(fakeRingtoneController.started)
 
         // User rejects call
         callSessionManager.executeAction(CallAction.Reject("call_3"))
@@ -183,7 +195,7 @@ class CallSessionManagerTest {
         kotlinx.coroutines.delay(100)
 
         // Verify ringtone stopped upon reject
-        assertTrue(fakeRingtoneManager.stopped)
+        assertTrue(fakeRingtoneController.stopped)
     }
 
     // ─────────────────────────────────────────────────────────────
@@ -370,6 +382,161 @@ class CallSessionManagerTest {
         assertNull(callSessionManager.activeCallSession.value)
     }
 
+    @Test
+    fun testRejectCallWithMessageDispatchesToController() = runBlocking {
+        callSessionManager.onTelecomCallAdded(
+            callId = "call_msg_1",
+            rawNumber = "9988776655",
+            telecomDisplayName = null,
+            direction = CallDirection.INCOMING,
+            initialState = CallState.RINGING,
+            capabilities = CallCapabilities(),
+            accountHandleId = null,
+            accountComponentName = null
+        )
+
+        kotlinx.coroutines.delay(100)
+
+        callSessionManager.executeAction(
+            CallAction.RejectWithMessage("call_msg_1", "In a meeting. Will call back soon.")
+        )
+
+        assertEquals("call_msg_1", fakeController.lastRejectedWithMessageCallId)
+        assertEquals("In a meeting. Will call back soon.", fakeController.lastRejectMessage)
+        assertTrue(fakeRingtoneController.stopped)
+    }
+
+    @Test
+    fun testAnswerCallAutoHoldsExistingActiveCall() = runBlocking {
+        // Line 1: Active call
+        callSessionManager.onTelecomCallAdded(
+            callId = "call_line_1",
+            rawNumber = "1111111111",
+            telecomDisplayName = null,
+            direction = CallDirection.OUTGOING,
+            initialState = CallState.ACTIVE,
+            capabilities = CallCapabilities(canHold = true),
+            accountHandleId = null,
+            accountComponentName = null
+        )
+
+        // Line 2: Incoming call
+        callSessionManager.onTelecomCallAdded(
+            callId = "call_line_2",
+            rawNumber = "2222222222",
+            telecomDisplayName = null,
+            direction = CallDirection.INCOMING,
+            initialState = CallState.RINGING,
+            capabilities = CallCapabilities(),
+            accountHandleId = null,
+            accountComponentName = null
+        )
+
+        // Answering Line 2
+        callSessionManager.executeAction(CallAction.Answer("call_line_2"))
+
+        // Assert Line 1 was auto-held and Line 2 was answered
+        assertEquals("call_line_1", fakeController.lastHeldCallId)
+        assertEquals("call_line_2", fakeController.lastAnsweredCallId)
+    }
+
+    @Test
+    fun testSwapAndMergeCallsDispatches() = runBlocking {
+        callSessionManager.executeAction(CallAction.SwapCalls)
+        assertTrue(fakeController.swapCallsCalled)
+
+        callSessionManager.executeAction(CallAction.MergeCalls("call_1", "call_2"))
+        assertEquals("call_1", fakeController.lastMergedCall1)
+        assertEquals("call_2", fakeController.lastMergedCall2)
+    }
+
+    @Test
+    fun testSetAudioRouteAndSendDtmf() = runBlocking {
+        callSessionManager.onTelecomCallAdded(
+            callId = "call_audio_test",
+            rawNumber = "5556667777",
+            telecomDisplayName = null,
+            direction = CallDirection.OUTGOING,
+            initialState = CallState.ACTIVE,
+            capabilities = CallCapabilities(),
+            accountHandleId = null,
+            accountComponentName = null
+        )
+
+        callSessionManager.executeAction(CallAction.SetAudioRoute(AudioRoute.SPEAKER))
+        assertEquals(AudioRoute.SPEAKER, fakeController.lastRoute)
+        callSessionManager.onAudioStateChanged(false, AudioRoute.SPEAKER, listOf(AudioRoute.EARPIECE, AudioRoute.SPEAKER))
+        assertEquals(AudioRoute.SPEAKER, callSessionManager.audioState.value.route)
+
+        callSessionManager.executeAction(CallAction.SendDtmf("call_audio_test", '9'))
+        assertEquals('9', fakeController.lastDtmfDigit)
+    }
+
+    @Test
+    fun testIncomingCallShowsIncomingNotification() = runBlocking {
+        callSessionManager.onTelecomCallAdded(
+            callId = "call_notif_1",
+            rawNumber = "9876543210",
+            telecomDisplayName = "Test Lead",
+            direction = CallDirection.INCOMING,
+            initialState = CallState.RINGING,
+            capabilities = CallCapabilities(),
+            accountHandleId = null,
+            accountComponentName = null
+        )
+
+        kotlinx.coroutines.delay(100)
+        assertNotNull(fakeNotificationManager.lastIncomingSession)
+        assertEquals("call_notif_1", fakeNotificationManager.lastIncomingSession?.callId)
+        assertFalse(fakeNotificationManager.isNotificationCancelled)
+    }
+
+    @Test
+    fun testActiveCallAudioStateUpdatesNotification() = runBlocking {
+        callSessionManager.onTelecomCallAdded(
+            callId = "call_notif_2",
+            rawNumber = "9876543210",
+            telecomDisplayName = "Active Lead",
+            direction = CallDirection.OUTGOING,
+            initialState = CallState.ACTIVE,
+            capabilities = CallCapabilities(),
+            accountHandleId = null,
+            accountComponentName = null
+        )
+
+        kotlinx.coroutines.delay(100)
+        assertNotNull(fakeNotificationManager.lastActiveSession)
+
+        // Toggle speaker
+        callSessionManager.onAudioStateChanged(true, AudioRoute.SPEAKER, listOf(AudioRoute.EARPIECE, AudioRoute.SPEAKER))
+        assertTrue(fakeNotificationManager.lastActiveSession?.isMuted == true)
+        assertTrue(fakeNotificationManager.lastActiveSession?.isSpeakerOn == true)
+    }
+
+    @Test
+    fun testMissedCallNotificationTriggeredOnUnansweredIncomingDisconnect() = runBlocking {
+        callSessionManager.onTelecomCallAdded(
+            callId = "call_missed_1",
+            rawNumber = "9876543210",
+            telecomDisplayName = "Important Client",
+            direction = CallDirection.INCOMING,
+            initialState = CallState.RINGING,
+            capabilities = CallCapabilities(),
+            accountHandleId = null,
+            accountComponentName = null
+        )
+
+        kotlinx.coroutines.delay(100)
+
+        // Remote caller hangs up without user answering
+        callSessionManager.onTelecomCallStateChanged("call_missed_1", CallState.DISCONNECTED)
+        kotlinx.coroutines.delay(100)
+
+        assertTrue(fakeNotificationManager.isNotificationCancelled)
+        assertNotNull(fakeNotificationManager.lastMissedSession)
+        assertEquals("call_missed_1", fakeNotificationManager.lastMissedSession?.callId)
+    }
+
     // ── Test Fakes ───────────────────────────────────────────────
 
     private fun createFakeContext(): Context {
@@ -380,27 +547,52 @@ class CallSessionManagerTest {
         }
     }
 
+    class FakeCallHapticManager(context: Context) : com.example.callog.core.telecom.CallHapticManager(context)
+
+    class FakeProximitySensorManager(context: Context) : com.example.callog.core.telecom.ProximitySensorManager(context)
+
+    class FakeDtmfTonePlayer : com.example.callog.core.telecom.DtmfTonePlayer()
+
     class FakeTelecomCallController : TelecomCallController {
         var lastAnsweredCallId: String? = null
         var lastRejectedCallId: String? = null
+        var lastRejectedWithMessageCallId: String? = null
+        var lastRejectMessage: String? = null
         var lastDisconnectedCallId: String? = null
         var isMuted = false
         var lastRoute: AudioRoute? = null
         var lastHeldCallId: String? = null
         var lastUnheldCallId: String? = null
+        var swapCallsCalled = false
+        var lastMergedCall1: String? = null
+        var lastMergedCall2: String? = null
+        var lastDtmfDigit: Char? = null
 
         override fun answerCall(callId: String) { lastAnsweredCallId = callId }
         override fun rejectCall(callId: String) { lastRejectedCallId = callId }
+        override fun rejectCallWithMessage(callId: String, textMessage: String) {
+            lastRejectedWithMessageCallId = callId
+            lastRejectMessage = textMessage
+        }
         override fun disconnectCall(callId: String) { lastDisconnectedCallId = callId }
         override fun setCallMuted(shouldMute: Boolean) { isMuted = shouldMute }
         override fun setAudioRoute(route: AudioRoute) { lastRoute = route }
         override fun holdCall(callId: String) { lastHeldCallId = callId }
         override fun unholdCall(callId: String) { lastUnheldCallId = callId }
-        override fun playDtmfTone(callId: String, digit: Char) {}
+        override fun swapCalls() { swapCallsCalled = true }
+        override fun mergeCalls(callId1: String, callId2: String) {
+            lastMergedCall1 = callId1
+            lastMergedCall2 = callId2
+        }
+        override fun playDtmfTone(callId: String, digit: Char) { lastDtmfDigit = digit }
         override fun stopDtmfTone(callId: String) {}
     }
 
-    class FakeRingtoneManager(context: Context) : CallRingtoneManager(context) {
+    class FakeRingtonePolicy : com.example.callog.domain.repository.RingtonePolicy {
+        override fun ringtoneFor(person: Person?, lead: Lead?): android.net.Uri = android.net.Uri.EMPTY
+    }
+
+    class FakeRingtoneController(context: Context) : com.example.callog.core.telecom.RingtoneController(context, FakeRingtonePolicy()) {
         var started = false
         var stopped = false
 
@@ -410,6 +602,11 @@ class CallSessionManagerTest {
         }
 
         override fun stopRingtone() {
+            stopped = true
+            started = false
+        }
+
+        override fun silenceRinger() {
             stopped = true
             started = false
         }
@@ -433,6 +630,9 @@ class CallSessionManagerTest {
         override suspend fun syncContactsFromDevice(): List<Person> = emptyList()
         override suspend fun resolveAndAttachContact(deviceId: String, contact: ContactDto): PersonResolutionResult =
             PersonResolutionResult("p1")
+        override suspend fun syncGlobalContactsFromSupabase(): Result<List<Person>> = Result.success(emptyList())
+        override suspend fun createGlobalContact(name: String, phone: String, company: String?, notes: String?): Result<Person> =
+            Result.success(Person(id = "p1", displayName = name, companyName = company, notes = notes, phoneNumbers = listOf(PhoneNumber("pn1", "p1", phone, phone))))
     }
 
     class FakeLeadRepository : LeadRepository {
@@ -487,8 +687,27 @@ class CallSessionManagerTest {
     }
 
     class FakeCallNotificationManager(context: Context) : CallNotificationManager(context) {
-        override fun showIncomingCallNotification(session: CallSessionState) {}
-        override fun showActiveCallNotification(session: CallSessionState) {}
-        override fun cancelCallNotification() {}
+        var lastIncomingSession: CallSessionState? = null
+        var lastActiveSession: CallSessionState? = null
+        var lastMissedSession: CallSessionState? = null
+        var isNotificationCancelled: Boolean = false
+
+        override fun showIncomingCallNotification(session: CallSessionState) {
+            lastIncomingSession = session
+            isNotificationCancelled = false
+        }
+
+        override fun showActiveCallNotification(session: CallSessionState) {
+            lastActiveSession = session
+            isNotificationCancelled = false
+        }
+
+        override fun showMissedCallNotification(session: CallSessionState) {
+            lastMissedSession = session
+        }
+
+        override fun cancelCallNotification() {
+            isNotificationCancelled = true
+        }
     }
 }

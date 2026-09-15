@@ -1,5 +1,6 @@
 package com.example.callog.data.telecom
 
+import android.content.Intent
 import android.telecom.Call
 import android.telecom.CallAudioState
 import android.telecom.InCallService
@@ -124,6 +125,27 @@ class CallogInCallService : InCallService(), TelecomCallController {
         callSessionManager.onAudioStateChanged(audioState.isMuted, route, supported)
     }
 
+    override fun onSilenceRinger() {
+        super.onSilenceRinger()
+        Log.i(TAG, "Telecom onSilenceRinger received")
+        DeveloperLogger.info("INCALL_SILENCE_RINGER", "Telecom requested ringtone silence")
+        callSessionManager.silenceRinger()
+    }
+
+    override fun onBringToForeground(showDialpad: Boolean) {
+        super.onBringToForeground(showDialpad)
+        Log.i(TAG, "onBringToForeground called, showDialpad=$showDialpad")
+        try {
+            val intent = Intent(this, com.example.callog.presentation.call.InCallActivity::class.java).apply {
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
+                putExtra("EXTRA_SHOW_DIALPAD", showDialpad)
+            }
+            startActivity(intent)
+        } catch (e: Exception) {
+            Log.e(TAG, "Error bringing InCallActivity to foreground", e)
+        }
+    }
+
     // ── TelecomCallController implementation ───────────────────────────────────
 
     override fun answerCall(callId: String) {
@@ -144,6 +166,41 @@ class CallogInCallService : InCallService(), TelecomCallController {
                 call.reject(false, null)
             } catch (e: Exception) {
                 Log.e(TAG, "Error rejecting call $callId", e)
+            }
+        }
+    }
+
+    override fun rejectCallWithMessage(callId: String, textMessage: String) {
+        val call = callMap[callId]
+        if (call != null) {
+            try {
+                call.reject(true, textMessage)
+            } catch (e: Exception) {
+                Log.e(TAG, "Error rejecting call $callId with message", e)
+            }
+        }
+    }
+
+    override fun swapCalls() {
+        val activeCalls = callMap.values.toList()
+        val holdingCall = activeCalls.find { it.state == Call.STATE_HOLDING }
+        val activeCall = activeCalls.find { it.state == Call.STATE_ACTIVE }
+        try {
+            activeCall?.hold()
+            holdingCall?.unhold()
+        } catch (e: Exception) {
+            Log.e(TAG, "Error swapping calls", e)
+        }
+    }
+
+    override fun mergeCalls(callId1: String, callId2: String) {
+        val call1 = callMap[callId1]
+        val call2 = callMap[callId2]
+        if (call1 != null && call2 != null) {
+            try {
+                call1.conference(call2)
+            } catch (e: Exception) {
+                Log.e(TAG, "Error merging calls $callId1 and $callId2", e)
             }
         }
     }

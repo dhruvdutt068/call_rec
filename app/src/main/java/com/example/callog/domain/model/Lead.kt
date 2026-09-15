@@ -4,6 +4,8 @@ enum class LeadStatus {
     HOT,
     WARM,
     COLD,
+    NEW,
+    CUSTOMER,
     UNKNOWN;
 
     companion object {

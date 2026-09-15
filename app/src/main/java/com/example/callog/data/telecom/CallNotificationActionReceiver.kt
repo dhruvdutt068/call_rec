@@ -35,6 +35,12 @@ class CallNotificationActionReceiver : BroadcastReceiver() {
             CallNotificationManager.ACTION_DISCONNECT -> {
                 callSessionManager.executeAction(CallAction.Disconnect(callId))
             }
+            CallNotificationManager.ACTION_TOGGLE_MUTE -> {
+                callSessionManager.executeAction(CallAction.ToggleMute(callId))
+            }
+            CallNotificationManager.ACTION_TOGGLE_SPEAKER -> {
+                callSessionManager.executeAction(CallAction.ToggleSpeaker(callId))
+            }
         }
     }
 }

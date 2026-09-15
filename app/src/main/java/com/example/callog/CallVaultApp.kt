@@ -43,13 +43,25 @@ class CallVaultApp : Application() {
                 lockscreenVisibility = android.app.Notification.VISIBILITY_PUBLIC
             }
 
+            val missedCallsChannel = NotificationChannel(
+                MISSED_CALLS_NOTIFICATION_CHANNEL_ID,
+                "Missed Calls",
+                NotificationManager.IMPORTANCE_DEFAULT
+            ).apply {
+                description = "Notifies of missed incoming calls with quick call-back actions."
+                setShowBadge(true)
+                lockscreenVisibility = android.app.Notification.VISIBILITY_PUBLIC
+            }
+
             manager.createNotificationChannel(reminderChannel)
             manager.createNotificationChannel(callsChannel)
+            manager.createNotificationChannel(missedCallsChannel)
         }
     }
 
     companion object {
         const val NOTIFICATION_CHANNEL_ID = "call_vault_reminders"
         const val CALLS_NOTIFICATION_CHANNEL_ID = "callog_incoming_calls"
+        const val MISSED_CALLS_NOTIFICATION_CHANNEL_ID = "callog_missed_calls"
     }
 }

@@ -35,11 +35,13 @@ import com.example.callog.presentation.theme.*
 @Composable
 fun ActiveCallScreen(
     session: CallSessionState,
+    otherSessions: List<CallSessionState> = emptyList(),
     onAction: (CallAction) -> Unit,
     onOpenPersonDetails: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
     var showKeypadSheet by remember { mutableStateOf(false) }
+    var showAudioRouteSheet by remember { mutableStateOf(false) }
 
     val formattedDuration = remember(session.durationSeconds) {
         val minutes = session.durationSeconds / 60
@@ -180,7 +182,19 @@ fun ActiveCallScreen(
                 .padding(bottom = 24.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // First row of controls: Mute, Keypad, Speaker, and Hold (if supported)
+            // Multi-Call Active / Held Line Card
+            if (otherSessions.isNotEmpty()) {
+                MultiCallLineCard(
+                    activeSession = session,
+                    heldSessions = otherSessions,
+                    onSwapCalls = { onAction(CallAction.SwapCalls) },
+                    onMergeCalls = { c1, c2 -> onAction(CallAction.MergeCalls(c1, c2)) },
+                    onEndHeldCall = { callId -> onAction(CallAction.Disconnect(callId)) }
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+            }
+
+            // Primary In-Call Controls Row 1
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceEvenly,
@@ -202,12 +216,12 @@ fun ActiveCallScreen(
                     onClick = { showKeypadSheet = true }
                 )
 
-                // Speaker Button
+                // Audio Route / Speaker Button
                 CallControlButton(
                     icon = if (session.isSpeakerOn) Icons.AutoMirrored.Filled.VolumeUp else Icons.AutoMirrored.Filled.VolumeDown,
-                    label = "Speaker",
+                    label = if (session.isSpeakerOn) "Speaker" else "Audio",
                     isActive = session.isSpeakerOn,
-                    onClick = { onAction(CallAction.ToggleSpeaker(session.callId)) }
+                    onClick = { showAudioRouteSheet = true }
                 )
 
                 // Hold Button: ONLY shown if Telecom capability supports hold
@@ -255,6 +269,23 @@ fun ActiveCallScreen(
                 )
             }
         }
+
+        // Audio Route Selector Bottom Sheet
+        if (showAudioRouteSheet) {
+            AudioRouteBottomSheet(
+                currentRoute = if (session.isSpeakerOn) com.example.callog.domain.call.AudioRoute.SPEAKER else com.example.callog.domain.call.AudioRoute.EARPIECE,
+                supportedRoutes = listOf(
+                    com.example.callog.domain.call.AudioRoute.EARPIECE,
+                    com.example.callog.domain.call.AudioRoute.SPEAKER,
+                    com.example.callog.domain.call.AudioRoute.BLUETOOTH,
+                    com.example.callog.domain.call.AudioRoute.WIRED_HEADSET
+                ),
+                onSelectRoute = { selectedRoute ->
+                    onAction(CallAction.SetAudioRoute(selectedRoute))
+                },
+                onDismiss = { showAudioRouteSheet = false }
+            )
+        }
     }
 }
 
@@ -301,6 +332,8 @@ fun DtmfKeypadView(
     onDigitClick: (Char) -> Unit,
     onClose: () -> Unit
 ) {
+    var typedDigits by remember { mutableStateOf("") }
+
     val digits = listOf(
         listOf('1', '2', '3'),
         listOf('4', '5', '6'),
@@ -329,7 +362,51 @@ fun DtmfKeypadView(
             }
         }
 
-        Spacer(modifier = Modifier.height(16.dp))
+        // Live Typed Digits Display
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(48.dp)
+                .padding(horizontal = 8.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            if (typedDigits.isNotEmpty()) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Center
+                ) {
+                    Text(
+                        text = typedDigits,
+                        style = MaterialTheme.typography.headlineMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary,
+                        letterSpacing = 3.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    IconButton(
+                        onClick = { typedDigits = "" },
+                        modifier = Modifier.size(28.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Close,
+                            contentDescription = "Clear",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+                }
+            } else {
+                Text(
+                    text = "Touch digits to send DTMF tone",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
 
         digits.forEach { row ->
             Row(
@@ -344,7 +421,10 @@ fun DtmfKeypadView(
                             .size(64.dp)
                             .clip(CircleShape)
                             .background(MaterialTheme.colorScheme.surfaceVariant)
-                            .clickable { onDigitClick(digit) },
+                            .clickable {
+                                typedDigits += digit
+                                onDigitClick(digit)
+                            },
                         contentAlignment = Alignment.Center
                     ) {
                         Text(

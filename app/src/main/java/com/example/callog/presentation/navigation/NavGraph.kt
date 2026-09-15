@@ -216,16 +216,17 @@ fun MainScreen(
     onCallClick: (Long) -> Unit,
     onSettingsClick: () -> Unit
 ) {
-    var selectedTab by remember { mutableStateOf<Screen.Tab>(Screen.Tab.Dashboard) }
+    var selectedTab by remember { mutableStateOf<Screen.Tab>(Screen.Tab.Logs) }
 
     Scaffold(
         topBar = {
             TopAppBar(
                 title = {
                     val titleText = when (selectedTab) {
-                        Screen.Tab.Dashboard -> "CallVault"
                         Screen.Tab.Logs -> "Call Logs"
+                        Screen.Tab.Contacts -> "Contacts"
                         Screen.Tab.Recordings -> "Recordings"
+                        Screen.Tab.Settings -> "Settings"
                     }
                     Text(titleText, fontWeight = FontWeight.Bold)
                 },
@@ -256,9 +257,10 @@ fun MainScreen(
                 contentColor = MaterialTheme.colorScheme.onSurfaceVariant
             ) {
                 val tabs = listOf(
-                    Screen.Tab.Dashboard,
                     Screen.Tab.Logs,
-                    Screen.Tab.Recordings
+                    Screen.Tab.Contacts,
+                    Screen.Tab.Recordings,
+                    Screen.Tab.Settings
                 )
                 tabs.forEach { tab ->
                     NavigationBarItem(
@@ -281,20 +283,24 @@ fun MainScreen(
     ) { innerPadding ->
         val modifier = Modifier.padding(innerPadding)
         when (selectedTab) {
-            Screen.Tab.Dashboard -> DashboardScreen(
-                callViewModel = callViewModel,
-                analyticsViewModel = analyticsViewModel,
-                onViewAllLogsClick = { selectedTab = Screen.Tab.Logs },
-                onCallClick = onCallClick,
-                modifier = modifier
-            )
             Screen.Tab.Logs -> CallLogsScreen(
                 viewModel = callViewModel,
                 onCallClick = onCallClick,
                 modifier = modifier
             )
+            Screen.Tab.Contacts -> com.example.callog.presentation.screens.contacts.ContactsScreen(
+                viewModel = callViewModel,
+                modifier = modifier
+            )
             Screen.Tab.Recordings -> RecordingManagerScreen(
                 viewModel = callViewModel,
+                modifier = modifier
+            )
+            Screen.Tab.Settings -> com.example.callog.presentation.screens.settings.SettingsScreen(
+                viewModel = callViewModel,
+                darkTheme = false,
+                onDarkThemeChange = {},
+                onNavigateToDeveloperDashboard = {},
                 modifier = modifier
             )
         }

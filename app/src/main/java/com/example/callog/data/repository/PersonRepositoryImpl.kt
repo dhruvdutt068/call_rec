@@ -1,6 +1,7 @@
 package com.example.callog.data.repository
 
 import android.os.Build
+import com.example.callog.core.diagnostics.DeveloperLogger
 import com.example.callog.core.utils.PhoneNumberNormalizer
 import com.example.callog.data.local.dao.PersonDao
 import com.example.callog.data.local.entity.*
@@ -217,6 +218,154 @@ class PersonRepositoryImpl @Inject constructor(
             }
         }
         resolvedPeople
+    }
+
+    override suspend fun syncGlobalContactsFromSupabase(): Result<List<Person>> = withContext(Dispatchers.IO) {
+        return@withContext try {
+            val remotePeopleResult = supabaseService.fetchGlobalPeople()
+            if (remotePeopleResult.isFailure) {
+                return@withContext Result.failure(remotePeopleResult.exceptionOrNull() ?: Exception("Failed to fetch people from Supabase"))
+            }
+            val remotePeople = remotePeopleResult.getOrNull() ?: emptyList()
+
+            val remotePhones = supabaseService.fetchGlobalPhoneNumbers().getOrNull() ?: emptyList()
+            val remoteAliases = supabaseService.fetchGlobalContactAliases().getOrNull() ?: emptyList()
+
+            // 1. Upsert People into Room
+            for (p in remotePeople) {
+                val existing = personDao.getPersonById(p.id)
+                val entity = PersonEntity(
+                    id = p.id,
+                    displayName = p.displayName.ifBlank { "Unknown Contact" },
+                    companyName = p.companyName,
+                    notes = p.notes,
+                    createdAt = parseTimestamp(p.createdAt),
+                    updatedAt = parseTimestamp(p.updatedAt),
+                    syncStatus = "SYNCED"
+                )
+                personDao.insertPerson(entity)
+            }
+
+            // 2. Upsert Phone Numbers
+            for (ph in remotePhones) {
+                val entity = PhoneNumberEntity(
+                    id = ph.id,
+                    personId = ph.personId,
+                    phoneNumber = ph.phoneNumber,
+                    normalizedNumber = ph.normalizedNumber,
+                    phoneType = ph.phoneType,
+                    isPrimary = ph.isPrimary,
+                    createdAt = parseTimestamp(ph.createdAt),
+                    syncStatus = "SYNCED"
+                )
+                personDao.insertPhoneNumber(entity)
+            }
+
+            // 3. Upsert Aliases
+            for (al in remoteAliases) {
+                val entity = ContactAliasEntity(
+                    id = al.id,
+                    personId = al.personId,
+                    deviceId = al.deviceId,
+                    androidContactId = al.androidContactId,
+                    aliasName = al.aliasName,
+                    phoneNumber = al.phoneNumber,
+                    normalizedNumber = al.normalizedNumber,
+                    createdAt = parseTimestamp(al.createdAt),
+                    syncStatus = "SYNCED"
+                )
+                personDao.insertAlias(entity)
+            }
+
+            val allPeople = getAllPeople()
+            Result.success(allPeople)
+        } catch (e: Exception) {
+            DeveloperLogger.error("PersonRepositoryImpl", "Error syncing global contacts from Supabase: ${e.message}")
+            Result.failure(e)
+        }
+    }
+
+    override suspend fun createGlobalContact(
+        name: String,
+        phone: String,
+        company: String?,
+        notes: String?
+    ): Result<Person> = withContext(Dispatchers.IO) {
+        return@withContext try {
+            val normalized = PhoneNumberNormalizer.normalize(phone)
+            val remoteRes = supabaseService.createGlobalPerson(
+                name = name,
+                phone = phone,
+                normalizedPhone = normalized,
+                company = company,
+                notes = notes
+            )
+            val personId = if (remoteRes.isSuccess) {
+                remoteRes.getOrThrow().id
+            } else {
+                "P" + UUID.randomUUID().toString().replace("-", "").take(8).uppercase()
+            }
+
+            val now = System.currentTimeMillis()
+            val entity = PersonEntity(
+                id = personId,
+                displayName = name.trim().ifBlank { "New Contact" },
+                companyName = company?.trim()?.ifBlank { null },
+                notes = notes?.trim()?.ifBlank { null },
+                createdAt = now,
+                updatedAt = now,
+                syncStatus = if (remoteRes.isSuccess) "SYNCED" else "PENDING"
+            )
+            personDao.insertPerson(entity)
+
+            if (normalized.isNotBlank()) {
+                val phoneEntity = PhoneNumberEntity(
+                    id = UUID.randomUUID().toString(),
+                    personId = personId,
+                    phoneNumber = phone.trim(),
+                    normalizedNumber = normalized,
+                    phoneType = "PRIMARY",
+                    isPrimary = true,
+                    createdAt = now,
+                    syncStatus = if (remoteRes.isSuccess) "SYNCED" else "PENDING"
+                )
+                personDao.insertPhoneNumber(phoneEntity)
+            }
+
+            val created = personDao.getPersonWithDetailsById(personId)?.toDomain()
+                ?: Person(
+                    id = personId,
+                    displayName = name,
+                    companyName = company,
+                    notes = notes,
+                    phoneNumbers = if (normalized.isNotBlank()) listOf(PhoneNumber(id = UUID.randomUUID().toString(), personId = personId, phoneNumber = phone, normalizedNumber = normalized, isPrimary = true)) else emptyList(),
+                    aliases = emptyList(),
+                    createdAt = now,
+                    updatedAt = now
+                )
+
+            Result.success(created)
+        } catch (e: Exception) {
+            DeveloperLogger.error("PersonRepositoryImpl", "Failed to create global contact: ${e.message}")
+            Result.failure(e)
+        }
+    }
+
+    private fun parseTimestamp(isoString: String?): Long {
+        if (isoString.isNullOrBlank()) return System.currentTimeMillis()
+        return try {
+            // Try ISO format
+            val sdf = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", java.util.Locale.US)
+            sdf.timeZone = java.util.TimeZone.getTimeZone("UTC")
+            sdf.parse(isoString)?.time ?: isoString.toLongOrNull() ?: System.currentTimeMillis()
+        } catch (e: Exception) {
+            try {
+                val altSdf = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", java.util.Locale.US)
+                altSdf.parse(isoString)?.time ?: isoString.toLongOrNull() ?: System.currentTimeMillis()
+            } catch (e2: Exception) {
+                isoString.toLongOrNull() ?: System.currentTimeMillis()
+            }
+        }
     }
 }
 

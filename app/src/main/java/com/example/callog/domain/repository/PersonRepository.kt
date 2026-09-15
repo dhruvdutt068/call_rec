@@ -21,5 +21,7 @@ interface PersonRepository {
 
     suspend fun getOrCreateCurrentDevice(): Device
     suspend fun syncContactsFromDevice(): List<Person>
+    suspend fun syncGlobalContactsFromSupabase(): Result<List<Person>>
+    suspend fun createGlobalContact(name: String, phone: String, company: String?, notes: String?): Result<Person>
     suspend fun resolveAndAttachContact(deviceId: String, contact: com.example.callog.data.provider.ContactDto): com.example.callog.domain.model.PersonResolutionResult
 }

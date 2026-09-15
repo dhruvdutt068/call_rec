@@ -120,9 +120,10 @@ class InCallActivity : ComponentActivity() {
                             is CallUiState.Active -> {
                                 ActiveCallScreen(
                                     session = targetState.session,
+                                    otherSessions = targetState.otherSessions,
                                     onAction = viewModel::onAction,
                                     onOpenPersonDetails = { personId ->
-                                        openCanonicalPersonDetails(personId)
+                                         openCanonicalPersonDetails(personId)
                                     }
                                 )
                             }
