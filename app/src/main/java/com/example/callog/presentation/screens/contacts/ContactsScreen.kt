@@ -19,6 +19,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -45,6 +46,7 @@ import com.example.callog.presentation.viewmodel.ContactsViewModel
 @Composable
 fun ContactsScreen(
     contactsViewModel: ContactsViewModel = hiltViewModel(),
+    callViewModel: CallViewModel? = null,
     modifier: Modifier = Modifier,
     onContactClick: ((personId: String) -> Unit)? = null,
     onDeviceContactClick: ((androidContactId: String) -> Unit)? = null,
@@ -66,8 +68,21 @@ fun ContactsScreen(
         state = uiState,
         onEvent = { contactsViewModel.onEvent(it) },
         onCallClick = { phone ->
-            val intent = Intent(Intent.ACTION_DIAL, Uri.parse("tel:$phone"))
-            context.startActivity(intent)
+            val clean = phone.filter { it.isDigit() || it == '+' || it == '*' || it == '#' }.ifBlank { phone.trim() }
+            if (clean.isNotBlank()) {
+                if (callViewModel != null) {
+                    callViewModel.initiateCall(context, clean)
+                } else {
+                    try {
+                        val intent = Intent(Intent.ACTION_DIAL, Uri.parse("tel:${Uri.encode(clean)}")).apply {
+                            flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                        }
+                        context.startActivity(intent)
+                    } catch (e: Exception) {
+                        android.util.Log.e("ContactsScreen", "Failed to place call to $phone: ${e.message}")
+                    }
+                }
+            }
         },
         onContactClick = { contactItem ->
             when (contactItem) {
@@ -103,6 +118,7 @@ fun ContactsScreen(
 ) {
     ContactsScreen(
         contactsViewModel = contactsViewModel,
+        callViewModel = viewModel,
         modifier = modifier,
         onContactClick = onContactClick,
         onDeviceContactClick = onDeviceContactClick,
@@ -132,16 +148,25 @@ fun ContactsContent(
         }
     }
 
+    val searchPlaceholder = if (state.source == ContactSource.CLOUD) {
+        "Search cloud CRM, aliases..."
+    } else {
+        "Search phone contacts & numbers..."
+    }
+
     Scaffold(
+        modifier = modifier,
         topBar = {
-            TopAppBar(
-                title = { Text("Contacts Directory", style = CallogTypography.sectionTitle) },
+            CallogAppBarWithSearch(
+                query = state.query,
+                onQueryChange = { onEvent(ContactsEvent.SearchChanged(it)) },
+                placeholder = searchPlaceholder,
                 navigationIcon = {
                     if (onMenuClick != null) {
                         IconButton(onClick = onMenuClick) {
                             Icon(
                                 imageVector = Icons.Default.Menu,
-                                contentDescription = "Open Menu"
+                                contentDescription = "Open Navigation Menu"
                             )
                         }
                     }
@@ -165,12 +190,7 @@ fun ContactsContent(
                             )
                         }
                     }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceVariant,
-                    titleContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                    actionIconContentColor = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                }
             )
         },
         floatingActionButton = {
@@ -191,7 +211,7 @@ fun ContactsContent(
         containerColor = MaterialTheme.colorScheme.background
     ) { innerPadding ->
         Column(
-            modifier = modifier
+            modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
         ) {
@@ -204,24 +224,9 @@ fun ContactsContent(
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(horizontal = 16.dp),
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                // Search Bar
-                val searchPlaceholder = if (state.source == ContactSource.CLOUD) {
-                    "Search cloud CRM, company, aliases..."
-                } else {
-                    "Search phone contacts & numbers..."
-                }
-
-                SearchBarField(
-                    query = state.query,
-                    onQueryChange = { onEvent(ContactsEvent.SearchChanged(it)) },
-                    placeholder = searchPlaceholder,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 12.dp)
-                )
 
                 // Sync status banner for Cloud Tab
                 AnimatedVisibility(
@@ -347,7 +352,8 @@ fun ContactsContent(
                                     is ContactDirectoryItem.Cloud -> "cloud_${item.person.id}"
                                     is ContactDirectoryItem.Device -> "device_${item.contactId}"
                                 }
-                            }
+                            },
+                            contentType = { item -> item::class.java }
                         ) { item ->
                             when (item) {
                                 is ContactDirectoryItem.Cloud -> {
@@ -433,6 +439,20 @@ private fun ContactSourceTabs(
 }
 
 /**
+ * Fast zero-allocation initials extractor for contact avatars.
+ */
+private fun fastExtractInitials(name: String): String {
+    val trimmed = name.trim()
+    if (trimmed.isEmpty()) return "?"
+    val spaceIdx = trimmed.indexOf(' ')
+    return if (spaceIdx != -1 && spaceIdx + 1 < trimmed.length) {
+        "${trimmed[0]}${trimmed[spaceIdx + 1]}".uppercase()
+    } else {
+        trimmed.take(1).uppercase()
+    }
+}
+
+/**
  * Card for Cloud CRM Person.
  */
 @Composable
@@ -443,12 +463,7 @@ private fun CloudContactCard(
     modifier: Modifier = Modifier
 ) {
     val initials = remember(item.displayName) {
-        val parts = item.displayName.trim().split("\\s+".toRegex())
-        if (parts.size >= 2) {
-            "${parts[0].take(1)}${parts[1].take(1)}".uppercase()
-        } else {
-            item.displayName.take(1).uppercase()
-        }
+        fastExtractInitials(item.displayName)
     }
 
     GlassyCard(
@@ -558,12 +573,7 @@ private fun DeviceContactCard(
     modifier: Modifier = Modifier
 ) {
     val initials = remember(item.displayName) {
-        val parts = item.displayName.trim().split("\\s+".toRegex())
-        if (parts.size >= 2) {
-            "${parts[0].take(1)}${parts[1].take(1)}".uppercase()
-        } else {
-            item.displayName.take(1).uppercase()
-        }
+        fastExtractInitials(item.displayName)
     }
 
     GlassyCard(

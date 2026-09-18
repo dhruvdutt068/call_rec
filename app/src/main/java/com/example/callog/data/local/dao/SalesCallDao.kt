@@ -22,6 +22,14 @@ interface SalesCallDao {
     @Query("SELECT * FROM sales_calls WHERE callId = :callId LIMIT 1")
     suspend fun getSalesCallByCallId(callId: Long): SalesCallEntity?
 
+    /** Observe the record tied to a specific call log entry. */
+    @Query("SELECT * FROM sales_calls WHERE callId = :callId LIMIT 1")
+    fun getSalesCallByCallIdFlow(callId: Long): Flow<SalesCallEntity?>
+
+    /** All sales calls linked to a specific canonical Person. */
+    @Query("SELECT * FROM sales_calls WHERE personId = :personId ORDER BY createdAt DESC")
+    fun getSalesCallsByPersonIdFlow(personId: String): Flow<List<SalesCallEntity>>
+
     /** All calls made/received by a particular salesperson. */
     @Query("SELECT * FROM sales_calls WHERE salespersonPhone = :phone ORDER BY createdAt DESC")
     fun getSalesCallsBySalesperson(phone: String): Flow<List<SalesCallEntity>>

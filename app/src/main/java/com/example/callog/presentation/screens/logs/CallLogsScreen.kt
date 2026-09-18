@@ -16,11 +16,13 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.example.callog.domain.model.CallLogEntry
 import com.example.callog.presentation.components.CallCard
+import com.example.callog.presentation.components.CallogAppBarWithSearch
 import com.example.callog.presentation.components.ExpressiveEmptyState
 import com.example.callog.presentation.components.ExpressiveSegmentedButtonGroup
 import com.example.callog.presentation.components.ExpressiveSegmentedButtonItem
@@ -102,14 +104,10 @@ fun CallLogsContent(
         onRefresh = onSyncClick,
         modifier = modifier.fillMaxSize(),
         topBar = {
-            TopAppBar(
-                title = {
-                    Text(
-                        text = "Call Logs",
-                        style = CallogTypography.sectionTitle,
-                        fontWeight = FontWeight.Bold
-                    )
-                },
+            CallogAppBarWithSearch(
+                query = searchQuery,
+                onQueryChange = onSearchQueryChange,
+                placeholder = "Search name, number, notes, tags...",
                 navigationIcon = {
                     if (onBackClick != null) {
                         IconButton(
@@ -153,30 +151,16 @@ fun CallLogsContent(
                             )
                         }
                     }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
-                    titleContentColor = MaterialTheme.colorScheme.onSurface,
-                    navigationIconContentColor = MaterialTheme.colorScheme.onSurface
-                )
+                }
             )
         }
     ) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(horizontal = 16.dp),
+                .padding(horizontal = 16.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            // Search Bar
-            SearchBarField(
-                query = searchQuery,
-                onQueryChange = onSearchQueryChange,
-                placeholder = "Search name, number, notes, tags...",
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 12.dp)
-            )
 
             // Filter chips and Sort button row
             Row(

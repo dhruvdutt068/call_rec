@@ -10,10 +10,13 @@ import com.example.callog.domain.usecase.GetCloudContactsUseCase
 import com.example.callog.domain.usecase.GetDeviceContactsUseCase
 import com.example.callog.domain.usecase.RefreshDeviceContactsUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
+@OptIn(ExperimentalCoroutinesApi::class)
 @HiltViewModel
 class ContactsViewModel(
     private val personRepository: PersonRepository,
@@ -57,56 +60,78 @@ class ContactsViewModel(
         FilterMeta(source, query, isRefreshing, hasPermission, syncStatus)
     }
 
+    private val _activeContactsFlow: Flow<List<ContactDirectoryItem>> = combine(
+        _selectedSource,
+        _hasContactsPermission
+    ) { source, hasPermission ->
+        source to hasPermission
+    }.flatMapLatest { (source, hasPermission) ->
+        when (source) {
+            ContactSource.CLOUD -> getCloudContactsUseCase()
+            ContactSource.DEVICE -> {
+                if (!hasPermission) flowOf(emptyList()) else getDeviceContactsUseCase()
+            }
+        }
+    }
+
     val uiState: StateFlow<ContactsUiState> = combine(
+        _activeContactsFlow,
         _metadataFlow,
-        getCloudContactsUseCase(),
-        getDeviceContactsUseCase()
-    ) { meta, cloud, device ->
-        val (source, query, isRefreshing, hasPermission, syncStatus) = meta
-        val filtered = when (source) {
-            ContactSource.CLOUD -> {
-                if (query.isBlank()) {
-                    cloud
-                } else {
-                    val q = query.trim().lowercase()
-                    cloud.filter { item ->
-                        item.displayName.lowercase().contains(q) ||
-                        (item.companyName?.lowercase()?.contains(q) == true) ||
-                        (item.primaryPhone?.contains(q) == true) ||
-                        item.person.phoneNumbers.any { it.phoneNumber.contains(q) || it.normalizedNumber.contains(q) } ||
-                        item.person.aliases.any { it.aliasName.lowercase().contains(q) }
+        _error
+    ) { rawList, meta, error ->
+        val query = meta.query.trim().lowercase()
+        val digitsQuery = query.filter { it.isDigit() }
+        val filtered = if (query.isBlank()) {
+            rawList
+        } else {
+            when (meta.source) {
+                ContactSource.CLOUD -> {
+                    rawList.filter { item ->
+                        if (item !is ContactDirectoryItem.Cloud) return@filter false
+                        item.displayName.lowercase().contains(query) ||
+                        (item.companyName?.lowercase()?.contains(query) == true) ||
+                        (item.primaryPhone?.lowercase()?.contains(query) == true) ||
+                        (digitsQuery.length >= 2 && item.primaryPhone?.filter { it.isDigit() }?.contains(digitsQuery) == true) ||
+                        item.person.phoneNumbers.any { 
+                            it.phoneNumber.lowercase().contains(query) || 
+                            it.normalizedNumber.lowercase().contains(query) ||
+                            (digitsQuery.length >= 2 && it.normalizedNumber.contains(digitsQuery))
+                        } ||
+                        item.person.aliases.any { 
+                            it.aliasName.lowercase().contains(query) ||
+                            (digitsQuery.length >= 2 && it.normalizedNumber.contains(digitsQuery))
+                        }
                     }
                 }
-            }
-            ContactSource.DEVICE -> {
-                if (!hasPermission) {
-                    emptyList()
-                } else if (query.isBlank()) {
-                    device
-                } else {
-                    val q = query.trim().lowercase()
-                    device.filter { item ->
-                        item.displayName.lowercase().contains(q) ||
-                        (item.primaryPhone?.contains(q) == true) ||
-                        (item.deviceContact?.phoneNumbers?.any { it.number.contains(q) || it.normalizedNumber.contains(q) } == true)
+                ContactSource.DEVICE -> {
+                    rawList.filter { item ->
+                        if (item !is ContactDirectoryItem.Device) return@filter false
+                        item.displayName.lowercase().contains(query) ||
+                        (item.primaryPhone?.lowercase()?.contains(query) == true) ||
+                        (digitsQuery.length >= 2 && item.primaryPhone?.filter { it.isDigit() }?.contains(digitsQuery) == true) ||
+                        (item.linkedPersonName?.lowercase()?.contains(query) == true) ||
+                        (item.deviceContact?.phoneNumbers?.any { 
+                            it.number.lowercase().contains(query) || 
+                            it.normalizedNumber.lowercase().contains(query) ||
+                            (digitsQuery.length >= 2 && it.normalizedNumber.contains(digitsQuery))
+                        } == true)
                     }
                 }
             }
         }
-
         ContactsUiState(
-            source = source,
-            query = query,
+            source = meta.source,
+            query = meta.query,
             contacts = filtered,
             isLoading = false,
-            isRefreshing = isRefreshing,
-            hasContactsPermission = hasPermission,
-            syncStatus = syncStatus,
-            error = _error.value
+            isRefreshing = meta.isRefreshing,
+            hasContactsPermission = meta.hasPermission,
+            syncStatus = meta.syncStatus,
+            error = error
         )
     }.stateIn(
         viewModelScope,
-        SharingStarted.Eagerly,
+        sharingStarted,
         ContactsUiState()
     )
 

@@ -31,9 +31,11 @@ class GetCallLogsUseCase @Inject constructor(
             // 1. Filter by Search Query
             if (searchQuery.isNotEmpty()) {
                 val q = searchQuery.trim().lowercase()
+                val digitsQuery = q.filter { it.isDigit() }
                 result = result.filter { entry ->
                     entry.name?.lowercase()?.contains(q) == true ||
-                    entry.number.contains(q) ||
+                    entry.number.lowercase().contains(q) ||
+                    (digitsQuery.length >= 2 && entry.number.filter { it.isDigit() }.contains(digitsQuery)) ||
                     entry.notes?.lowercase()?.contains(q) == true ||
                     entry.tags.any { it.lowercase().contains(q) }
                 }

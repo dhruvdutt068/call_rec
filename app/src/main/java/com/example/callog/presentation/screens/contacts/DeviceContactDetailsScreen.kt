@@ -36,7 +36,9 @@ fun DeviceContactDetailsScreen(
     personRepository: PersonRepository,
     onBackClick: () -> Unit,
     onNavigateToCloudProfile: (personId: String) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    callViewModel: com.example.callog.presentation.viewmodel.CallViewModel? = null,
+    onCallClick: ((String) -> Unit)? = null
 ) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
@@ -295,8 +297,21 @@ fun DeviceContactDetailsScreen(
                             // Call button
                             IconButton(
                                 onClick = {
-                                    val intent = Intent(Intent.ACTION_DIAL, Uri.parse("tel:${phone.number}"))
-                                    context.startActivity(intent)
+                                    val clean = phone.number.filter { it.isDigit() || it == '+' || it == '*' || it == '#' }.ifBlank { phone.number.trim() }
+                                    if (clean.isNotBlank()) {
+                                        if (onCallClick != null) {
+                                            onCallClick(clean)
+                                        } else if (callViewModel != null) {
+                                            callViewModel.initiateCall(context, clean)
+                                        } else {
+                                            try {
+                                                val intent = Intent(Intent.ACTION_DIAL, Uri.parse("tel:${Uri.encode(clean)}")).apply {
+                                                    flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                                                }
+                                                context.startActivity(intent)
+                                            } catch (e: Exception) { }
+                                        }
+                                    }
                                 }
                             ) {
                                 Icon(
@@ -309,8 +324,15 @@ fun DeviceContactDetailsScreen(
                             // SMS button
                             IconButton(
                                 onClick = {
-                                    val intent = Intent(Intent.ACTION_SENDTO, Uri.parse("smsto:${phone.number}"))
-                                    context.startActivity(intent)
+                                    val clean = phone.number.filter { it.isDigit() || it == '+' || it == '*' || it == '#' }.ifBlank { phone.number.trim() }
+                                    if (clean.isNotBlank()) {
+                                        try {
+                                            val intent = Intent(Intent.ACTION_SENDTO, Uri.parse("smsto:${Uri.encode(clean)}")).apply {
+                                                flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                                            }
+                                            context.startActivity(intent)
+                                        } catch (e: Exception) { }
+                                    }
                                 }
                             ) {
                                 Icon(

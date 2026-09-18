@@ -2,7 +2,9 @@ package com.example.callog.domain.usecase
 
 import com.example.callog.domain.model.ContactDirectoryItem
 import com.example.callog.domain.repository.PersonRepository
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import javax.inject.Inject
 
