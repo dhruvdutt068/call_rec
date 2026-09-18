@@ -175,6 +175,9 @@ fun NavGraph(
                     onNavigateToDeveloperDashboard = {
                         navController.navigate(Screen.DeveloperDashboard.route)
                     },
+                    onNavigateToEnvironmentPresets = {
+                        navController.navigate(Screen.EnvironmentPresets.route)
+                    },
                     modifier = Modifier.padding(innerPadding)
                 )
             }
@@ -188,7 +191,15 @@ fun NavGraph(
                     navController.popBackStack()
                 },
                 onNavigateToLogs = { navController.navigate(Screen.DeveloperLogs.route) },
-                onNavigateToRecordingDiagnostics = { navController.navigate(Screen.RecordingDiagnostics.route) }
+                onNavigateToRecordingDiagnostics = { navController.navigate(Screen.RecordingDiagnostics.route) },
+                onNavigateToCallSimulator = { navController.navigate(Screen.CallSimulator.route) },
+                onNavigateToEnvironmentPresets = { navController.navigate(Screen.EnvironmentPresets.route) }
+            )
+        }
+
+        composable(Screen.EnvironmentPresets.route) {
+            com.example.callog.presentation.screens.developer.EnvironmentPresetScreen(
+                onBackClick = { navController.popBackStack() }
             )
         }
 
@@ -202,6 +213,24 @@ fun NavGraph(
         composable(Screen.RecordingDiagnostics.route) {
             com.example.callog.presentation.screens.developer.RecordingDiagnosticsScreen(
                 viewModel = callViewModel,
+                onBackClick = { navController.popBackStack() }
+            )
+        }
+
+        composable(Screen.CallSimulator.route) {
+            val context = androidx.compose.ui.platform.LocalContext.current
+            val entryPoint = remember(context) {
+                dagger.hilt.android.EntryPointAccessors.fromApplication(
+                    context.applicationContext,
+                    com.example.callog.di.TelecomEntryPoint::class.java
+                )
+            }
+            val simulatorManager = remember(entryPoint) {
+                entryPoint.callSimulatorManager()
+            }
+            com.example.callog.presentation.screens.developer.CallSimulatorScreen(
+                callViewModel = callViewModel,
+                simulatorManager = simulatorManager,
                 onBackClick = { navController.popBackStack() }
             )
         }

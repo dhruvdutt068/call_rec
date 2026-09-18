@@ -12,6 +12,7 @@ import kotlinx.serialization.Serializable
  * - Complete data models are NOT passed through the back stack; ViewModels load
  *   entity state from the repository layer using the canonical identifier.
  */
+@Serializable
 @Immutable
 sealed interface AllSetNavKey {
 
@@ -44,6 +45,7 @@ sealed interface AllSetNavKey {
     // AUTHENTICATION FLOW
     // ==========================================
 
+    @Serializable
     sealed interface Auth : AllSetNavKey {
         @Serializable
         data object Login : Auth
@@ -63,6 +65,7 @@ sealed interface AllSetNavKey {
     // Contacts -> Global Search -> Search Results -> Contact Details -> Sub-destinations
     // ==========================================
 
+    @Serializable
     sealed interface Contacts : AllSetNavKey {
         @Serializable
         data object List : Contacts
@@ -80,6 +83,12 @@ sealed interface AllSetNavKey {
         @Serializable
         data class ContactDetails(val contactId: String) : Contacts
 
+        /**
+         * Device contact details screen with local Android Contact ID.
+         */
+        @Serializable
+        data class DeviceContactDetails(val androidContactId: String) : Contacts
+
         @Serializable
         data class EditContact(val contactId: String) : Contacts
 
@@ -90,6 +99,7 @@ sealed interface AllSetNavKey {
         data object SelectContact : Contacts
 
         // Contact sub-destinations / tabs
+        @Serializable
         sealed interface SubSection : Contacts {
             @Serializable
             data class Calls(val contactId: String) : SubSection
@@ -115,6 +125,7 @@ sealed interface AllSetNavKey {
     // TASKS FLOW
     // ==========================================
 
+    @Serializable
     sealed interface Tasks : AllSetNavKey {
         @Serializable
         data object List : Tasks
@@ -130,6 +141,7 @@ sealed interface AllSetNavKey {
     // MEETINGS FLOW
     // ==========================================
 
+    @Serializable
     sealed interface Meetings : AllSetNavKey {
         @Serializable
         data object List : Meetings

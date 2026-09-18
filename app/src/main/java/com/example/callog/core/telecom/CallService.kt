@@ -73,8 +73,15 @@ class CallService : InCallService(), TelecomCallController {
 
         val details = call.details
         val handle = details?.handle
-        val rawNumber = handle?.schemeSpecificPart ?: ""
-        val displayName = details?.callerDisplayName
+        val rawNumber = handle?.schemeSpecificPart
+            ?: handle?.let { if (it.scheme == "tel") it.schemeSpecificPart else it.toString().removePrefix("tel:") }
+            ?: details?.gatewayInfo?.originalAddress?.schemeSpecificPart
+            ?: details?.intentExtras?.getString(android.telecom.TelecomManager.EXTRA_INCOMING_CALL_ADDRESS)
+            ?: details?.extras?.getString(android.telecom.TelecomManager.EXTRA_INCOMING_CALL_ADDRESS)
+            ?: ""
+        val displayName = details?.contactDisplayName
+            ?.takeIf { it.isNotBlank() }
+            ?: details?.callerDisplayName
 
         val direction = when (details?.callDirection) {
             Call.Details.DIRECTION_INCOMING -> CallDirection.INCOMING
@@ -172,36 +179,64 @@ class CallService : InCallService(), TelecomCallController {
 
     // ── TelecomCallController implementation ───────────────────────────────────
 
+    private fun findCall(callId: String, targetState: Int? = null): Call? {
+        // 1. Direct match by ID
+        callMap[callId]?.let { return it }
+
+        // 2. If targetState specified (e.g. STATE_RINGING), find call matching that state
+        if (targetState != null) {
+            callMap.values.firstOrNull { it.state == targetState }?.let { return it }
+        }
+
+        // 3. Fallback to any active/connecting/ringing/holding call, or first call in map
+        return callMap.values.firstOrNull {
+            it.state == Call.STATE_RINGING || it.state == Call.STATE_ACTIVE ||
+            it.state == Call.STATE_CONNECTING || it.state == Call.STATE_HOLDING
+        } ?: callMap.values.firstOrNull()
+    }
+
     override fun answerCall(callId: String) {
-        val call = callMap[callId]
+        val call = findCall(callId, targetState = Call.STATE_RINGING)
         if (call != null) {
             try {
+                DeveloperLogger.info("CALL_SERVICE", "Answering call ${getCallId(call)} (requested id=$callId)")
                 call.answer(VideoProfile.STATE_AUDIO_ONLY)
             } catch (e: Exception) {
                 Log.e(TAG, "Error answering call $callId", e)
+                DeveloperLogger.error("CALL_SERVICE", "Error answering call $callId: ${e.message}")
             }
+        } else {
+            DeveloperLogger.warning("CALL_SERVICE", "Could not find call to answer for id=$callId (active calls count=${callMap.size})")
         }
     }
 
     override fun rejectCall(callId: String) {
-        val call = callMap[callId]
+        val call = findCall(callId, targetState = Call.STATE_RINGING)
         if (call != null) {
             try {
+                DeveloperLogger.info("CALL_SERVICE", "Rejecting call ${getCallId(call)} (requested id=$callId)")
                 call.reject(false, null)
             } catch (e: Exception) {
                 Log.e(TAG, "Error rejecting call $callId", e)
+                DeveloperLogger.error("CALL_SERVICE", "Error rejecting call $callId: ${e.message}")
             }
+        } else {
+            DeveloperLogger.warning("CALL_SERVICE", "Could not find call to reject for id=$callId (active calls count=${callMap.size})")
         }
     }
 
     override fun rejectCallWithMessage(callId: String, textMessage: String) {
-        val call = callMap[callId]
+        val call = findCall(callId, targetState = Call.STATE_RINGING)
         if (call != null) {
             try {
+                DeveloperLogger.info("CALL_SERVICE", "Rejecting call ${getCallId(call)} with message (requested id=$callId)")
                 call.reject(true, textMessage)
             } catch (e: Exception) {
                 Log.e(TAG, "Error rejecting call $callId with message", e)
+                DeveloperLogger.error("CALL_SERVICE", "Error rejecting call $callId with message: ${e.message}")
             }
+        } else {
+            DeveloperLogger.warning("CALL_SERVICE", "Could not find call to reject with message for id=$callId (active calls count=${callMap.size})")
         }
     }
 
@@ -218,8 +253,8 @@ class CallService : InCallService(), TelecomCallController {
     }
 
     override fun mergeCalls(callId1: String, callId2: String) {
-        val call1 = callMap[callId1]
-        val call2 = callMap[callId2]
+        val call1 = findCall(callId1)
+        val call2 = findCall(callId2)
         if (call1 != null && call2 != null) {
             try {
                 call1.conference(call2)
@@ -230,13 +265,17 @@ class CallService : InCallService(), TelecomCallController {
     }
 
     override fun disconnectCall(callId: String) {
-        val call = callMap[callId]
+        val call = findCall(callId)
         if (call != null) {
             try {
+                DeveloperLogger.info("CALL_SERVICE", "Disconnecting call ${getCallId(call)} (requested id=$callId)")
                 call.disconnect()
             } catch (e: Exception) {
                 Log.e(TAG, "Error disconnecting call $callId", e)
+                DeveloperLogger.error("CALL_SERVICE", "Error disconnecting call $callId: ${e.message}")
             }
+        } else {
+            DeveloperLogger.warning("CALL_SERVICE", "Could not find call to disconnect for id=$callId (active calls count=${callMap.size})")
         }
     }
 
@@ -263,7 +302,7 @@ class CallService : InCallService(), TelecomCallController {
     }
 
     override fun holdCall(callId: String) {
-        val call = callMap[callId]
+        val call = findCall(callId)
         if (call != null) {
             try {
                 call.hold()
@@ -274,7 +313,7 @@ class CallService : InCallService(), TelecomCallController {
     }
 
     override fun unholdCall(callId: String) {
-        val call = callMap[callId]
+        val call = findCall(callId)
         if (call != null) {
             try {
                 call.unhold()
@@ -285,7 +324,7 @@ class CallService : InCallService(), TelecomCallController {
     }
 
     override fun playDtmfTone(callId: String, digit: Char) {
-        val call = callMap[callId]
+        val call = findCall(callId)
         if (call != null) {
             try {
                 call.playDtmfTone(digit)
@@ -296,7 +335,7 @@ class CallService : InCallService(), TelecomCallController {
     }
 
     override fun stopDtmfTone(callId: String) {
-        val call = callMap[callId]
+        val call = findCall(callId)
         if (call != null) {
             try {
                 call.stopDtmfTone()

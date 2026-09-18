@@ -34,6 +34,7 @@ import com.example.callog.presentation.screens.analytics.AnalyticsScreen
 import com.example.callog.presentation.screens.contacts.ContactDetailsScreen
 import com.example.callog.presentation.screens.contacts.ContactsScreen
 import com.example.callog.presentation.screens.crm.CrmHubScreen
+import com.example.callog.presentation.screens.developer.CallSimulatorScreen
 import com.example.callog.presentation.screens.developer.SyncLogsScreen
 import com.example.callog.presentation.screens.dialer.DialerScreen
 import com.example.callog.presentation.screens.logs.CallLogsScreen
@@ -101,6 +102,14 @@ fun CrmNav3Container(
 
     val activeSims by callViewModel.activeSims.collectAsState()
     val isSyncing by callViewModel.isSyncing.collectAsState()
+    val isDeveloperModeActive by callViewModel.isDeveloperModeActive.collectAsState()
+    val autoLockTimeoutMinutes by callViewModel.autoLockTimeoutMinutes.collectAsState()
+
+    var showDeveloperPinDialog by remember { mutableStateOf(false) }
+    var pendingDestination by remember { mutableStateOf<Nav3Key?>(null) }
+    var isOpeningDeveloperDashboard by remember { mutableStateOf(false) }
+    var pinInput by remember { mutableStateOf("") }
+    var pinError by remember { mutableStateOf(false) }
 
     val tabRoots = remember {
         mapOf<CrmBottomTab, Nav3Key>(
@@ -118,10 +127,31 @@ fun CrmNav3Container(
     )
 
     val openDrawer: () -> Unit = {
+        if (isDeveloperModeActive) {
+            callViewModel.recordDeveloperActivity()
+        }
         coroutineScope.launch { drawerState.open() }
     }
     val closeDrawer: () -> Unit = {
         coroutineScope.launch { drawerState.close() }
+    }
+
+    val navigateOrPromptPin: (destination: Nav3Key?, isDev: Boolean) -> Unit = { dest, isDev ->
+        if (isDeveloperModeActive) {
+            callViewModel.recordDeveloperActivity()
+            closeDrawer()
+            if (isDev) {
+                onNavigateToDeveloperDashboard()
+            } else if (dest != null) {
+                multiStack.navigate(dest)
+            }
+        } else {
+            pendingDestination = dest
+            isOpeningDeveloperDashboard = isDev
+            pinInput = ""
+            pinError = false
+            showDeveloperPinDialog = true
+        }
     }
 
     // BackHandler: If drawer is open, close it; otherwise pop active tab stack; fallback to CALL_LOGS.
@@ -424,20 +454,75 @@ fun CrmNav3Container(
 
                         HorizontalDivider(color = Slate800)
 
-                        Text(
-                            text = "Preferences & Tools",
-                            style = MaterialTheme.typography.labelMedium,
-                            color = Slate400,
-                            fontWeight = FontWeight.SemiBold
-                        )
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Text(
+                                    text = "Preferences & Tools",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = Slate400,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                                Icon(
+                                    imageVector = if (isDeveloperModeActive) Icons.Default.LockOpen else Icons.Default.Lock,
+                                    contentDescription = if (isDeveloperModeActive) "Developer Unlocked" else "Developer Locked",
+                                    tint = if (isDeveloperModeActive) Teal400 else Amber500,
+                                    modifier = Modifier.size(14.dp)
+                                )
+                                if (isDeveloperModeActive) {
+                                    Text(
+                                        text = "${autoLockTimeoutMinutes}m",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = Teal400.copy(alpha = 0.8f),
+                                        fontWeight = FontWeight.Medium
+                                    )
+                                }
+                            }
+
+                            if (isDeveloperModeActive) {
+                                TextButton(
+                                    onClick = {
+                                        callViewModel.setDeveloperModeActive(false)
+                                        android.widget.Toast.makeText(context, "Preferences & Tools locked", android.widget.Toast.LENGTH_SHORT).show()
+                                    },
+                                    contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp)
+                                ) {
+                                    Text("Lock", style = MaterialTheme.typography.labelSmall, color = Amber500)
+                                }
+                            } else {
+                                TextButton(
+                                    onClick = {
+                                        navigateOrPromptPin(null, false)
+                                    },
+                                    contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp)
+                                ) {
+                                    Text("Unlock", style = MaterialTheme.typography.labelSmall, color = Teal400)
+                                }
+                            }
+                        }
 
                         NavigationDrawerItem(
                             icon = { Icon(Icons.Default.MusicNote, contentDescription = null) },
                             label = { Text("CRM Ringtone Rules") },
+                            badge = {
+                                if (!isDeveloperModeActive) {
+                                    Icon(
+                                        imageVector = Icons.Default.Lock,
+                                        contentDescription = "Locked",
+                                        tint = Slate500,
+                                        modifier = Modifier.size(14.dp)
+                                    )
+                                }
+                            },
                             selected = false,
                             onClick = {
-                                multiStack.navigate(Nav3Key.CrmTab.RingtoneSettings)
-                                closeDrawer()
+                                navigateOrPromptPin(Nav3Key.CrmTab.RingtoneSettings, false)
                             },
                             colors = NavigationDrawerItemDefaults.colors(
                                 unselectedIconColor = Slate400,
@@ -449,10 +534,43 @@ fun CrmNav3Container(
                         NavigationDrawerItem(
                             icon = { Icon(Icons.Default.Settings, contentDescription = null) },
                             label = { Text("Settings & Sync") },
+                            badge = {
+                                if (!isDeveloperModeActive) {
+                                    Icon(
+                                        imageVector = Icons.Default.Lock,
+                                        contentDescription = "Locked",
+                                        tint = Slate500,
+                                        modifier = Modifier.size(14.dp)
+                                    )
+                                }
+                            },
                             selected = false,
                             onClick = {
-                                multiStack.navigate(Nav3Key.CrmTab.Settings)
-                                closeDrawer()
+                                navigateOrPromptPin(Nav3Key.CrmTab.Settings, false)
+                            },
+                            colors = NavigationDrawerItemDefaults.colors(
+                                unselectedIconColor = Slate400,
+                                unselectedTextColor = Slate300
+                            ),
+                            shape = RoundedCornerShape(12.dp)
+                        )
+
+                        NavigationDrawerItem(
+                            icon = { Icon(Icons.Default.PhoneCallback, contentDescription = null) },
+                            label = { Text("Call Simulation Studio") },
+                            badge = {
+                                if (!isDeveloperModeActive) {
+                                    Icon(
+                                        imageVector = Icons.Default.Lock,
+                                        contentDescription = "Locked",
+                                        tint = Slate500,
+                                        modifier = Modifier.size(14.dp)
+                                    )
+                                }
+                            },
+                            selected = false,
+                            onClick = {
+                                navigateOrPromptPin(Nav3Key.CrmTab.CallSimulator, false)
                             },
                             colors = NavigationDrawerItemDefaults.colors(
                                 unselectedIconColor = Slate400,
@@ -464,10 +582,19 @@ fun CrmNav3Container(
                         NavigationDrawerItem(
                             icon = { Icon(Icons.Default.Code, contentDescription = null) },
                             label = { Text("Developer Diagnostics") },
+                            badge = {
+                                if (!isDeveloperModeActive) {
+                                    Icon(
+                                        imageVector = Icons.Default.Lock,
+                                        contentDescription = "Locked",
+                                        tint = Slate500,
+                                        modifier = Modifier.size(14.dp)
+                                    )
+                                }
+                            },
                             selected = false,
                             onClick = {
-                                closeDrawer()
-                                onNavigateToDeveloperDashboard()
+                                navigateOrPromptPin(null, true)
                             },
                             colors = NavigationDrawerItemDefaults.colors(
                                 unselectedIconColor = Slate400,
@@ -595,6 +722,9 @@ fun CrmNav3Container(
                                 multiStack.selectTab(CrmBottomTab.CONTACTS)
                                 multiStack.navigate(Nav3Key.Contacts.ContactDetails(contactId = contactId))
                             },
+                            onNavigateToCallSimulator = {
+                                multiStack.navigate(Nav3Key.CrmTab.CallSimulator)
+                            },
                             onMenuClick = openDrawer
                         )
                     }
@@ -616,6 +746,9 @@ fun CrmNav3Container(
                             onContactClick = { canonicalId ->
                                 multiStack.navigate(Nav3Key.Contacts.ContactDetails(contactId = canonicalId))
                             },
+                            onDeviceContactClick = { androidContactId ->
+                                multiStack.navigate(Nav3Key.Contacts.DeviceContactDetails(androidContactId = androidContactId))
+                            },
                             onMenuClick = openDrawer
                         )
                     }
@@ -624,6 +757,23 @@ fun CrmNav3Container(
                             contactId = key.contactId,
                             viewModel = callViewModel,
                             onBackClick = { multiStack.pop() }
+                        )
+                    }
+                    is Nav3Key.Contacts.DeviceContactDetails -> {
+                        val entryPoint = remember(context) {
+                            dagger.hilt.android.EntryPointAccessors.fromApplication(
+                                context.applicationContext,
+                                com.example.callog.di.ContactsDirectoryEntryPoint::class.java
+                            )
+                        }
+                        com.example.callog.presentation.screens.contacts.DeviceContactDetailsScreen(
+                            androidContactId = key.androidContactId,
+                            deviceContactsRepository = entryPoint.deviceContactsRepository(),
+                            personRepository = entryPoint.personRepository(),
+                            onBackClick = { multiStack.pop() },
+                            onNavigateToCloudProfile = { personId ->
+                                multiStack.navigate(Nav3Key.Contacts.ContactDetails(contactId = personId))
+                            }
                         )
                     }
 
@@ -748,6 +898,13 @@ fun CrmNav3Container(
                         )
                     }
 
+                    // --- Call Simulation Studio Flow ---
+                    is Nav3Key.CrmTab.CallSimulator -> {
+                        CallSimulatorScreen(
+                            onBackClick = { multiStack.pop() }
+                        )
+                    }
+
                     else -> {
                         Box(modifier = Modifier.padding(innerPadding)) {
                             Text("Unknown Destination: $key")
@@ -756,5 +913,106 @@ fun CrmNav3Container(
                 }
             }
         }
+    }
+
+    if (showDeveloperPinDialog) {
+        AlertDialog(
+            onDismissRequest = {
+                showDeveloperPinDialog = false
+                pendingDestination = null
+                isOpeningDeveloperDashboard = false
+                pinInput = ""
+                pinError = false
+            },
+            title = {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Lock,
+                        contentDescription = null,
+                        tint = Amber500,
+                        modifier = Modifier.size(22.dp)
+                    )
+                    Text("Developer Authentication", color = Slate50, fontWeight = FontWeight.Bold)
+                }
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(
+                        "Preferences & Tools are locked in this environment. Enter developer PIN to access:",
+                        color = Slate300,
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    OutlinedTextField(
+                        value = pinInput,
+                        onValueChange = {
+                            if (it.length <= 6) {
+                                pinInput = it
+                                pinError = false
+                            }
+                        },
+                        label = { Text("Developer PIN") },
+                        singleLine = true,
+                        isError = pinError,
+                        supportingText = if (pinError) {
+                            { Text("Incorrect developer PIN", color = Red500) }
+                        } else null,
+                        visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(),
+                        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                            keyboardType = androidx.compose.ui.text.input.KeyboardType.NumberPassword
+                        ),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = Teal400,
+                            unfocusedBorderColor = Slate600,
+                            focusedTextColor = Slate50,
+                            unfocusedTextColor = Slate100,
+                            cursorColor = Teal400
+                        ),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        if (pinInput == "9852") {
+                            callViewModel.setDeveloperModeActive(true)
+                            showDeveloperPinDialog = false
+                            android.widget.Toast.makeText(context, "Preferences & Tools unlocked! (Auto-locks after ${autoLockTimeoutMinutes}m idle)", android.widget.Toast.LENGTH_SHORT).show()
+                            closeDrawer()
+                            if (isOpeningDeveloperDashboard) {
+                                onNavigateToDeveloperDashboard()
+                            } else if (pendingDestination != null) {
+                                multiStack.navigate(pendingDestination!!)
+                            }
+                            pendingDestination = null
+                            isOpeningDeveloperDashboard = false
+                            pinInput = ""
+                            pinError = false
+                        } else {
+                            pinError = true
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = Teal500)
+                ) {
+                    Text("Unlock", fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    showDeveloperPinDialog = false
+                    pendingDestination = null
+                    isOpeningDeveloperDashboard = false
+                    pinInput = ""
+                    pinError = false
+                }) {
+                    Text("Cancel", color = Slate400)
+                }
+            },
+            containerColor = Slate900,
+            shape = RoundedCornerShape(16.dp)
+        )
     }
 }

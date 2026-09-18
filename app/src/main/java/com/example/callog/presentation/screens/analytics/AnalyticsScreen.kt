@@ -42,6 +42,21 @@ fun AnalyticsScreen(
 ) {
     val state by viewModel.uiState.collectAsState()
 
+    AnalyticsContent(
+        state = state,
+        modifier = modifier,
+        onBackClick = onBackClick,
+        onMenuClick = onMenuClick
+    )
+}
+
+@Composable
+fun AnalyticsContent(
+    state: com.example.callog.presentation.viewmodel.AnalyticsUiState,
+    modifier: Modifier = Modifier,
+    onBackClick: (() -> Unit)? = null,
+    onMenuClick: (() -> Unit)? = null
+) {
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -326,9 +341,7 @@ fun WeeklyBarChart(
                 cornerRadius = androidx.compose.ui.geometry.CornerRadius(4.dp.toPx(), 4.dp.toPx())
             )
 
-            // Draw label
-            // In canvas, drawing text requires NativeCanvas/Paint, so we will construct a clean visualization layout.
-            // As a nice fallback, we'll draw a small dot under the bar if count > 0, indicating value presence
+            // Draw label dot
             if (count > 0) {
                 drawCircle(
                     color = colorTeal300,
@@ -385,7 +398,6 @@ fun HourlyActivityLineChart(
     
     val maxVal = blockValues.maxOrNull()?.coerceAtLeast(1) ?: 1
     
-    // Resolve dynamic colors outside Canvas drawing scope
     val colorTeal500 = Teal500
     val colorTeal300 = Teal300
     val colorAmber500 = Amber500
@@ -404,7 +416,6 @@ fun HourlyActivityLineChart(
                 for (i in 1 until points.size) {
                     val pre = points[i - 1]
                     val curr = points[i]
-                    // Bezier cubic curve coordinates
                     val conX1 = (pre.x + curr.x) / 2
                     val conY1 = pre.y
                     val conX2 = (pre.x + curr.x) / 2
@@ -479,6 +490,95 @@ fun HourlyActivityLineChart(
                     color = Slate400
                 )
             }
+        }
+    }
+}
+
+@androidx.compose.ui.tooling.preview.Preview(name = "Analytics Screen Full", showBackground = true)
+@Composable
+fun AnalyticsScreenPreview() {
+    CallogTheme {
+        AnalyticsContent(
+            state = com.example.callog.presentation.viewmodel.AnalyticsUiState(
+                totalCalls = 85,
+                incomingCount = 45,
+                outgoingCount = 28,
+                missedCount = 8,
+                rejectedCount = 4,
+                recordedCount = 22,
+                avgDurationSeconds = 145,
+                longestCallSeconds = 850,
+                longestCallName = "Enterprise Client",
+                callsByDayOfWeek = mapOf(
+                    "Mon" to 14,
+                    "Tue" to 18,
+                    "Wed" to 22,
+                    "Thu" to 15,
+                    "Fri" to 12,
+                    "Sat" to 3,
+                    "Sun" to 1
+                ),
+                callsByHourOfDay = mapOf(
+                    2 to 0,
+                    9 to 8,
+                    14 to 15,
+                    20 to 5
+                ),
+                callTypePercentages = mapOf(
+                    "Incoming" to 0.53f,
+                    "Outgoing" to 0.33f,
+                    "Missed" to 0.09f,
+                    "Rejected/Spam" to 0.05f
+                ),
+                topContacts = listOf(
+                    com.example.callog.presentation.viewmodel.TopContactStat(
+                        name = "Sarah Miller",
+                        number = "+919876543210",
+                        count = 14,
+                        totalDuration = 2400,
+                        photoUri = null
+                    ),
+                    com.example.callog.presentation.viewmodel.TopContactStat(
+                        name = "Apex Global",
+                        number = "+919811122334",
+                        count = 9,
+                        totalDuration = 1800,
+                        photoUri = null
+                    )
+                )
+            )
+        )
+    }
+}
+
+@androidx.compose.ui.tooling.preview.Preview(name = "Donut Chart Preview", showBackground = true)
+@Composable
+fun DonutChartPreview() {
+    CallogTheme {
+        Box(modifier = Modifier.padding(16.dp)) {
+            DonutChart(
+                percentages = mapOf(
+                    "Incoming" to 0.5f,
+                    "Outgoing" to 0.3f,
+                    "Missed" to 0.15f,
+                    "Rejected/Spam" to 0.05f
+                ),
+                colors = listOf(Green500, Teal300, Red500, Amber500),
+                modifier = Modifier.size(140.dp)
+            )
+        }
+    }
+}
+
+@androidx.compose.ui.tooling.preview.Preview(name = "Weekly Bar Chart Preview", showBackground = true)
+@Composable
+fun WeeklyBarChartPreview() {
+    CallogTheme {
+        Box(modifier = Modifier.padding(16.dp)) {
+            WeeklyBarChart(
+                data = mapOf("Mon" to 12, "Tue" to 18, "Wed" to 25, "Thu" to 14, "Fri" to 20, "Sat" to 5, "Sun" to 2),
+                modifier = Modifier.fillMaxWidth().height(160.dp)
+            )
         }
     }
 }

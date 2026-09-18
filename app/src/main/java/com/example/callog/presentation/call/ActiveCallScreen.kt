@@ -100,9 +100,13 @@ fun ActiveCallScreen(
 
             Spacer(modifier = Modifier.height(16.dp))
 
+            val displayName = session.callerDisplayName.ifBlank {
+                session.phoneNumber.ifBlank { "Active Call" }
+            }
+
             // Caller Name
             Text(
-                text = session.callerDisplayName,
+                text = displayName,
                 style = MaterialTheme.typography.headlineMedium,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onBackground,
@@ -122,13 +126,15 @@ fun ActiveCallScreen(
                 )
             }
 
-            // Phone Number
-            Spacer(modifier = Modifier.height(4.dp))
-            Text(
-                text = session.phoneNumber,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+            // Phone Number (if different from displayName)
+            if (session.phoneNumber.isNotBlank() && session.phoneNumber != displayName) {
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = session.phoneNumber,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
 
             Spacer(modifier = Modifier.height(12.dp))
 
@@ -439,5 +445,99 @@ fun DtmfKeypadView(
         }
 
         Spacer(modifier = Modifier.height(24.dp))
+    }
+}
+
+@androidx.compose.ui.tooling.preview.Preview(name = "Active Call Screen Light", showBackground = true)
+@Composable
+fun ActiveCallScreenPreview() {
+    CallogTheme {
+        ActiveCallScreen(
+            session = CallSessionState(
+                callId = "call_101",
+                phoneNumber = "+91 98765 43210",
+                callerDisplayName = "Sarah Connor",
+                companyName = "Cyberdyne Systems",
+                crmStatus = LeadStatus.HOT,
+                priority = LeadPriority.URGENT,
+                initials = "SC",
+                state = CallState.ACTIVE,
+                durationSeconds = 145,
+                personId = "person_123",
+                capabilities = com.example.callog.domain.call.CallCapabilities(canHold = true, canMute = true),
+                simInfo = com.example.callog.sim.SimInfo(
+                    subscriptionId = 1,
+                    slotIndex = 0,
+                    carrierName = "Jio 5G",
+                    displayName = "Work SIM",
+                    phoneNumber = "+919876543210"
+                )
+            ),
+            otherSessions = emptyList(),
+            onAction = {},
+            onOpenPersonDetails = {}
+        )
+    }
+}
+
+@androidx.compose.ui.tooling.preview.Preview(name = "Active Call Screen Dark", showBackground = true)
+@Composable
+fun ActiveCallScreenDarkPreview() {
+    CallogTheme(darkTheme = true) {
+        ActiveCallScreen(
+            session = CallSessionState(
+                callId = "call_102",
+                phoneNumber = "+91 91234 56789",
+                callerDisplayName = "John Matrix",
+                companyName = "Commando Logistics",
+                crmStatus = LeadStatus.WARM,
+                priority = LeadPriority.HIGH,
+                initials = "JM",
+                state = CallState.ACTIVE,
+                durationSeconds = 85,
+                isMuted = true,
+                isSpeakerOn = true
+            ),
+            otherSessions = emptyList(),
+            onAction = {},
+            onOpenPersonDetails = {}
+        )
+    }
+}
+
+@androidx.compose.ui.tooling.preview.Preview(name = "DTMF Keypad Preview", showBackground = true)
+@Composable
+fun DtmfKeypadPreview() {
+    CallogTheme {
+        Surface {
+            DtmfKeypadView(
+                onDigitClick = {},
+                onClose = {}
+            )
+        }
+    }
+}
+
+@androidx.compose.ui.tooling.preview.Preview(name = "Call Control Button", showBackground = true)
+@Composable
+fun CallControlButtonPreview() {
+    CallogTheme {
+        Row(
+            modifier = Modifier.padding(16.dp),
+            horizontalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            CallControlButton(
+                icon = Icons.Default.Mic,
+                label = "Mute",
+                isActive = false,
+                onClick = {}
+            )
+            CallControlButton(
+                icon = Icons.Default.MicOff,
+                label = "Unmute",
+                isActive = true,
+                onClick = {}
+            )
+        }
     }
 }

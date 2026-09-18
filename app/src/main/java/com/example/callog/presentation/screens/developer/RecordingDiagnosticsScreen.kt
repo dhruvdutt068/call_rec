@@ -5,13 +5,16 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -24,6 +27,7 @@ import androidx.core.content.FileProvider
 import com.example.callog.data.local.entity.RecordingLogEntity
 import com.example.callog.data.local.entity.RecordingEntity
 import com.example.callog.domain.model.CallLogEntry
+import com.example.callog.presentation.components.ExpressiveEmptyState
 import com.example.callog.presentation.components.GlassyCard
 import com.example.callog.presentation.theme.*
 import com.example.callog.presentation.viewmodel.CallViewModel
@@ -74,16 +78,26 @@ fun RecordingDiagnosticsScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Recording Diagnostics", fontWeight = FontWeight.Bold) },
+                title = {
+                    Text(
+                        text = "Recording Diagnostics",
+                        style = CallogTypography.sectionTitle,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                },
                 navigationIcon = {
                     IconButton(onClick = onBackClick) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Back")
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Back",
+                            tint = MaterialTheme.colorScheme.onSurface
+                        )
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceVariant,
-                    titleContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                    navigationIconContentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                    containerColor = MaterialTheme.colorScheme.surface,
+                    titleContentColor = MaterialTheme.colorScheme.onSurface,
+                    navigationIconContentColor = MaterialTheme.colorScheme.onSurface
                 )
             )
         },
@@ -98,12 +112,14 @@ fun RecordingDiagnosticsScreen(
         ) {
             // Summary Card
             GlassyCard(modifier = Modifier.fillMaxWidth()) {
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Column(
+                    modifier = Modifier.padding(14.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
                     Text(
                         text = "Recording Statistics",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = Slate50
+                        style = CallogTypography.heroTitle,
+                        color = MaterialTheme.colorScheme.onSurface
                     )
                     
                     Row(
@@ -111,12 +127,12 @@ fun RecordingDiagnosticsScreen(
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
                         TelemetryStat("Total Files", "$totalFiles")
-                        TelemetryStat("Matched", "$matchedCount", color = Teal300)
-                        TelemetryStat("Unmatched", "$unmatchedCount", color = AllSetAmber)
+                        TelemetryStat("Matched", "$matchedCount", color = CallogSemanticColors.RecordingColors.Matched)
+                        TelemetryStat("Unmatched", "$unmatchedCount", color = CallogSemanticColors.RecordingColors.Unmatched)
                         TelemetryStat("Failed", "$parserFailedCount", color = MaterialTheme.colorScheme.error)
                     }
 
-                    Divider(color = Slate700.copy(alpha = 0.5f))
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
 
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -127,12 +143,12 @@ fun RecordingDiagnosticsScreen(
                         TelemetryStat("Avg Match Time", "14 ms")
                     }
 
-                    Divider(color = Slate700.copy(alpha = 0.5f))
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
 
                     Text(
                         text = "Last Scan: $lastScanTime",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = Slate400
+                        style = CallogTypography.denseData,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             }
@@ -145,25 +161,34 @@ fun RecordingDiagnosticsScreen(
                 Button(
                     onClick = { viewModel.rescanRecordings() },
                     modifier = Modifier.weight(1f),
-                    colors = ButtonDefaults.buttonColors(containerColor = Teal500)
+                    shape = CallogShapes.buttonShape,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.primary,
+                        contentColor = MaterialTheme.colorScheme.onPrimary
+                    )
                 ) {
                     Icon(Icons.Default.Sync, contentDescription = null, modifier = Modifier.size(16.dp))
                     Spacer(modifier = Modifier.width(6.dp))
-                    Text("Rescan")
+                    Text("Rescan", style = CallogTypography.statusLabel)
                 }
 
                 Button(
                     onClick = { viewModel.exportRecordingDiagnostics(context) },
                     modifier = Modifier.weight(1f),
-                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondaryContainer, contentColor = MaterialTheme.colorScheme.onSecondaryContainer)
+                    shape = CallogShapes.buttonShape,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                        contentColor = MaterialTheme.colorScheme.onSecondaryContainer
+                    )
                 ) {
                     Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(16.dp))
                     Spacer(modifier = Modifier.width(6.dp))
-                    Text("Export")
+                    Text("Export", style = CallogTypography.statusLabel)
                 }
 
                 IconButton(
                     onClick = { viewModel.clearRecordingLogs() },
+                    modifier = Modifier.size(48.dp),
                     colors = IconButtonDefaults.iconButtonColors(containerColor = MaterialTheme.colorScheme.error.copy(alpha = 0.1f))
                 ) {
                     Icon(Icons.Default.Delete, contentDescription = "Clear logs", tint = MaterialTheme.colorScheme.error)
@@ -178,21 +203,29 @@ fun RecordingDiagnosticsScreen(
                 Button(
                     onClick = { exportCallsCsv(context, callLogs) },
                     modifier = Modifier.weight(1f),
-                    colors = ButtonDefaults.buttonColors(containerColor = Teal500)
+                    shape = CallogShapes.buttonShape,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.primaryContainer,
+                        contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                    )
                 ) {
                     Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(16.dp))
                     Spacer(modifier = Modifier.width(6.dp))
-                    Text("Share Calls CSV", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
+                    Text("Share Calls CSV", style = CallogTypography.statusLabel)
                 }
 
                 Button(
                     onClick = { exportRecordingsCsv(context, recordings) },
                     modifier = Modifier.weight(1f),
-                    colors = ButtonDefaults.buttonColors(containerColor = Green500)
+                    shape = CallogShapes.buttonShape,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.tertiaryContainer,
+                        contentColor = MaterialTheme.colorScheme.onTertiaryContainer
+                    )
                 ) {
                     Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(16.dp))
                     Spacer(modifier = Modifier.width(6.dp))
-                    Text("Share Recs CSV", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
+                    Text("Share Recs CSV", style = CallogTypography.statusLabel)
                 }
             }
 
@@ -207,14 +240,14 @@ fun RecordingDiagnosticsScreen(
                 },
                 edgePadding = 0.dp,
                 containerColor = Color.Transparent,
-                contentColor = Teal300,
+                contentColor = MaterialTheme.colorScheme.primary,
                 divider = {}
             ) {
                 listOf("All", "Matched", "Unmatched", "Parser Failed").forEach { filter ->
                     Tab(
                         selected = selectedFilter == filter,
                         onClick = { selectedFilter = filter },
-                        text = { Text(filter, fontWeight = FontWeight.Bold) }
+                        text = { Text(filter, style = CallogTypography.statusLabel) }
                     )
                 }
             }
@@ -226,12 +259,12 @@ fun RecordingDiagnosticsScreen(
             ) {
                 if (filteredLogs.isEmpty()) {
                     item {
-                        Box(
-                            modifier = Modifier.fillMaxWidth().padding(32.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text("No telemetry logs found.", color = Slate400)
-                        }
+                        ExpressiveEmptyState(
+                            title = "No Telemetry Logs",
+                            description = "Run a rescan to generate fresh diagnostic events for audio matching.",
+                            icon = Icons.Default.Analytics,
+                            modifier = Modifier.fillMaxWidth().padding(top = 24.dp)
+                        )
                     }
                 } else {
                     items(filteredLogs) { log ->
@@ -249,27 +282,36 @@ fun RecordingDiagnosticsScreen(
 }
 
 @Composable
-fun TelemetryStat(label: String, value: String, color: Color = Slate50) {
+fun TelemetryStat(label: String, value: String, color: Color = Color.Unspecified) {
+    val resolvedColor = if (color == Color.Unspecified) MaterialTheme.colorScheme.onSurface else color
     Column {
-        Text(label, style = MaterialTheme.typography.bodySmall, color = Slate400)
-        Text(value, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold, color = color)
+        Text(
+            text = label,
+            style = CallogTypography.statusLabel,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Text(
+            text = value,
+            style = CallogTypography.entityName,
+            color = resolvedColor
+        )
     }
 }
 
 @Composable
 fun LogItemCard(log: RecordingLogEntity, onClick: () -> Unit) {
     val statusColor = when (log.status) {
-        "MATCHED" -> Teal300
-        "UNMATCHED" -> AllSetAmber
+        "MATCHED" -> CallogSemanticColors.RecordingColors.Matched
+        "UNMATCHED" -> CallogSemanticColors.RecordingColors.Unmatched
         "PARSER_FAILED" -> MaterialTheme.colorScheme.error
-        else -> Slate400
+        else -> MaterialTheme.colorScheme.onSurfaceVariant
     }
 
     val statusIcon = when (log.status) {
-        "MATCHED" -> "✅"
-        "UNMATCHED" -> "⚠️"
-        "PARSER_FAILED" -> "❌"
-        else -> "🟢"
+        "MATCHED" -> Icons.Default.CheckCircle
+        "UNMATCHED" -> Icons.Default.Warning
+        "PARSER_FAILED" -> Icons.Default.Cancel
+        else -> Icons.Default.Info
     }
 
     GlassyCard(
@@ -278,30 +320,44 @@ fun LogItemCard(log: RecordingLogEntity, onClick: () -> Unit) {
             .clickable { onClick() }
     ) {
         Row(
+            modifier = Modifier.padding(12.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            Text(statusIcon, style = MaterialTheme.typography.titleLarge)
+            Box(
+                modifier = Modifier
+                    .size(36.dp)
+                    .clip(CallogShapes.badgeShape)
+                    .background(statusColor.copy(alpha = 0.12f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = statusIcon,
+                    contentDescription = log.status,
+                    tint = statusColor,
+                    modifier = Modifier.size(20.dp)
+                )
+            }
 
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = log.fileName,
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = Slate50,
+                    style = CallogTypography.entityName,
+                    color = MaterialTheme.colorScheme.onSurface,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
                 Text(
                     text = "${log.parser} • Status: ${log.status}",
-                    style = MaterialTheme.typography.bodySmall,
+                    style = CallogTypography.denseData,
                     color = statusColor
                 )
                 if (!log.reason.isNullOrEmpty()) {
+                    Spacer(modifier = Modifier.height(2.dp))
                     Text(
                         text = log.reason,
                         style = MaterialTheme.typography.bodySmall,
-                        color = Slate400,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
@@ -311,7 +367,7 @@ fun LogItemCard(log: RecordingLogEntity, onClick: () -> Unit) {
             Icon(
                 imageVector = Icons.Default.ChevronRight,
                 contentDescription = null,
-                tint = Slate400
+                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
             )
         }
     }
@@ -332,8 +388,8 @@ fun RecordingLogDetailDialog(
         title = {
             Text(
                 text = "Recording Details",
-                fontWeight = FontWeight.Bold,
-                color = Slate50
+                style = CallogTypography.heroTitle,
+                color = MaterialTheme.colorScheme.onSurface
             )
         },
         text = {
@@ -342,25 +398,37 @@ fun RecordingLogDetailDialog(
                 modifier = Modifier.fillMaxWidth()
             ) {
                 item {
-                    Text("File Metadata", fontWeight = FontWeight.Bold, color = Teal300)
+                    Text(
+                        text = "File Metadata",
+                        style = CallogTypography.sectionTitle,
+                        color = MaterialTheme.colorScheme.primary
+                    )
                     RecordingDetailRow("File Name", log.fileName)
                     RecordingDetailRow("Path", log.path)
                     RecordingDetailRow("Recorded At", timeFormatted)
                 }
 
                 item {
-                    Divider(color = Slate700.copy(alpha = 0.5f))
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
                     Spacer(modifier = Modifier.height(8.dp))
-                    Text("Parser Outcome", fontWeight = FontWeight.Bold, color = Teal300)
+                    Text(
+                        text = "Parser Outcome",
+                        style = CallogTypography.sectionTitle,
+                        color = MaterialTheme.colorScheme.primary
+                    )
                     RecordingDetailRow("Parser Name", log.parser)
                     RecordingDetailRow("Phone Extracted", log.phoneExtracted ?: "None")
                     RecordingDetailRow("Timestamp Extracted", extTimeFormatted)
                 }
 
                 item {
-                    Divider(color = Slate700.copy(alpha = 0.5f))
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
                     Spacer(modifier = Modifier.height(8.dp))
-                    Text("Match Evaluation", fontWeight = FontWeight.Bold, color = Teal300)
+                    Text(
+                        text = "Match Evaluation",
+                        style = CallogTypography.sectionTitle,
+                        color = MaterialTheme.colorScheme.primary
+                    )
                     RecordingDetailRow("Status", log.status)
                     RecordingDetailRow("Matched Call ID", log.matchedCallId?.toString() ?: "None")
                     RecordingDetailRow("Time Candidates", "${log.candidateCount} call(s)")
@@ -371,23 +439,36 @@ fun RecordingLogDetailDialog(
         confirmButton = {
             Button(
                 onClick = onDismiss,
-                colors = ButtonDefaults.buttonColors(containerColor = Teal500)
+                shape = CallogShapes.buttonShape,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    contentColor = MaterialTheme.colorScheme.onPrimary
+                )
             ) {
-                Text("Close")
+                Text("Close", style = CallogTypography.sectionTitle)
             }
         },
-        containerColor = Slate900,
-        shape = RoundedCornerShape(12.dp)
+        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+        shape = CallogShapes.modalShape
     )
 }
 
 @Composable
 fun RecordingDetailRow(label: String, value: String) {
     Column(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
-        Text(label, style = MaterialTheme.typography.bodySmall, color = Slate400)
-        Text(value, style = MaterialTheme.typography.bodyMedium, color = Slate50, fontWeight = FontWeight.Medium)
+        Text(
+            text = label,
+            style = CallogTypography.statusLabel,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Text(
+            text = value,
+            style = CallogTypography.denseData,
+            color = MaterialTheme.colorScheme.onSurface
+        )
     }
 }
+
 
 fun exportCallsCsv(context: Context, callLogs: List<CallLogEntry>) {
     try {

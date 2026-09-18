@@ -41,5 +41,6 @@ interface TelecomEntryPoint {
     fun ringtoneRepository(): RingtoneRepository
     fun ringtonePolicy(): RingtonePolicy
     fun callOrchestrator(): CallOrchestrator
+    fun callSimulatorManager(): com.example.callog.domain.service.simulator.CallSimulatorManager
 }
 

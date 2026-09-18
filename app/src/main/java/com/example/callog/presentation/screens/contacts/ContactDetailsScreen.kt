@@ -1,32 +1,45 @@
 package com.example.callog.presentation.screens.contacts
 
 import android.content.Intent
+import android.content.res.Configuration
 import android.net.Uri
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.outlined.Person
+import androidx.compose.material.icons.outlined.Phone
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.example.callog.domain.model.LeadPriority
 import com.example.callog.domain.model.LeadStatus
 import com.example.callog.presentation.components.ContactAvatar
+import com.example.callog.presentation.components.ExpressiveEmptyState
+import com.example.callog.presentation.components.ExpressiveLoadingView
+import com.example.callog.presentation.components.ExpressiveSegmentedButtonGroup
+import com.example.callog.presentation.components.ExpressiveSegmentedButtonItem
 import com.example.callog.presentation.components.GlassyCard
+import com.example.callog.presentation.components.LeadStatusPill
+import com.example.callog.presentation.components.PriorityPill
 import com.example.callog.presentation.theme.*
 import com.example.callog.presentation.viewmodel.CallViewModel
 import com.example.callog.presentation.viewmodel.ContactDetailUiState
@@ -36,7 +49,7 @@ import java.util.*
 
 /**
  * Contact Details Screen utilizing canonical [contactId] (String) for CRM client & lead management.
- * Phase 4: Integrates CRM Lead lifecycle (Status, Priority, Feedback & Notes).
+ * Material 3 Expressive upgraded with tactile feedback, semantic color tokens, and dense telemetry.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -72,20 +85,30 @@ fun ContactDetailsScreen(
                 title = {
                     val titleName = when (val s = uiState) {
                         is ContactDetailUiState.Success -> s.contact.name
-                        else -> "Contact Details"
+                        else -> "Contact Profile"
                     }
-                    Text(titleName, fontWeight = FontWeight.Bold)
+                    Text(
+                        text = titleName,
+                        style = CallogTypography.sectionTitle,
+                        fontWeight = FontWeight.Bold
+                    )
                 },
                 navigationIcon = {
-                    IconButton(onClick = onBackClick) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                    IconButton(
+                        onClick = onBackClick,
+                        modifier = Modifier.sizeIn(minWidth = 48.dp, minHeight = 48.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Back to contacts"
+                        )
                     }
                 },
                 actions = { },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceVariant,
-                    titleContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                    navigationIconContentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                    containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+                    titleContentColor = MaterialTheme.colorScheme.onSurface,
+                    navigationIconContentColor = MaterialTheme.colorScheme.onSurface
                 )
             )
         },
@@ -99,7 +122,7 @@ fun ContactDetailsScreen(
                         .padding(innerPadding),
                     contentAlignment = Alignment.Center
                 ) {
-                    CircularProgressIndicator(color = AllSetBlue)
+                    ExpressiveLoadingView(message = "Loading contact details...")
                 }
             }
 
@@ -107,13 +130,16 @@ fun ContactDetailsScreen(
                 Box(
                     modifier = modifier
                         .fillMaxSize()
-                        .padding(innerPadding),
+                        .padding(innerPadding)
+                        .padding(16.dp),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text(
-                        text = state.message,
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = Red500
+                    ExpressiveEmptyState(
+                        title = "Unable to load contact",
+                        description = state.message,
+                        icon = Icons.Outlined.Person,
+                        actionLabel = "Retry",
+                        onActionClick = { detailsViewModel.loadContact(contactId) }
                     )
                 }
             }
@@ -147,56 +173,62 @@ fun ContactDetailsScreen(
                             Column(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(12.dp),
+                                    .padding(16.dp),
                                 horizontalAlignment = Alignment.CenterHorizontally
                             ) {
                                 ContactAvatar(
                                     name = contact.name,
                                     initials = initials,
                                     photoUri = contact.photoUri,
-                                    modifier = Modifier.size(80.dp)
+                                    modifier = Modifier.size(88.dp)
                                 )
                                 Spacer(modifier = Modifier.height(12.dp))
                                 Text(
                                     text = contact.name,
-                                    style = MaterialTheme.typography.headlineSmall,
-                                    fontWeight = FontWeight.Bold,
-                                    color = Slate50
+                                    style = CallogTypography.heroTitle,
+                                    color = MaterialTheme.colorScheme.onSurface
                                 )
                                 if (!person?.companyName.isNullOrBlank()) {
                                     Text(
                                         text = person?.companyName ?: "",
                                         style = MaterialTheme.typography.bodyMedium,
-                                        color = Slate300
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                 }
-                                Text(
-                                    text = "Canonical ID: ${person?.id ?: contactId}",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = Teal300
-                                )
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Surface(
+                                    color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.5f),
+                                    shape = CallogShapes.pill
+                                ) {
+                                    Text(
+                                        text = "ID: ${person?.id ?: contactId}",
+                                        style = CallogTypography.denseData,
+                                        color = MaterialTheme.colorScheme.onSecondaryContainer,
+                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 3.dp)
+                                    )
+                                }
 
-                                Spacer(modifier = Modifier.height(16.dp))
+                                Spacer(modifier = Modifier.height(20.dp))
 
                                 // Quick Action Buttons
                                 Row(
                                     modifier = Modifier.fillMaxWidth(),
                                     horizontalArrangement = Arrangement.SpaceEvenly
                                 ) {
-                                    QuickActionButton(
+                                    ExpressiveQuickActionButton(
                                         icon = Icons.Default.Phone,
                                         label = "Call",
-                                        color = Teal300,
+                                        accentColor = CallogSemanticColors.Incoming,
                                         onClick = {
                                             contact.phoneNumbers.firstOrNull()?.let { phone ->
                                                 viewModel.initiateCall(context, phone)
                                             }
                                         }
                                     )
-                                    QuickActionButton(
+                                    ExpressiveQuickActionButton(
                                         icon = Icons.Default.Message,
                                         label = "Message",
-                                        color = AllSetBlue,
+                                        accentColor = MaterialTheme.colorScheme.primary,
                                         onClick = {
                                             contact.phoneNumbers.firstOrNull()?.let { phone ->
                                                 val intent = Intent(Intent.ACTION_SENDTO, Uri.parse("smsto:$phone"))
@@ -204,10 +236,10 @@ fun ContactDetailsScreen(
                                             }
                                         }
                                     )
-                                    QuickActionButton(
+                                    ExpressiveQuickActionButton(
                                         icon = Icons.Default.Email,
                                         label = "Email",
-                                        color = Amber500,
+                                        accentColor = CallogSemanticColors.LeadWarm,
                                         onClick = {
                                             contact.emails.firstOrNull()?.let { email ->
                                                 val intent = Intent(Intent.ACTION_SENDTO, Uri.parse("mailto:$email"))
@@ -215,18 +247,23 @@ fun ContactDetailsScreen(
                                             }
                                         }
                                     )
+                                    ExpressiveQuickActionButton(
+                                        icon = Icons.Default.CalendarToday,
+                                        label = "Meeting",
+                                        accentColor = CallogSemanticColors.LeadVip,
+                                        onClick = { onScheduleMeetingClick(contactId) }
+                                    )
                                 }
                             }
                         }
                     }
 
-                    // 2. CRM Lifecycle & Lead Status Section (PHASE 4)
+                    // 2. CRM Lifecycle & Lead Status Section
                     item {
                         Text(
                             text = "CRM Lead Status & Priority",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.SemiBold,
-                            color = Slate300
+                            style = CallogTypography.sectionTitle,
+                            color = MaterialTheme.colorScheme.onSurface
                         )
                     }
 
@@ -235,109 +272,78 @@ fun ContactDetailsScreen(
                             Column(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(12.dp),
-                                verticalArrangement = Arrangement.spacedBy(14.dp)
+                                    .padding(14.dp),
+                                verticalArrangement = Arrangement.spacedBy(16.dp)
                             ) {
                                 // Lead Status Selector
                                 Column {
-                                    Text(
-                                        text = "LEAD STATUS",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = Slate400,
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                    Spacer(modifier = Modifier.height(8.dp))
                                     Row(
                                         modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
                                     ) {
-                                        LeadStatus.entries.forEach { statusOption ->
-                                            val isSelected = (lead?.status ?: LeadStatus.UNKNOWN) == statusOption
-                                            val (badgeBg, badgeFg) = when (statusOption) {
-                                                LeadStatus.HOT -> if (isSelected) Red500 to Color.White else Red500.copy(alpha = 0.15f) to Red500
-                                                LeadStatus.WARM -> if (isSelected) Amber500 to Slate900 else Amber500.copy(alpha = 0.15f) to Amber500
-                                                LeadStatus.COLD -> if (isSelected) Teal300 to Slate900 else Teal300.copy(alpha = 0.15f) to Teal300
-                                                LeadStatus.NEW -> if (isSelected) AllSetBlue to Color.White else AllSetBlue.copy(alpha = 0.15f) to AllSetBlue
-                                                LeadStatus.CUSTOMER -> if (isSelected) Color(0xFF52C41A) to Color.White else Color(0xFF52C41A).copy(alpha = 0.15f) to Color(0xFF52C41A)
-                                                LeadStatus.UNKNOWN -> if (isSelected) Slate400 to Slate900 else Slate400.copy(alpha = 0.15f) to Slate400
-                                            }
-
-                                            Surface(
-                                                modifier = Modifier
-                                                    .weight(1f)
-                                                    .clip(RoundedCornerShape(8.dp))
-                                                    .clickable {
-                                                        detailsViewModel.updateLeadStatus(statusOption)
-                                                    },
-                                                color = badgeBg,
-                                                shape = RoundedCornerShape(8.dp)
-                                            ) {
-                                                Box(
-                                                    modifier = Modifier.padding(vertical = 8.dp),
-                                                    contentAlignment = Alignment.Center
-                                                ) {
-                                                    Text(
-                                                        text = statusOption.name,
-                                                        style = MaterialTheme.typography.labelMedium,
-                                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                                                        color = badgeFg
-                                                    )
-                                                }
-                                            }
-                                        }
+                                        Text(
+                                            text = "LEAD STATUS",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                        LeadStatusPill(status = lead?.status ?: LeadStatus.NEW)
                                     }
+                                    Spacer(modifier = Modifier.height(10.dp))
+
+                                    val statusItems = LeadStatus.entries.map { status ->
+                                        ExpressiveSegmentedButtonItem(
+                                            key = status.name,
+                                            label = status.name
+                                        )
+                                    }
+                                    ExpressiveSegmentedButtonGroup(
+                                        items = statusItems,
+                                        selectedKey = (lead?.status ?: LeadStatus.NEW).name,
+                                        onItemSelected = { key ->
+                                            val status = LeadStatus.entries.find { it.name == key } ?: LeadStatus.NEW
+                                            detailsViewModel.updateLeadStatus(status)
+                                        }
+                                    )
                                 }
 
-                                HorizontalDivider(color = Slate700.copy(alpha = 0.5f))
+                                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
 
                                 // Lead Priority Selector
                                 Column {
-                                    Text(
-                                        text = "DEAL PRIORITY",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = Slate400,
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                    Spacer(modifier = Modifier.height(8.dp))
                                     Row(
                                         modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
                                     ) {
-                                        LeadPriority.entries.forEach { priorityOption ->
-                                            val isSelected = (lead?.priority ?: LeadPriority.MEDIUM) == priorityOption
-                                            val chipColor = when (priorityOption) {
-                                                LeadPriority.URGENT -> Red500
-                                                LeadPriority.HIGH -> Amber500
-                                                LeadPriority.MEDIUM -> AllSetBlue
-                                                LeadPriority.LOW -> Teal300
-                                            }
-
-                                            FilterChip(
-                                                selected = isSelected,
-                                                onClick = {
-                                                    detailsViewModel.updateLeadPriority(priorityOption)
-                                                },
-                                                label = {
-                                                    Text(
-                                                        priorityOption.name,
-                                                        style = MaterialTheme.typography.labelSmall
-                                                    )
-                                                },
-                                                colors = FilterChipDefaults.filterChipColors(
-                                                    selectedContainerColor = chipColor.copy(alpha = 0.25f),
-                                                    selectedLabelColor = chipColor,
-                                                    containerColor = Color.Transparent,
-                                                    labelColor = Slate300
-                                                ),
-                                                border = FilterChipDefaults.filterChipBorder(
-                                                    enabled = true,
-                                                    selected = isSelected,
-                                                    borderColor = if (isSelected) chipColor else Slate700
-                                                )
-                                            )
-                                        }
+                                        Text(
+                                            text = "DEAL PRIORITY",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                        PriorityPill(priority = lead?.priority?.name ?: "Medium")
                                     }
+                                    Spacer(modifier = Modifier.height(10.dp))
+
+                                    val priorityItems = LeadPriority.entries.map { priority ->
+                                        ExpressiveSegmentedButtonItem(
+                                            key = priority.name,
+                                            label = priority.name
+                                        )
+                                    }
+                                    ExpressiveSegmentedButtonGroup(
+                                        items = priorityItems,
+                                        selectedKey = (lead?.priority ?: LeadPriority.MEDIUM).name,
+                                        onItemSelected = { key ->
+                                            val priority = LeadPriority.entries.find { it.name == key } ?: LeadPriority.MEDIUM
+                                            detailsViewModel.updateLeadPriority(priority)
+                                        }
+                                    )
                                 }
+
+                                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
 
                                 // Follow-Up & Source Meta
                                 Row(
@@ -349,7 +355,7 @@ fun ContactDetailsScreen(
                                         Text(
                                             text = "NEXT FOLLOW-UP",
                                             style = MaterialTheme.typography.labelSmall,
-                                            color = Slate400
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
                                         )
                                         val followUpText = lead?.nextFollowUpAt?.let {
                                             SimpleDateFormat("dd MMM yyyy, hh:mm a", Locale.getDefault()).format(Date(it))
@@ -357,18 +363,15 @@ fun ContactDetailsScreen(
                                         Text(
                                             text = followUpText,
                                             style = MaterialTheme.typography.bodyMedium,
-                                            color = if (lead?.nextFollowUpAt != null) Teal300 else Slate400,
+                                            color = if (lead?.nextFollowUpAt != null) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                                             fontWeight = FontWeight.SemiBold
                                         )
                                     }
 
-                                    Button(
+                                    FilledTonalButton(
                                         onClick = { showFollowUpDialog = true },
-                                        colors = ButtonDefaults.buttonColors(
-                                            containerColor = AllSetBlue.copy(alpha = 0.2f),
-                                            contentColor = AllSetLavender
-                                        ),
-                                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                                        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp),
+                                        shape = CallogShapes.interactive
                                     ) {
                                         Icon(Icons.Default.EditCalendar, contentDescription = null, modifier = Modifier.size(16.dp))
                                         Spacer(modifier = Modifier.width(6.dp))
@@ -379,7 +382,7 @@ fun ContactDetailsScreen(
                         }
                     }
 
-                    // 3. CRM Notes Section (PHASE 4)
+                    // 3. CRM Notes Section
                     item {
                         Row(
                             modifier = Modifier.fillMaxWidth(),
@@ -388,15 +391,21 @@ fun ContactDetailsScreen(
                         ) {
                             Text(
                                 text = "CRM Deal Notes",
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.SemiBold,
-                                color = Slate300
+                                style = CallogTypography.sectionTitle,
+                                color = MaterialTheme.colorScheme.onSurface
                             )
-                            IconButton(onClick = {
-                                notesInput = lead?.notes ?: ""
-                                showEditNotesDialog = true
-                            }) {
-                                Icon(Icons.Default.Edit, contentDescription = "Edit Notes", tint = Teal300)
+                            IconButton(
+                                onClick = {
+                                    notesInput = lead?.notes ?: ""
+                                    showEditNotesDialog = true
+                                },
+                                modifier = Modifier.sizeIn(minWidth = 48.dp, minHeight = 48.dp)
+                            ) {
+                                Icon(
+                                    Icons.Default.Edit,
+                                    contentDescription = "Edit Notes",
+                                    tint = MaterialTheme.colorScheme.primary
+                                )
                             }
                         }
                     }
@@ -406,26 +415,26 @@ fun ContactDetailsScreen(
                             Column(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(12.dp)
+                                    .padding(14.dp)
                             ) {
                                 if (lead?.notes.isNullOrBlank()) {
                                     Text(
-                                        text = "No deal notes recorded. Click edit to add notes.",
+                                        text = "No deal notes recorded. Click the edit icon to add notes.",
                                         style = MaterialTheme.typography.bodyMedium,
-                                        color = Slate400
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                 } else {
                                     Text(
                                         text = lead?.notes ?: "",
                                         style = MaterialTheme.typography.bodyMedium,
-                                        color = Slate50
+                                        color = MaterialTheme.colorScheme.onSurface
                                     )
                                 }
                             }
                         }
                     }
 
-                    // 4. CRM Feedback Section (PHASE 4)
+                    // 4. CRM Feedback Section
                     item {
                         Row(
                             modifier = Modifier.fillMaxWidth(),
@@ -433,17 +442,23 @@ fun ContactDetailsScreen(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(
-                                text = "Latest Client Feedback",
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.SemiBold,
-                                color = Slate300
+                                text = "Client Feedback",
+                                style = CallogTypography.sectionTitle,
+                                color = MaterialTheme.colorScheme.onSurface
                             )
-                            IconButton(onClick = {
-                                feedbackInput = lead?.feedback ?: ""
-                                feedbackRatingInput = lead?.feedbackRating ?: 5
-                                showFeedbackDialog = true
-                            }) {
-                                Icon(Icons.Default.RateReview, contentDescription = "Edit Feedback", tint = Amber500)
+                            IconButton(
+                                onClick = {
+                                    feedbackInput = lead?.feedback ?: ""
+                                    feedbackRatingInput = lead?.feedbackRating ?: 5
+                                    showFeedbackDialog = true
+                                },
+                                modifier = Modifier.sizeIn(minWidth = 48.dp, minHeight = 48.dp)
+                            ) {
+                                Icon(
+                                    Icons.Default.RateReview,
+                                    contentDescription = "Edit Feedback",
+                                    tint = CallogSemanticColors.LeadWarm
+                                )
                             }
                         }
                     }
@@ -453,32 +468,32 @@ fun ContactDetailsScreen(
                             Column(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(12.dp),
+                                    .padding(14.dp),
                                 verticalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
                                 if (lead?.feedback.isNullOrBlank() && lead?.feedbackRating == null) {
                                     Text(
-                                        text = "No feedback recorded yet. Tap review icon to submit feedback.",
+                                        text = "No feedback recorded yet. Tap the review icon to submit feedback.",
                                         style = MaterialTheme.typography.bodyMedium,
-                                        color = Slate400
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                 } else {
                                     if (lead?.feedbackRating != null) {
                                         Row(verticalAlignment = Alignment.CenterVertically) {
                                             repeat(5) { index ->
-                                                val starColor = if (index < (lead.feedbackRating ?: 0)) Amber500 else Slate400
+                                                val isFilled = index < (lead.feedbackRating ?: 0)
                                                 Icon(
-                                                    Icons.Default.Star,
+                                                    imageVector = if (isFilled) Icons.Default.Star else Icons.Default.StarBorder,
                                                     contentDescription = null,
-                                                    tint = starColor,
-                                                    modifier = Modifier.size(18.dp)
+                                                    tint = if (isFilled) CallogSemanticColors.LeadWarm else MaterialTheme.colorScheme.outlineVariant,
+                                                    modifier = Modifier.size(20.dp)
                                                 )
                                             }
                                             Spacer(modifier = Modifier.width(8.dp))
                                             Text(
                                                 text = "${lead.feedbackRating}/5 Rating",
-                                                style = MaterialTheme.typography.labelSmall,
-                                                color = Amber500,
+                                                style = MaterialTheme.typography.labelMedium,
+                                                color = CallogSemanticColors.LeadWarm,
                                                 fontWeight = FontWeight.Bold
                                             )
                                         }
@@ -487,7 +502,7 @@ fun ContactDetailsScreen(
                                         Text(
                                             text = "\"${lead?.feedback}\"",
                                             style = MaterialTheme.typography.bodyMedium,
-                                            color = Slate50
+                                            color = MaterialTheme.colorScheme.onSurface
                                         )
                                     }
                                 }
@@ -499,9 +514,8 @@ fun ContactDetailsScreen(
                     item {
                         Text(
                             text = "Contact Information",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.SemiBold,
-                            color = Slate300
+                            style = CallogTypography.sectionTitle,
+                            color = MaterialTheme.colorScheme.onSurface
                         )
                     }
 
@@ -510,14 +524,24 @@ fun ContactDetailsScreen(
                             Column(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(12.dp),
-                                verticalArrangement = Arrangement.spacedBy(12.dp)
+                                    .padding(14.dp),
+                                verticalArrangement = Arrangement.spacedBy(14.dp)
                             ) {
                                 contact.phoneNumbers.forEach { phone ->
-                                    InfoRow(icon = Icons.Default.Phone, label = "Phone Number", value = phone, tint = Teal300)
+                                    InfoRow(
+                                        icon = Icons.Default.Phone,
+                                        label = "Phone Number",
+                                        value = phone,
+                                        tint = CallogSemanticColors.Incoming
+                                    )
                                 }
                                 contact.emails.forEach { email ->
-                                    InfoRow(icon = Icons.Default.Email, label = "Email Address", value = email, tint = Amber500)
+                                    InfoRow(
+                                        icon = Icons.Default.Email,
+                                        label = "Email Address",
+                                        value = email,
+                                        tint = CallogSemanticColors.LeadWarm
+                                    )
                                 }
                             }
                         }
@@ -528,9 +552,8 @@ fun ContactDetailsScreen(
                         item {
                             Text(
                                 text = "Cross-Device Aliases (${state.aliases.size})",
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.SemiBold,
-                                color = Slate300
+                                style = CallogTypography.sectionTitle,
+                                color = MaterialTheme.colorScheme.onSurface
                             )
                         }
 
@@ -539,16 +562,25 @@ fun ContactDetailsScreen(
                                 Column(
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .padding(12.dp),
+                                        .padding(14.dp),
                                     verticalArrangement = Arrangement.spacedBy(8.dp)
                                 ) {
                                     state.aliases.forEach { alias ->
                                         Row(
                                             modifier = Modifier.fillMaxWidth(),
-                                            horizontalArrangement = Arrangement.SpaceBetween
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
                                         ) {
-                                            Text(alias.aliasName, style = MaterialTheme.typography.bodyMedium, color = Slate50)
-                                            Text("Device: ${alias.deviceId.take(8)}", style = MaterialTheme.typography.labelSmall, color = Slate400)
+                                            Text(
+                                                text = alias.aliasName,
+                                                style = MaterialTheme.typography.bodyMedium,
+                                                color = MaterialTheme.colorScheme.onSurface
+                                            )
+                                            Text(
+                                                text = "Device: ${alias.deviceId.take(8)}",
+                                                style = CallogTypography.denseData,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
                                         }
                                     }
                                 }
@@ -560,24 +592,18 @@ fun ContactDetailsScreen(
                     item {
                         Text(
                             text = "Interaction History (${contactCallLogs.size})",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.SemiBold,
-                            color = Slate300
+                            style = CallogTypography.sectionTitle,
+                            color = MaterialTheme.colorScheme.onSurface
                         )
                     }
 
                     if (contactCallLogs.isEmpty()) {
                         item {
-                            GlassyCard {
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(24.dp),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Text("No recent calls recorded with this contact", color = Slate400)
-                                }
-                            }
+                            ExpressiveEmptyState(
+                                title = "No interaction history",
+                                description = "Calls and recordings with this contact will appear here automatically.",
+                                icon = Icons.Outlined.Phone
+                            )
                         }
                     } else {
                         items(contactCallLogs, key = { it.id }) { callLog ->
@@ -585,7 +611,7 @@ fun ContactDetailsScreen(
                                 Row(
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .padding(12.dp),
+                                        .padding(14.dp),
                                     verticalAlignment = Alignment.CenterVertically,
                                     horizontalArrangement = Arrangement.SpaceBetween
                                 ) {
@@ -594,18 +620,18 @@ fun ContactDetailsScreen(
                                             text = callLog.callType.lowercase().replaceFirstChar { it.uppercase() },
                                             style = MaterialTheme.typography.bodyMedium,
                                             fontWeight = FontWeight.SemiBold,
-                                            color = Slate50
+                                            color = MaterialTheme.colorScheme.onSurface
                                         )
                                         Text(
                                             text = "${callLog.duration}s duration",
                                             style = MaterialTheme.typography.bodySmall,
-                                            color = Slate400
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
                                         )
                                     }
                                     Text(
                                         text = SimpleDateFormat("dd MMM yyyy", Locale.getDefault()).format(Date(callLog.timestamp)),
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = Slate400
+                                        style = CallogTypography.denseData,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                 }
                             }
@@ -622,12 +648,13 @@ fun ContactDetailsScreen(
     if (showEditNotesDialog) {
         AlertDialog(
             onDismissRequest = { showEditNotesDialog = false },
-            title = { Text("Edit CRM Notes", fontWeight = FontWeight.Bold) },
+            title = { Text("Edit CRM Notes", style = CallogTypography.sectionTitle) },
             text = {
                 OutlinedTextField(
                     value = notesInput,
                     onValueChange = { notesInput = it },
                     label = { Text("Deal / Client Notes") },
+                    shape = CallogShapes.card,
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(140.dp)
@@ -639,16 +666,20 @@ fun ContactDetailsScreen(
                         detailsViewModel.updateLeadNotes(notesInput)
                         showEditNotesDialog = false
                     },
-                    colors = ButtonDefaults.buttonColors(containerColor = AllSetBlue)
+                    shape = CallogShapes.interactive
                 ) {
                     Text("Save Notes")
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showEditNotesDialog = false }) {
+                TextButton(
+                    onClick = { showEditNotesDialog = false },
+                    shape = CallogShapes.interactive
+                ) {
                     Text("Cancel")
                 }
-            }
+            },
+            shape = CallogShapes.dialog
         )
     }
 
@@ -656,20 +687,23 @@ fun ContactDetailsScreen(
     if (showFeedbackDialog) {
         AlertDialog(
             onDismissRequest = { showFeedbackDialog = false },
-            title = { Text("Client Feedback & Rating", fontWeight = FontWeight.Bold) },
+            title = { Text("Client Feedback & Rating", style = CallogTypography.sectionTitle) },
             text = {
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text("Rating (1-5 stars):", style = MaterialTheme.typography.labelMedium, color = Slate400)
+                Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                    Text("Rating (1-5 stars):", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Row(
                         horizontalArrangement = Arrangement.Center,
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         (1..5).forEach { star ->
-                            IconButton(onClick = { feedbackRatingInput = star }) {
+                            IconButton(
+                                onClick = { feedbackRatingInput = star },
+                                modifier = Modifier.sizeIn(minWidth = 48.dp, minHeight = 48.dp)
+                            ) {
                                 Icon(
-                                    Icons.Default.Star,
+                                    imageVector = if (star <= feedbackRatingInput) Icons.Default.Star else Icons.Default.StarBorder,
                                     contentDescription = "$star stars",
-                                    tint = if (star <= feedbackRatingInput) Amber500 else Slate400,
+                                    tint = if (star <= feedbackRatingInput) CallogSemanticColors.LeadWarm else MaterialTheme.colorScheme.outlineVariant,
                                     modifier = Modifier.size(32.dp)
                                 )
                             }
@@ -679,6 +713,7 @@ fun ContactDetailsScreen(
                         value = feedbackInput,
                         onValueChange = { feedbackInput = it },
                         label = { Text("Feedback Details") },
+                        shape = CallogShapes.card,
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(120.dp)
@@ -691,16 +726,20 @@ fun ContactDetailsScreen(
                         detailsViewModel.updateLeadFeedback(feedbackInput, feedbackRatingInput)
                         showFeedbackDialog = false
                     },
-                    colors = ButtonDefaults.buttonColors(containerColor = Amber500, contentColor = Slate900)
+                    shape = CallogShapes.interactive
                 ) {
                     Text("Submit Feedback", fontWeight = FontWeight.Bold)
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showFeedbackDialog = false }) {
+                TextButton(
+                    onClick = { showFeedbackDialog = false },
+                    shape = CallogShapes.interactive
+                ) {
                     Text("Cancel")
                 }
-            }
+            },
+            shape = CallogShapes.dialog
         )
     }
 
@@ -708,50 +747,53 @@ fun ContactDetailsScreen(
     if (showFollowUpDialog) {
         AlertDialog(
             onDismissRequest = { showFollowUpDialog = false },
-            title = { Text("Schedule Follow-Up", fontWeight = FontWeight.Bold) },
+            title = { Text("Schedule Follow-Up", style = CallogTypography.sectionTitle) },
             text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("Quick follow-up presets:", style = MaterialTheme.typography.labelSmall, color = Slate400)
-                    Button(
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text("Quick follow-up presets:", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    FilledTonalButton(
                         onClick = {
                             val tomorrow = System.currentTimeMillis() + 24 * 60 * 60 * 1000L
                             detailsViewModel.updateLeadFollowUp(tomorrow)
                             showFollowUpDialog = false
                         },
                         modifier = Modifier.fillMaxWidth(),
-                        colors = ButtonDefaults.buttonColors(containerColor = Slate700)
+                        shape = CallogShapes.interactive
                     ) {
                         Text("Tomorrow (+24 hours)")
                     }
-                    Button(
+                    FilledTonalButton(
                         onClick = {
                             val in3Days = System.currentTimeMillis() + 3 * 24 * 60 * 60 * 1000L
                             detailsViewModel.updateLeadFollowUp(in3Days)
                             showFollowUpDialog = false
                         },
                         modifier = Modifier.fillMaxWidth(),
-                        colors = ButtonDefaults.buttonColors(containerColor = Slate700)
+                        shape = CallogShapes.interactive
                     ) {
                         Text("In 3 Days")
                     }
-                    Button(
+                    FilledTonalButton(
                         onClick = {
                             val nextWeek = System.currentTimeMillis() + 7 * 24 * 60 * 60 * 1000L
                             detailsViewModel.updateLeadFollowUp(nextWeek)
                             showFollowUpDialog = false
                         },
                         modifier = Modifier.fillMaxWidth(),
-                        colors = ButtonDefaults.buttonColors(containerColor = Slate700)
+                        shape = CallogShapes.interactive
                     ) {
                         Text("Next Week (+7 days)")
                     }
-                    Button(
+                    OutlinedButton(
                         onClick = {
                             detailsViewModel.updateLeadFollowUp(null)
                             showFollowUpDialog = false
                         },
                         modifier = Modifier.fillMaxWidth(),
-                        colors = ButtonDefaults.buttonColors(containerColor = Red500.copy(alpha = 0.2f), contentColor = Red500)
+                        shape = CallogShapes.interactive,
+                        colors = ButtonDefaults.outlinedButtonColors(
+                            contentColor = MaterialTheme.colorScheme.error
+                        )
                     ) {
                         Text("Clear Follow-Up")
                     }
@@ -759,33 +801,62 @@ fun ContactDetailsScreen(
             },
             confirmButton = {},
             dismissButton = {
-                TextButton(onClick = { showFollowUpDialog = false }) {
+                TextButton(
+                    onClick = { showFollowUpDialog = false },
+                    shape = CallogShapes.interactive
+                ) {
                     Text("Close")
                 }
-            }
+            },
+            shape = CallogShapes.dialog
         )
     }
 }
 
 @Composable
-private fun QuickActionButton(
+private fun ExpressiveQuickActionButton(
     icon: ImageVector,
     label: String,
-    color: Color,
+    accentColor: Color,
     onClick: () -> Unit
 ) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        IconButton(
+    val interactionSource = remember { MutableInteractionSource() }
+    val isPressed by interactionSource.collectIsPressedAsState()
+    val scale by animateFloatAsState(
+        targetValue = if (isPressed) 0.92f else 1f,
+        animationSpec = CallogMotion.snappySpring(),
+        label = "quickActionScale"
+    )
+
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier.scale(scale)
+    ) {
+        Surface(
             onClick = onClick,
-            modifier = Modifier
-                .size(48.dp)
-                .clip(CircleShape)
-                .background(color.copy(alpha = 0.15f))
+            interactionSource = interactionSource,
+            modifier = Modifier.size(52.dp),
+            shape = CallogShapes.avatar,
+            color = accentColor.copy(alpha = 0.15f),
+            contentColor = accentColor
         ) {
-            Icon(icon, contentDescription = label, tint = color)
+            Box(
+                contentAlignment = Alignment.Center,
+                modifier = Modifier.fillMaxSize()
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = label,
+                    modifier = Modifier.size(22.dp)
+                )
+            }
         }
-        Spacer(modifier = Modifier.height(4.dp))
-        Text(text = label, style = MaterialTheme.typography.labelSmall, color = Slate300)
+        Spacer(modifier = Modifier.height(6.dp))
+        Text(
+            text = label,
+            style = CallogTypography.statusLabel,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
     }
 }
 
@@ -797,11 +868,81 @@ private fun InfoRow(
     tint: Color
 ) {
     Row(verticalAlignment = Alignment.CenterVertically) {
-        Icon(icon, contentDescription = label, tint = tint, modifier = Modifier.size(18.dp))
+        Surface(
+            shape = CallogShapes.avatar,
+            color = tint.copy(alpha = 0.15f),
+            modifier = Modifier.size(36.dp)
+        ) {
+            Box(contentAlignment = Alignment.Center) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = label,
+                    tint = tint,
+                    modifier = Modifier.size(18.dp)
+                )
+            }
+        }
         Spacer(modifier = Modifier.width(12.dp))
         Column {
-            Text(text = label, style = MaterialTheme.typography.labelSmall, color = Slate400)
-            Text(text = value, style = MaterialTheme.typography.bodyMedium, color = Slate50)
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Text(
+                text = value,
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.Medium,
+                color = MaterialTheme.colorScheme.onSurface
+            )
         }
     }
 }
+
+// ==========================================
+// PREVIEWS
+// ==========================================
+
+@Preview(name = "Contact Details - Dark", uiMode = Configuration.UI_MODE_NIGHT_YES, showBackground = true)
+@Preview(name = "Contact Details - Light", showBackground = true)
+@Composable
+private fun ContactDetailsPreview() {
+    CallogTheme {
+        Surface(color = MaterialTheme.colorScheme.background) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                GlassyCard {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        ContactAvatar(
+                            name = "Jane Cooper",
+                            initials = "JC",
+                            photoUri = null,
+                            modifier = Modifier.size(80.dp)
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = "Jane Cooper",
+                            style = CallogTypography.heroTitle,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Text(
+                            text = "Acme Corp Ltd.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+

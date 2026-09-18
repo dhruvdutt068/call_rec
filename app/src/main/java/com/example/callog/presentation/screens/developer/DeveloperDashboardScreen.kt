@@ -39,6 +39,8 @@ fun DeveloperDashboardScreen(
     onBackClick: () -> Unit,
     onNavigateToLogs: () -> Unit,
     onNavigateToRecordingDiagnostics: () -> Unit,
+    onNavigateToCallSimulator: () -> Unit = {},
+    onNavigateToEnvironmentPresets: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     BackHandler {
@@ -143,8 +145,41 @@ fun DeveloperDashboardScreen(
                 color = Slate400
             )
 
-            // Section: Cloud Credentials & Environment Switcher
-            DashboardSectionHeader(title = "Cloud Environments & Credentials")
+            // Section: Cloud Environments & Presets
+            DashboardSectionHeader(title = "Cloud Environments & Presets")
+
+            // Presets Manager Hub Card
+            GlassyCard(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { onNavigateToEnvironmentPresets() }
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(40.dp)
+                                .clip(CircleShape)
+                                .background(Teal500.copy(alpha = 0.15f)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(Icons.Default.Dns, contentDescription = null, tint = Teal300, modifier = Modifier.size(22.dp))
+                        }
+                        Column {
+                            Text("Environment & Preset Manager", fontWeight = FontWeight.Bold, color = Slate50)
+                            Text("Switch, duplicate & export backend profiles", style = MaterialTheme.typography.bodySmall, color = Slate400)
+                        }
+                    }
+                    Icon(Icons.Default.ChevronRight, contentDescription = null, tint = Teal300)
+                }
+            }
 
             // 0. Environment Switcher
             EnvironmentSelectorCard(
@@ -539,6 +574,62 @@ fun DeveloperDashboardScreen(
                         label = "Application Version",
                         value = "1.0.0 (Release)"
                     )
+                }
+            }
+
+            // Section 4: Call Simulation Studio Card
+            DashboardSectionHeader(title = "Call Simulation Studio")
+            GlassyCard(modifier = Modifier.fillMaxWidth()) {
+                Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(40.dp)
+                                .clip(CircleShape)
+                                .background(Teal500.copy(alpha = 0.2f)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.PhoneCallback,
+                                contentDescription = null,
+                                tint = Teal300,
+                                modifier = Modifier.size(22.dp)
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Live Call Simulator",
+                                fontWeight = FontWeight.Bold,
+                                color = Slate50,
+                                style = MaterialTheme.typography.titleMedium
+                            )
+                            Text(
+                                text = "Simulate incoming & outgoing calls with real ringtones, lock-screen in-call UI, dual-SIM, and CRM wrap-up.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Slate400
+                            )
+                        }
+                    }
+
+                    Button(
+                        onClick = onNavigateToCallSimulator,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(46.dp),
+                        shape = RoundedCornerShape(8.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Teal500,
+                            contentColor = Slate50
+                        )
+                    ) {
+                        Icon(Icons.Default.PlayCircle, contentDescription = null)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Open Call Simulation Studio", fontWeight = FontWeight.Bold)
+                    }
                 }
             }
 

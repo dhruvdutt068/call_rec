@@ -53,10 +53,20 @@ class UploadServiceImpl @Inject constructor(
                         .setProjectId(savedConfig.projectId)
                         .setApiKey(savedConfig.apiKey)
                         .setApplicationId(savedConfig.appId)
+                        .apply {
+                            savedConfig.storageBucket?.takeIf { it.isNotBlank() }?.let { setStorageBucket(it) }
+                            savedConfig.gcmSenderId?.takeIf { it.isNotBlank() }?.let { setGcmSenderId(it) }
+                            savedConfig.databaseUrl?.takeIf { it.isNotBlank() }?.let { setDatabaseUrl(it) }
+                        }
                         .build()
                     FirebaseApp.initializeApp(context, options, "customApp")
                 }
-                FirebaseStorage.getInstance(customApp)
+                if (!savedConfig.storageBucket.isNullOrBlank()) {
+                    val bucketUrl = if (savedConfig.storageBucket.startsWith("gs://")) savedConfig.storageBucket else "gs://${savedConfig.storageBucket}"
+                    FirebaseStorage.getInstance(customApp, bucketUrl)
+                } else {
+                    FirebaseStorage.getInstance(customApp)
+                }
             } else {
                 if (FirebaseApp.getApps(context).isEmpty()) {
                     FirebaseApp.initializeApp(context)

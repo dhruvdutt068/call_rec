@@ -13,6 +13,7 @@ import com.example.callog.domain.model.Lead
 import com.example.callog.domain.model.Person
 import com.example.callog.domain.repository.LeadRepository
 import com.example.callog.domain.repository.PersonRepository
+import com.example.callog.domain.service.simulator.CallSimulatorManager
 import com.example.callog.sim.SimInfo
 import com.example.callog.sim.SimRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -29,7 +30,8 @@ class DialerViewModel @Inject constructor(
     private val simRepository: SimRepository,
     private val t9SearchEngine: T9SearchEngine,
     private val telecomDialerManager: TelecomDialerManager,
-    private val dtmfTonePlayer: DtmfTonePlayer
+    private val dtmfTonePlayer: DtmfTonePlayer,
+    val simulatorManager: CallSimulatorManager
 ) : ViewModel() {
 
     private val _inputNumber = MutableStateFlow("")

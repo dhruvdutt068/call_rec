@@ -68,7 +68,9 @@ class CallSessionManagerTest {
             proximityController = fakeProximityController,
             notificationManager = fakeNotificationManager,
             callHapticManager = fakeHapticManager,
-            dtmfTonePlayer = fakeDtmfTonePlayer
+            dtmfTonePlayer = fakeDtmfTonePlayer,
+            contactsProvider = com.example.callog.data.provider.ContactsProvider(fakeContext),
+            dialerRoleManager = com.example.callog.domain.service.DialerRoleManager(fakeContext)
         )
 
         callSessionManager.registerTelecomController(fakeController)
@@ -196,6 +198,49 @@ class CallSessionManagerTest {
 
         // Verify ringtone stopped upon reject
         assertTrue(fakeRingtoneController.stopped)
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // 3b. Telephony Pre-session to Telecom Handover & Answer/Reject
+    // ─────────────────────────────────────────────────────────────
+    @Test
+    fun testTelephonyIncomingPreSessionHandoverToTelecom() = runBlocking {
+        // Step 1: Telephony broadcast arrives before InCallService binds
+        callSessionManager.unregisterTelecomController(fakeController)
+        callSessionManager.onTelephonyCallStateChanged(
+            state = CallState.RINGING,
+            number = "+91 98765 43210",
+            direction = CallDirection.INCOMING
+        )
+
+        val preSession = callSessionManager.activeCallSession.value
+        assertNotNull(preSession)
+        assertEquals(CallState.RINGING, preSession?.state)
+        assertTrue(preSession?.callId?.startsWith("call_") == true)
+
+        // Step 2: InCallService connects and Telecom onCallAdded arrives with authoritative ID
+        callSessionManager.registerTelecomController(fakeController)
+        val authoritativeTelecomId = "telecom_hash_12345"
+        callSessionManager.onTelecomCallAdded(
+            callId = authoritativeTelecomId,
+            rawNumber = "+91 98765 43210",
+            telecomDisplayName = "VIP Client",
+            direction = CallDirection.INCOMING,
+            initialState = CallState.RINGING,
+            capabilities = CallCapabilities(canHold = true),
+            accountHandleId = null,
+            accountComponentName = null
+        )
+
+        kotlinx.coroutines.delay(50)
+        val sessions = callSessionManager.callSessions.value
+        assertEquals(1, sessions.size)
+        val active = callSessionManager.activeCallSession.value
+        assertEquals(authoritativeTelecomId, active?.callId)
+
+        // Step 3: Answering invokes Telecom controller on authoritative ID
+        callSessionManager.executeAction(CallAction.Answer(authoritativeTelecomId))
+        assertEquals(authoritativeTelecomId, fakeController.lastAnsweredCallId)
     }
 
     // ─────────────────────────────────────────────────────────────

@@ -136,6 +136,43 @@ class ContactsProvider @Inject constructor(
         return result
     }
 
+    /**
+     * Fast direct lookup of a contact name and photo by phone number from Android ContactsContract.
+     */
+    fun lookupContactByNumber(phoneNumber: String): Pair<String, String?>? {
+        if (phoneNumber.isBlank()) return null
+        if (ContextCompat.checkSelfPermission(
+                context,
+                Manifest.permission.READ_CONTACTS
+            ) != PackageManager.PERMISSION_GRANTED
+        ) {
+            return null
+        }
+
+        val uri = android.net.Uri.withAppendedPath(
+            ContactsContract.PhoneLookup.CONTENT_FILTER_URI,
+            android.net.Uri.encode(phoneNumber)
+        )
+        val projection = arrayOf(
+            ContactsContract.PhoneLookup.DISPLAY_NAME,
+            ContactsContract.PhoneLookup.PHOTO_THUMBNAIL_URI
+        )
+
+        return try {
+            context.contentResolver.query(uri, projection, null, null, null)?.use { cursor ->
+                if (cursor.moveToFirst()) {
+                    val nameIdx = cursor.getColumnIndex(ContactsContract.PhoneLookup.DISPLAY_NAME)
+                    val photoIdx = cursor.getColumnIndex(ContactsContract.PhoneLookup.PHOTO_THUMBNAIL_URI)
+                    val name = if (nameIdx != -1) cursor.getString(nameIdx) else null
+                    val photo = if (photoIdx != -1) cursor.getString(photoIdx) else null
+                    if (!name.isNullOrBlank()) Pair(name, photo) else null
+                } else null
+            }
+        } catch (e: Exception) {
+            null
+        }
+    }
+
     private data class TempContact(
         val contactId: String,
         val name: String,

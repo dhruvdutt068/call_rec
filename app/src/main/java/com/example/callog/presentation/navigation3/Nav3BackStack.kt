@@ -78,19 +78,32 @@ class Nav3BackStack<T : Any>(
 }
 
 /**
- * Remembers a [Nav3BackStack] across recompositions and configuration changes.
+ * Remembers a [Nav3BackStack] across recompositions and configuration changes using [Nav3StatePersistence].
  */
 @Composable
-fun <T : Any> rememberNav3BackStack(
+fun <T : Nav3Key> rememberNav3BackStack(
     vararg initialKeys: T
 ): Nav3BackStack<T> {
     require(initialKeys.isNotEmpty()) { "Backstack must have at least one initial key" }
+    val rootKey = initialKeys.first()
     return rememberSaveable(
-        saver = Saver(
-            save = { backStack -> backStack.items.toList() },
-            restore = { savedList -> Nav3BackStack(savedList) }
-        )
+        saver = Nav3StatePersistence.nav3BackStackSaver(rootKey)
     ) {
         Nav3BackStack(initialKeys.toList())
     }
 }
+
+/**
+ * Remembers a generic [Nav3BackStack] with an explicit type-safe [Saver].
+ */
+@Composable
+fun <T : Any> rememberGenericNav3BackStack(
+    saver: Saver<Nav3BackStack<T>, out Any>,
+    vararg initialKeys: T
+): Nav3BackStack<T> {
+    require(initialKeys.isNotEmpty()) { "Backstack must have at least one initial key" }
+    return rememberSaveable(saver = saver) {
+        Nav3BackStack(initialKeys.toList())
+    }
+}
+

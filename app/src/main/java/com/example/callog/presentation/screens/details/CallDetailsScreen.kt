@@ -1,23 +1,29 @@
 package com.example.callog.presentation.screens.details
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -26,12 +32,10 @@ import com.example.callog.core.extensions.toDurationString
 import com.example.callog.presentation.components.*
 import com.example.callog.presentation.theme.*
 import com.example.callog.presentation.viewmodel.CallViewModel
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun CallDetailsScreen(
     callId: Long,
@@ -55,7 +59,7 @@ fun CallDetailsScreen(
         // States for audio playback (Real MediaPlayer)
         var isPlaying by remember { mutableStateOf(false) }
         var playProgress by remember { mutableFloatStateOf(0f) }
-        
+
         val context = androidx.compose.ui.platform.LocalContext.current
 
         // Initialize MediaPlayer
@@ -140,7 +144,7 @@ fun CallDetailsScreen(
                                 input.copyTo(output)
                             }
                         }
-                        
+
                         viewModel.associateAndUploadRecording(call.id, cacheFile.absolutePath) { result ->
                             isUploadingManual = false
                         }
@@ -155,32 +159,54 @@ fun CallDetailsScreen(
         Scaffold(
             topBar = {
                 TopAppBar(
-                    title = { Text("Call Details", fontWeight = FontWeight.Bold) },
+                    title = {
+                        Text(
+                            text = "Call Details",
+                            style = CallogTypography.sectionTitle,
+                            fontWeight = FontWeight.Bold
+                        )
+                    },
                     navigationIcon = {
-                        IconButton(onClick = onBackClick) {
-                            Icon(Icons.Default.ArrowBack, contentDescription = "Back")
+                        IconButton(
+                            onClick = onBackClick,
+                            modifier = Modifier.sizeIn(minWidth = 48.dp, minHeight = 48.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                                contentDescription = "Back"
+                            )
                         }
                     },
                     actions = {
-                        IconButton(onClick = { viewModel.toggleFavorite(call.id) }) {
+                        IconButton(
+                            onClick = { viewModel.toggleFavorite(call.id) },
+                            modifier = Modifier.sizeIn(minWidth = 48.dp, minHeight = 48.dp)
+                        ) {
                             Icon(
                                 imageVector = if (call.isFavorite) Icons.Default.Star else Icons.Default.StarBorder,
-                                contentDescription = "Favorite",
+                                contentDescription = if (call.isFavorite) "Remove from favorites" else "Add to favorites",
                                 tint = if (call.isFavorite) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
-                        IconButton(onClick = {
-                            viewModel.deleteCall(call.id)
-                            onBackClick()
-                        }) {
-                            Icon(Icons.Default.Delete, contentDescription = "Delete Log", tint = Red500)
+                        IconButton(
+                            onClick = {
+                                viewModel.deleteCall(call.id)
+                                onBackClick()
+                            },
+                            modifier = Modifier.sizeIn(minWidth = 48.dp, minHeight = 48.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Delete,
+                                contentDescription = "Delete call log",
+                                tint = MaterialTheme.colorScheme.error
+                            )
                         }
                     },
                     colors = TopAppBarDefaults.topAppBarColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceVariant,
-                        titleContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                        navigationIconContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                        actionIconContentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                        containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+                        titleContentColor = MaterialTheme.colorScheme.onSurface,
+                        navigationIconContentColor = MaterialTheme.colorScheme.onSurface,
+                        actionIconContentColor = MaterialTheme.colorScheme.onSurface
                     )
                 )
             },
@@ -193,143 +219,129 @@ fun CallDetailsScreen(
                     .padding(innerPadding)
                     .verticalScroll(rememberScrollState())
                     .padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(20.dp)
+                verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 // Header profile card
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 8.dp)
-                ) {
-                    ContactAvatar(
-                        name = call.name,
-                        initials = call.initials,
-                        photoUri = call.contactPhotoUri,
-                        modifier = Modifier.size(68.dp)
-                    )
-                    
-                    Spacer(modifier = Modifier.width(16.dp))
+                GlassyCard {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp)
+                    ) {
+                        ContactAvatar(
+                            name = call.name,
+                            initials = call.initials,
+                            photoUri = call.contactPhotoUri,
+                            modifier = Modifier.size(64.dp)
+                        )
 
-                    Column {
-                        Text(
-                            text = call.displayName,
-                            style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.Bold,
-                            color = Slate50
-                        )
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            text = call.number,
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = Slate400
-                        )
-                        Spacer(modifier = Modifier.height(6.dp))
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            CallTypeIcon(call.callType)
-                            Spacer(modifier = Modifier.width(6.dp))
+                        Spacer(modifier = Modifier.width(16.dp))
+
+                        Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = "${call.callType} • ${call.timestamp.toDateTimeString()}",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = Slate400
+                                text = call.displayName,
+                                style = CallogTypography.entityName,
+                                color = MaterialTheme.colorScheme.onSurface
                             )
-                        }
-                        Spacer(modifier = Modifier.height(8.dp))
-                        val syncIcon = when (call.syncStatus.uppercase()) {
-                            "SYNCED" -> Icons.Default.CloudDone
-                            "UPLOADING" -> Icons.Default.CloudUpload
-                            "FAILED" -> Icons.Default.CloudOff
-                            else -> Icons.Default.Cloud
-                        }
-                        val syncColor = when (call.syncStatus.uppercase()) {
-                            "SYNCED" -> Green500
-                            "UPLOADING" -> Amber500
-                            "FAILED" -> Red500
-                            else -> Slate400
-                        }
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(6.dp))
-                                .background(syncColor.copy(alpha = 0.1f))
-                                .padding(horizontal = 8.dp, vertical = 4.dp)
-                        ) {
-                            Icon(
-                                imageVector = syncIcon,
-                                contentDescription = "Sync Status: ${call.syncStatus}",
-                                tint = syncColor,
-                                modifier = Modifier.size(14.dp)
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
+                            Spacer(modifier = Modifier.height(2.dp))
                             Text(
-                                text = when (call.syncStatus.uppercase()) {
-                                    "SYNCED" -> "Backup Synced"
-                                    "UPLOADING" -> "Backing up..."
-                                    "FAILED" -> "Sync Failed"
-                                    else -> "Local Only"
-                                },
-                                style = MaterialTheme.typography.labelSmall,
-                                color = syncColor,
-                                fontWeight = FontWeight.Bold
+                                text = call.number,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                CallTypeIcon(call.callType)
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = "${call.callType} • ${call.timestamp.toDateTimeString()}",
+                                    style = CallogTypography.denseData,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            Spacer(modifier = Modifier.height(8.dp))
+                            SyncStatusPill(status = call.syncStatus)
                         }
                     }
                 }
 
                 // Interactive Callback Reminder trigger
-                GlassyCard(
+                val reminderInteraction = remember { MutableInteractionSource() }
+                val reminderPressed by reminderInteraction.collectIsPressedAsState()
+                val reminderScale by animateFloatAsState(
+                    targetValue = if (reminderPressed) 0.98f else 1f,
+                    animationSpec = CallogMotion.snappySpring(),
+                    label = "reminderScale"
+                )
+
+                Surface(
                     onClick = { showReminderDialog = true },
-                    modifier = Modifier.fillMaxWidth()
+                    interactionSource = reminderInteraction,
+                    shape = CallogShapes.card,
+                    color = MaterialTheme.colorScheme.surfaceContainerLow,
+                    border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .scale(reminderScale)
                 ) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.SpaceBetween,
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp)
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(
-                                imageVector = Icons.Default.NotificationsActive,
-                                contentDescription = null,
-                                tint = Amber500,
-                                modifier = Modifier.size(24.dp)
-                            )
-                            Spacer(modifier = Modifier.width(12.dp))
+                            Surface(
+                                shape = CallogShapes.avatar,
+                                color = CallogSemanticColors.LeadWarm.copy(alpha = 0.15f),
+                                modifier = Modifier.size(44.dp)
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Icon(
+                                        imageVector = Icons.Default.NotificationsActive,
+                                        contentDescription = null,
+                                        tint = CallogSemanticColors.LeadWarm,
+                                        modifier = Modifier.size(22.dp)
+                                    )
+                                }
+                            }
+                            Spacer(modifier = Modifier.width(14.dp))
                             Column {
                                 Text(
                                     text = "Callback Reminder",
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.Bold,
-                                    color = Slate50
+                                    style = CallogTypography.sectionTitle,
+                                    color = MaterialTheme.colorScheme.onSurface
                                 )
                                 Text(
                                     text = "Schedule a reminder notification for this caller",
                                     style = MaterialTheme.typography.bodySmall,
-                                    color = Slate400
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
                         }
                         Icon(
                             imageVector = Icons.Default.ChevronRight,
                             contentDescription = null,
-                            tint = Slate400
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                 }
 
-                // Call Recording Player (Bouncing Waveforms!)
+                // Call Recording Player (Waveforms)
                 if (call.recordingPath != null) {
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text(
                             text = "Call Recording",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = Slate50
+                            style = CallogTypography.sectionTitle,
+                            color = MaterialTheme.colorScheme.onSurface
                         )
-                        
+
                         GlassyCard(modifier = Modifier.fillMaxWidth()) {
                             Column(
                                 horizontalAlignment = Alignment.CenterHorizontally,
-                                modifier = Modifier.padding(bottom = 8.dp)
+                                modifier = Modifier.padding(16.dp)
                             ) {
                                 Row(
                                     verticalAlignment = Alignment.CenterVertically,
@@ -338,63 +350,69 @@ fun CallDetailsScreen(
                                     Icon(
                                         imageVector = Icons.Default.Mic,
                                         contentDescription = null,
-                                        tint = Teal300,
+                                        tint = CallogSemanticColors.RecordingActive,
                                         modifier = Modifier.size(20.dp)
                                     )
                                     Text(
                                         text = call.recordingPath?.substringAfterLast("/") ?: "recording",
                                         style = MaterialTheme.typography.bodyMedium,
-                                        color = Slate50,
+                                        color = MaterialTheme.colorScheme.onSurface,
                                         fontWeight = FontWeight.SemiBold
                                     )
                                 }
-                                Spacer(modifier = Modifier.height(4.dp))
-                                
-                                val statusText = when (call.recordingUploadStatus) {
+                                Spacer(modifier = Modifier.height(6.dp))
+
+                                val uploadStatusText = when (call.recordingUploadStatus) {
                                     "SUCCESS" -> "Cloud Storage Uploaded"
                                     "UPLOADING" -> "Cloud Storage Uploading..."
                                     "FAILED" -> "Cloud Storage Upload Failed"
                                     else -> "Local File (Pending Cloud Upload)"
                                 }
-                                val statusColor = when (call.recordingUploadStatus) {
-                                    "SUCCESS" -> Green500
-                                    "UPLOADING" -> Teal300
-                                    "FAILED" -> Red500
-                                    else -> Slate400
+                                val uploadStatusColor = when (call.recordingUploadStatus) {
+                                    "SUCCESS" -> CallogSemanticColors.SyncSuccess
+                                    "UPLOADING" -> CallogSemanticColors.SyncInProgress
+                                    "FAILED" -> CallogSemanticColors.SyncFailed
+                                    else -> MaterialTheme.colorScheme.onSurfaceVariant
                                 }
-                                val statusIcon = when (call.recordingUploadStatus) {
+                                val uploadStatusIcon = when (call.recordingUploadStatus) {
                                     "SUCCESS" -> Icons.Default.CloudDone
                                     "UPLOADING" -> Icons.Default.Sync
                                     "FAILED" -> Icons.Default.Warning
                                     else -> Icons.Default.CloudUpload
                                 }
-                                
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+
+                                Surface(
+                                    color = uploadStatusColor.copy(alpha = 0.12f),
+                                    shape = CallogShapes.pill
                                 ) {
-                                    Icon(
-                                        imageVector = statusIcon,
-                                        contentDescription = null,
-                                        tint = statusColor,
-                                        modifier = Modifier.size(14.dp)
-                                    )
-                                    Text(
-                                        text = statusText,
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = statusColor,
-                                        fontWeight = FontWeight.Medium
-                                    )
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = uploadStatusIcon,
+                                            contentDescription = null,
+                                            tint = uploadStatusColor,
+                                            modifier = Modifier.size(14.dp)
+                                        )
+                                        Text(
+                                            text = uploadStatusText,
+                                            style = CallogTypography.statusLabel,
+                                            color = uploadStatusColor,
+                                            fontWeight = FontWeight.Medium
+                                        )
+                                    }
                                 }
-                                
-                                Spacer(modifier = Modifier.height(16.dp))
+
+                                Spacer(modifier = Modifier.height(18.dp))
 
                                 // Bouncing animated waveform
                                 Row(
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .height(40.dp)
-                                        .padding(horizontal = 16.dp),
+                                        .padding(horizontal = 8.dp),
                                     horizontalArrangement = Arrangement.SpaceBetween,
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
@@ -403,17 +421,18 @@ fun CallDetailsScreen(
                                             targetValue = if (isPlaying) {
                                                 ((i * 13 + (playProgress * 1000).toInt()) % 30 + 10).dp
                                             } else {
-                                                12.dp
+                                                10.dp
                                             },
-                                            animationSpec = spring(dampingRatio = 0.5f)
+                                            animationSpec = spring(dampingRatio = 0.5f),
+                                            label = "wave_$i"
                                         )
-                                        
+
                                         Box(
                                             modifier = Modifier
                                                 .width(4.dp)
                                                 .height(waveHeight)
                                                 .clip(CircleShape)
-                                                .background(if (isPlaying) Teal300 else Slate700)
+                                                .background(if (isPlaying) CallogSemanticColors.RecordingActive else MaterialTheme.colorScheme.outlineVariant)
                                         )
                                     }
                                 }
@@ -431,9 +450,9 @@ fun CallDetailsScreen(
                                         }
                                     },
                                     colors = SliderDefaults.colors(
-                                        thumbColor = Teal500,
-                                        activeTrackColor = Teal500,
-                                        inactiveTrackColor = Slate700
+                                        thumbColor = MaterialTheme.colorScheme.primary,
+                                        activeTrackColor = MaterialTheme.colorScheme.primary,
+                                        inactiveTrackColor = MaterialTheme.colorScheme.outlineVariant
                                     ),
                                     modifier = Modifier.fillMaxWidth()
                                 )
@@ -444,17 +463,17 @@ fun CallDetailsScreen(
                                 ) {
                                     Text(
                                         text = (playProgress * duration).toInt().toDurationString(),
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = Slate400
+                                        style = CallogTypography.denseData,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                     Text(
                                         text = duration.toInt().toDurationString(),
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = Slate400
+                                        style = CallogTypography.denseData,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                 }
 
-                                Spacer(modifier = Modifier.height(8.dp))
+                                Spacer(modifier = Modifier.height(12.dp))
 
                                 // Play and Upload controls
                                 Row(
@@ -463,78 +482,83 @@ fun CallDetailsScreen(
                                     modifier = Modifier.fillMaxWidth()
                                 ) {
                                     // Play/Pause Button
-                                    IconButton(
-                                        onClick = {
-                                            isPlaying = !isPlaying
-                                        },
+                                    val playInteraction = remember { MutableInteractionSource() }
+                                    val playPressed by playInteraction.collectIsPressedAsState()
+                                    val playScale by animateFloatAsState(
+                                        targetValue = if (playPressed) 0.90f else 1f,
+                                        animationSpec = CallogMotion.bouncySpring(),
+                                        label = "playScale"
+                                    )
+
+                                    FilledIconButton(
+                                        onClick = { isPlaying = !isPlaying },
+                                        interactionSource = playInteraction,
                                         modifier = Modifier
                                             .size(56.dp)
-                                            .clip(CircleShape)
-                                            .background(Teal500)
+                                            .scale(playScale),
+                                        colors = IconButtonDefaults.filledIconButtonColors(
+                                            containerColor = MaterialTheme.colorScheme.primary
+                                        )
                                     ) {
                                         Icon(
                                             imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                                            contentDescription = "Play/Pause",
-                                            tint = Slate50,
+                                            contentDescription = if (isPlaying) "Pause playback" else "Start playback",
+                                            tint = MaterialTheme.colorScheme.onPrimary,
                                             modifier = Modifier.size(32.dp)
                                         )
                                     }
 
-                                    // GCS Upload/Delete Action Button
+                                    // Cloud Upload/Delete Action Button
                                     var isActionInProgress by remember { mutableStateOf(false) }
                                     val status = call.recordingUploadStatus
-                                    
+
                                     when (status) {
                                         "SUCCESS" -> {
-                                            IconButton(
+                                            OutlinedIconButton(
                                                 onClick = {
                                                     isActionInProgress = true
                                                     viewModel.deleteRecording(call.id) {
                                                         isActionInProgress = false
-                                                     }
+                                                    }
                                                 },
                                                 enabled = !isActionInProgress,
-                                                modifier = Modifier
-                                                    .size(56.dp)
-                                                    .clip(CircleShape)
-                                                    .background(Red500.copy(alpha = 0.2f))
-                                                    .border(1.dp, Red500, CircleShape)
+                                                modifier = Modifier.size(56.dp),
+                                                colors = IconButtonDefaults.outlinedIconButtonColors(
+                                                    contentColor = MaterialTheme.colorScheme.error
+                                                ),
+                                                border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.error)
                                             ) {
                                                 if (isActionInProgress) {
                                                     CircularProgressIndicator(
                                                         modifier = Modifier.size(24.dp),
                                                         strokeWidth = 2.dp,
-                                                        color = Red500
+                                                        color = MaterialTheme.colorScheme.error
                                                     )
                                                 } else {
                                                     Icon(
                                                         imageVector = Icons.Default.DeleteSweep,
                                                         contentDescription = "Delete Cloud Recording",
-                                                        tint = Red500,
+                                                        tint = MaterialTheme.colorScheme.error,
                                                         modifier = Modifier.size(28.dp)
                                                     )
                                                 }
                                             }
                                         }
                                         "UPLOADING" -> {
-                                            IconButton(
+                                            FilledTonalIconButton(
                                                 onClick = {},
                                                 enabled = false,
-                                                modifier = Modifier
-                                                    .size(56.dp)
-                                                    .clip(CircleShape)
-                                                    .background(Slate800)
-                                                    .border(1.dp, Teal300, CircleShape)
+                                                modifier = Modifier.size(56.dp)
                                             ) {
                                                 CircularProgressIndicator(
                                                     modifier = Modifier.size(24.dp),
                                                     strokeWidth = 2.dp,
-                                                    color = Teal300
+                                                    color = MaterialTheme.colorScheme.primary
                                                 )
                                             }
                                         }
                                         else -> { // PENDING or FAILED
-                                            IconButton(
+                                            FilledTonalIconButton(
                                                 onClick = {
                                                     isActionInProgress = true
                                                     viewModel.uploadRecording(call.id) { _ ->
@@ -542,23 +566,19 @@ fun CallDetailsScreen(
                                                     }
                                                 },
                                                 enabled = !isActionInProgress,
-                                                modifier = Modifier
-                                                    .size(56.dp)
-                                                    .clip(CircleShape)
-                                                    .background(Teal500.copy(alpha = 0.2f))
-                                                    .border(1.dp, Teal300, CircleShape)
+                                                modifier = Modifier.size(56.dp)
                                             ) {
                                                 if (isActionInProgress) {
                                                     CircularProgressIndicator(
                                                         modifier = Modifier.size(24.dp),
                                                         strokeWidth = 2.dp,
-                                                        color = Teal300
+                                                        color = MaterialTheme.colorScheme.primary
                                                     )
                                                 } else {
                                                     Icon(
                                                         imageVector = if (status == "FAILED") Icons.Default.Replay else Icons.Default.CloudUpload,
                                                         contentDescription = "Upload to Cloud",
-                                                        tint = Teal300,
+                                                        tint = MaterialTheme.colorScheme.primary,
                                                         modifier = Modifier.size(28.dp)
                                                     )
                                                 }
@@ -573,11 +593,10 @@ fun CallDetailsScreen(
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text(
                             text = "Call Recording",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = Slate50
+                            style = CallogTypography.sectionTitle,
+                            color = MaterialTheme.colorScheme.onSurface
                         )
-                        
+
                         GlassyCard(modifier = Modifier.fillMaxWidth()) {
                             Column(
                                 horizontalAlignment = Alignment.CenterHorizontally,
@@ -586,11 +605,11 @@ fun CallDetailsScreen(
                             ) {
                                 Text(
                                     text = "No recording file associated with this call log.",
-                                    color = Slate400,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     style = MaterialTheme.typography.bodyMedium,
                                     textAlign = TextAlign.Center
                                 )
-                                
+
                                 Button(
                                     onClick = {
                                         if (!isUploadingManual) {
@@ -598,16 +617,13 @@ fun CallDetailsScreen(
                                         }
                                     },
                                     enabled = !isUploadingManual,
-                                    colors = ButtonDefaults.buttonColors(
-                                        containerColor = Teal500,
-                                        contentColor = Slate50
-                                    )
+                                    shape = CallogShapes.interactive
                                 ) {
                                     if (isUploadingManual) {
                                         CircularProgressIndicator(
                                             modifier = Modifier.size(20.dp),
                                             strokeWidth = 2.dp,
-                                            color = Slate50
+                                            color = MaterialTheme.colorScheme.onPrimary
                                         )
                                     } else {
                                         Icon(
@@ -635,9 +651,8 @@ fun CallDetailsScreen(
                     ) {
                         Text(
                             text = "Call Notes",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = Slate50
+                            style = CallogTypography.sectionTitle,
+                            color = MaterialTheme.colorScheme.onSurface
                         )
                         AnimatedVisibility(
                             visible = isNotesSaved,
@@ -645,44 +660,51 @@ fun CallDetailsScreen(
                             exit = fadeOut()
                         ) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(Icons.Default.Check, contentDescription = null, tint = Green500, modifier = Modifier.size(16.dp))
+                                Icon(
+                                    imageVector = Icons.Default.Check,
+                                    contentDescription = null,
+                                    tint = CallogSemanticColors.SyncSuccess,
+                                    modifier = Modifier.size(16.dp)
+                                )
                                 Spacer(modifier = Modifier.width(4.dp))
-                                Text("Saved", color = Green500, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
+                                Text(
+                                    text = "Saved",
+                                    color = CallogSemanticColors.SyncSuccess,
+                                    style = CallogTypography.statusLabel,
+                                    fontWeight = FontWeight.Bold
+                                )
                             }
                         }
                     }
-                    
+
                     OutlinedTextField(
                         value = notesText,
                         onValueChange = {
                             notesText = it
                             isNotesSaved = false
                         },
-                        placeholder = { Text("Add personal notes about this conversation...", color = Slate400) },
+                        placeholder = {
+                            Text(
+                                text = "Add personal notes about this conversation...",
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        },
                         minLines = 3,
                         modifier = Modifier.fillMaxWidth(),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
-                            unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
-                            focusedBorderColor = MaterialTheme.colorScheme.primary,
-                            unfocusedBorderColor = MaterialTheme.colorScheme.outline,
-                            focusedTextColor = MaterialTheme.colorScheme.onBackground,
-                            unfocusedTextColor = MaterialTheme.colorScheme.onBackground
-                        ),
-                        shape = RoundedCornerShape(12.dp)
+                        shape = CallogShapes.card
                     )
 
                     Spacer(modifier = Modifier.height(4.dp))
-                    
-                    Button(
+
+                    FilledTonalButton(
                         onClick = {
                             viewModel.updateNotes(call.id, notesText)
                             isNotesSaved = true
                         },
-                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                        shape = CallogShapes.interactive,
                         modifier = Modifier.align(Alignment.End)
                     ) {
-                        Text("Save Notes", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
+                        Text("Save Notes", fontWeight = FontWeight.Bold)
                     }
                 }
 
@@ -690,9 +712,8 @@ fun CallDetailsScreen(
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(
                         text = "Call Tags",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onBackground
+                        style = CallogTypography.sectionTitle,
+                        color = MaterialTheme.colorScheme.onSurface
                     )
 
                     // Current tags layout
@@ -702,34 +723,25 @@ fun CallDetailsScreen(
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         currentTags.forEach { tag ->
-                            Row(
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(6.dp))
-                                    .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.15f))
-                                    .padding(horizontal = 8.dp, vertical = 4.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text(tag, color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Icon(
-                                    imageVector = Icons.Default.Close,
-                                    contentDescription = "Delete",
-                                    tint = MaterialTheme.colorScheme.primary,
-                                    modifier = Modifier
-                                        .size(14.dp)
-                                        .clickable {
-                                            currentTags.remove(tag)
-                                            viewModel.updateTags(call.id, currentTags.toList())
-                                        }
-                                )
-                            }
+                            TagChip(
+                                text = tag,
+                                isRemovable = true,
+                                onRemove = {
+                                    currentTags.remove(tag)
+                                    viewModel.updateTags(call.id, currentTags.toList())
+                                }
+                            )
                         }
                     }
 
                     Spacer(modifier = Modifier.height(4.dp))
 
                     // Preset quick selection tags
-                    Text("Pre-set Categories", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+                    Text(
+                        text = "Pre-set Categories",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = MaterialTheme.typography.bodySmall
+                    )
                     FlowRow(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -737,28 +749,19 @@ fun CallDetailsScreen(
                     ) {
                         presetTags.forEach { tag ->
                             val isAdded = currentTags.contains(tag)
-                            Box(
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(8.dp))
-                                    .background(if (isAdded) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant)
-                                    .border(1.dp, if (isAdded) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline, RoundedCornerShape(8.dp))
-                                    .clickable {
-                                        if (isAdded) {
-                                            currentTags.remove(tag)
-                                        } else {
-                                            currentTags.add(tag)
-                                        }
-                                        viewModel.updateTags(call.id, currentTags.toList())
+                            FilterChip(
+                                selected = isAdded,
+                                onClick = {
+                                    if (isAdded) {
+                                        currentTags.remove(tag)
+                                    } else {
+                                        currentTags.add(tag)
                                     }
-                                    .padding(horizontal = 10.dp, vertical = 6.dp)
-                            ) {
-                                Text(
-                                    text = tag,
-                                    color = if (isAdded) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
-                                    style = MaterialTheme.typography.bodySmall,
-                                    fontWeight = FontWeight.Medium
-                                )
-                            }
+                                    viewModel.updateTags(call.id, currentTags.toList())
+                                },
+                                label = { Text(tag, style = CallogTypography.statusLabel) },
+                                shape = CallogShapes.pill
+                            )
                         }
                     }
 
@@ -772,21 +775,18 @@ fun CallDetailsScreen(
                         OutlinedTextField(
                             value = customTagInput,
                             onValueChange = { customTagInput = it },
-                            placeholder = { Text("Add custom tag...", color = MaterialTheme.colorScheme.onSurfaceVariant) },
+                            placeholder = {
+                                Text(
+                                    text = "Add custom tag...",
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            },
                             singleLine = true,
-                            colors = OutlinedTextFieldDefaults.colors(
-                                focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
-                                unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
-                                focusedBorderColor = MaterialTheme.colorScheme.primary,
-                                unfocusedBorderColor = MaterialTheme.colorScheme.outline,
-                                focusedTextColor = MaterialTheme.colorScheme.onSurface,
-                                unfocusedTextColor = MaterialTheme.colorScheme.onSurface
-                            ),
-                            shape = RoundedCornerShape(8.dp),
+                            shape = CallogShapes.interactive,
                             modifier = Modifier.weight(1f)
                         )
                         Spacer(modifier = Modifier.width(8.dp))
-                        IconButton(
+                        FilledIconButton(
                             onClick = {
                                 val newTag = customTagInput.trim()
                                 if (newTag.isNotEmpty() && !currentTags.contains(newTag)) {
@@ -795,15 +795,16 @@ fun CallDetailsScreen(
                                     customTagInput = ""
                                 }
                             },
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(8.dp))
-                                .background(MaterialTheme.colorScheme.primary)
+                            shape = CallogShapes.interactive,
+                            modifier = Modifier.sizeIn(minWidth = 48.dp, minHeight = 48.dp)
                         ) {
-                            Icon(Icons.Default.Add, contentDescription = "Add Tag", tint = MaterialTheme.colorScheme.onPrimary)
+                            Icon(
+                                imageVector = Icons.Default.Add,
+                                contentDescription = "Add Tag"
+                            )
                         }
                     }
                 }
-
             }
         }
 
@@ -813,7 +814,8 @@ fun CallDetailsScreen(
                 onDismissRequest = { showReminderDialog = false },
                 title = {
                     Text(
-                        "Schedule Callback Reminder",
+                        text = "Schedule Callback Reminder",
+                        style = CallogTypography.sectionTitle,
                         color = MaterialTheme.colorScheme.onSurface,
                         fontWeight = FontWeight.Bold
                     )
@@ -829,22 +831,23 @@ fun CallDetailsScreen(
                         OutlinedTextField(
                             value = reminderNote,
                             onValueChange = { reminderNote = it },
-                            placeholder = { Text("e.g. Discuss contract pricing details...", color = MaterialTheme.colorScheme.onSurfaceVariant) },
+                            placeholder = {
+                                Text(
+                                    text = "e.g. Discuss contract pricing details...",
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            },
                             singleLine = true,
-                            label = { Text("Reminder Notes", color = MaterialTheme.colorScheme.primary) },
-                            colors = OutlinedTextFieldDefaults.colors(
-                                focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
-                                unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
-                                focusedBorderColor = MaterialTheme.colorScheme.primary,
-                                unfocusedBorderColor = MaterialTheme.colorScheme.outline,
-                                focusedTextColor = MaterialTheme.colorScheme.onSurface,
-                                unfocusedTextColor = MaterialTheme.colorScheme.onSurface
-                            ),
-                            shape = RoundedCornerShape(8.dp),
+                            label = { Text("Reminder Notes") },
+                            shape = CallogShapes.card,
                             modifier = Modifier.fillMaxWidth()
                         )
 
-                        Text("Select Time Delay", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+                        Text(
+                            text = "Select Time Delay",
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            style = MaterialTheme.typography.bodySmall
+                        )
 
                         val presetTimes = listOf(
                             "In 1 min" to 1 * 60 * 1000L,
@@ -859,20 +862,20 @@ fun CallDetailsScreen(
                             modifier = Modifier.fillMaxWidth()
                         ) {
                             presetTimes.forEach { (label, durationMillis) ->
-                                Button(
+                                FilledTonalButton(
                                     onClick = {
                                         val targetTime = System.currentTimeMillis() + durationMillis
                                         viewModel.scheduleReminder(call.id, targetTime, reminderNote)
                                         showReminderDialog = false
                                         reminderNote = ""
                                     },
-                                    colors = ButtonDefaults.buttonColors(
-                                        containerColor = MaterialTheme.colorScheme.surfaceVariant,
-                                        contentColor = MaterialTheme.colorScheme.primary
-                                    ),
-                                    shape = RoundedCornerShape(8.dp)
+                                    shape = CallogShapes.pill
                                 ) {
-                                    Text(label, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
+                                    Text(
+                                        text = label,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        fontWeight = FontWeight.Bold
+                                    )
                                 }
                             }
                         }
@@ -880,15 +883,16 @@ fun CallDetailsScreen(
                 },
                 confirmButton = { },
                 dismissButton = {
-                    TextButton(onClick = { showReminderDialog = false }) {
-                        Text("Cancel", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    TextButton(
+                        onClick = { showReminderDialog = false },
+                        shape = CallogShapes.interactive
+                    ) {
+                        Text("Cancel")
                     }
                 },
-                containerColor = MaterialTheme.colorScheme.surface,
-                titleContentColor = MaterialTheme.colorScheme.onSurface,
-                textContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                tonalElevation = 6.dp
+                shape = CallogShapes.dialog
             )
         }
     }
 }
+

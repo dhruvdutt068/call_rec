@@ -19,13 +19,16 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import com.example.callog.core.config.EnvironmentConfigManager
 import com.example.callog.domain.model.AppEnvironment
+import com.example.callog.domain.provider.ActivePresetProvider
+import kotlinx.coroutines.runBlocking
 import javax.inject.Inject
 import javax.inject.Singleton
 
 @Singleton
 class SupabaseService @Inject constructor(
     @ApplicationContext private val context: Context,
-    private val environmentConfigManager: EnvironmentConfigManager
+    private val environmentConfigManager: EnvironmentConfigManager,
+    private val activePresetProvider: ActivePresetProvider
 ) {
     private val TAG = "SupabaseService"
 
@@ -36,11 +39,14 @@ class SupabaseService @Inject constructor(
         environmentConfigManager.addOnEnvironmentChangeListener {
             invalidateClient()
         }
+        activePresetProvider.addOnActivePresetChangeListener {
+            invalidateClient()
+        }
     }
 
     fun invalidateClient() {
         currentClient = null
-        Log.d(TAG, "Supabase client invalidated due to environment/config update.")
+        Log.d(TAG, "Supabase client invalidated due to environment/preset update.")
     }
 
     fun getSavedConfig(): SupabaseConfig? {
@@ -74,10 +80,17 @@ class SupabaseService @Inject constructor(
     private fun getClient(): SupabaseClient {
         return currentClient ?: synchronized(this) {
             currentClient ?: run {
-                val active = getActiveConfig()
+                val activePreset = runBlocking { activePresetProvider.getActivePreset() }
+                val secrets = runBlocking { activePresetProvider.getActiveSecrets() }
+                
+                val url = activePreset.configuration.supabaseUrl?.trim()?.ifBlank { null }
+                    ?: getActiveConfig().url
+                val key = secrets?.supabaseAnonKey?.trim()?.ifBlank { null }
+                    ?: getActiveConfig().apiKey
+
                 createSupabaseClient(
-                    supabaseUrl = active.url,
-                    supabaseKey = active.apiKey
+                    supabaseUrl = url,
+                    supabaseKey = key
                 ) {
                     install(Postgrest)
                 }.also { currentClient = it }
@@ -304,6 +317,18 @@ class SupabaseService @Inject constructor(
             Result.success(aliases)
         } catch (e: Exception) {
             Log.e(TAG, "Error fetching global contact aliases from Supabase", e)
+            Result.failure(e)
+        }
+    }
+
+    suspend fun fetchGlobalDevices(): Result<List<com.example.callog.data.remote.model.SupabaseDevice>> = withContext(Dispatchers.IO) {
+        return@withContext try {
+            val devices = getClient().from(SupabaseDefaults.TABLE_DEVICES)
+                .select()
+                .decodeList<com.example.callog.data.remote.model.SupabaseDevice>()
+            Result.success(devices)
+        } catch (e: Exception) {
+            Log.e(TAG, "Error fetching global devices from Supabase", e)
             Result.failure(e)
         }
     }

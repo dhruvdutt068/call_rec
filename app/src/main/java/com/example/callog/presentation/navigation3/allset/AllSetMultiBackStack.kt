@@ -88,34 +88,16 @@ class AllSetMultiBackStack(
 }
 
 /**
- * Remembers an [AllSetMultiBackStack] across recompositions.
+ * Remembers an [AllSetMultiBackStack] across recompositions using [Nav3StatePersistence].
  */
 @Composable
 fun rememberAllSetMultiBackStack(
     initialTab: AllSetCrmTab = AllSetCrmTab.HOME
 ): AllSetMultiBackStack {
     return rememberSaveable(
-        saver = Saver(
-            save = { multiStack ->
-                listOf(
-                    multiStack.selectedTab.name,
-                    multiStack.stacks.mapValues { it.value.items.toList() }
-                )
-            },
-            restore = { saved ->
-                @Suppress("UNCHECKED_CAST")
-                val tabName = saved[0] as String
-                @Suppress("UNCHECKED_CAST")
-                val restoredMap = saved[1] as Map<AllSetCrmTab, List<AllSetNavKey>>
-                val tab = AllSetCrmTab.valueOf(tabName)
-                val multiStack = AllSetMultiBackStack(tab)
-                restoredMap.forEach { (t, items) ->
-                    multiStack.stacks[t] = AllSetBackStack(items, multiStack.resultManager)
-                }
-                multiStack
-            }
-        )
+        saver = com.example.callog.presentation.navigation3.Nav3StatePersistence.allSetMultiBackStackSaver(initialTab)
     ) {
         AllSetMultiBackStack(initialTab)
     }
 }
+

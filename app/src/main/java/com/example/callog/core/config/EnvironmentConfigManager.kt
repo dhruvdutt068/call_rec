@@ -125,9 +125,19 @@ class EnvironmentConfigManager @Inject constructor(
         val projectId = prefs.getString("${prefix}_firebase_project_id", null)
         val apiKey = prefs.getString("${prefix}_firebase_api_key", null)
         val appId = prefs.getString("${prefix}_firebase_app_id", null)
+        val storageBucket = prefs.getString("${prefix}_firebase_storage_bucket", null)
+        val gcmSenderId = prefs.getString("${prefix}_firebase_gcm_sender_id", null)
+        val databaseUrl = prefs.getString("${prefix}_firebase_database_url", null)
 
         return if (!projectId.isNullOrBlank() && !apiKey.isNullOrBlank() && !appId.isNullOrBlank()) {
-            FirebaseConfig(projectId.trim(), apiKey.trim(), appId.trim())
+            FirebaseConfig(
+                projectId = projectId.trim(),
+                apiKey = apiKey.trim(),
+                appId = appId.trim(),
+                storageBucket = storageBucket?.trim()?.ifBlank { null },
+                gcmSenderId = gcmSenderId?.trim()?.ifBlank { null },
+                databaseUrl = databaseUrl?.trim()?.ifBlank { null }
+            )
         } else {
             null
         }
@@ -144,10 +154,28 @@ class EnvironmentConfigManager @Inject constructor(
                 putString("${prefix}_firebase_project_id", config.projectId.trim())
                 putString("${prefix}_firebase_api_key", config.apiKey.trim())
                 putString("${prefix}_firebase_app_id", config.appId.trim())
+                if (!config.storageBucket.isNullOrBlank()) {
+                    putString("${prefix}_firebase_storage_bucket", config.storageBucket.trim())
+                } else {
+                    remove("${prefix}_firebase_storage_bucket")
+                }
+                if (!config.gcmSenderId.isNullOrBlank()) {
+                    putString("${prefix}_firebase_gcm_sender_id", config.gcmSenderId.trim())
+                } else {
+                    remove("${prefix}_firebase_gcm_sender_id")
+                }
+                if (!config.databaseUrl.isNullOrBlank()) {
+                    putString("${prefix}_firebase_database_url", config.databaseUrl.trim())
+                } else {
+                    remove("${prefix}_firebase_database_url")
+                }
             } else {
                 remove("${prefix}_firebase_project_id")
                 remove("${prefix}_firebase_api_key")
                 remove("${prefix}_firebase_app_id")
+                remove("${prefix}_firebase_storage_bucket")
+                remove("${prefix}_firebase_gcm_sender_id")
+                remove("${prefix}_firebase_database_url")
             }
             apply()
         }

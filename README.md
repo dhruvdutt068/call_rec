@@ -308,6 +308,42 @@ Supabase (sales_calls.person_id)
 
 ---
 
+## 11. 👥 Contacts Directory — Two-Tab Architecture
+
+The Contacts Directory enforces a strict two-source model with zero cross-contamination:
+
+```text
+                    CONTACTS DIRECTORY
+                            │
+             ┌──────────────┴──────────────┐
+             │                             │
+         ☁ CLOUD                       📱 DEVICE
+             │                             │
+       Supabase only                 Android only
+     (Room Offline Cache)          (ContactsContract)
+             │                             │
+       people + phones             ContactsProvider
+       + aliases                           │
+             │                     DeviceContactDetails
+      ContactDetails                       │
+      (canonical personId)         (androidContactId)
+                                           │
+                                   [ Link to CRM Person ]
+```
+
+### Core Invariants & Behavioral Guarantees
+1. **Strict Source Isolation**: The Cloud tab never falls back to local device contacts, and the Device tab never displays Supabase-only contacts.
+2. **Decoupled Domain Entities**:
+   - `ContactDirectoryItem.Cloud` wraps canonical `Person` entities with multiple phone numbers and cross-device aliases.
+   - `ContactDirectoryItem.Device` wraps `DeviceContact` loaded from Android `ContactsContract`.
+3. **Isolated Search**: Cloud search targets names, company names, phone numbers, and cross-device aliases. Device search targets local address book names and phone numbers only.
+4. **Permission Graceful Degradation**: If `READ_CONTACTS` is revoked or denied, the Device tab displays a clear explanation with an explicit **"Allow Contacts Access"** button rather than an empty list.
+5. **Navigation & CRM Bridging**:
+   - Clicking a Cloud contact navigates directly to `Nav3Key.Contacts.ContactDetails(personId)`.
+   - Clicking a Device contact navigates to `Nav3Key.Contacts.DeviceContactDetails(androidContactId)`, highlighting its CRM match status (`Linked to CRM` vs `Not Linked`) with actions to open the canonical profile or create a CRM contact.
+
+---
+
 ## ⚙️ Setup & Configuration
 
 ### 1. Permissions Required

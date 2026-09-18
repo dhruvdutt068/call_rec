@@ -128,7 +128,11 @@ open class CallNotificationManager @Inject constructor(
             )
         }
 
-        notificationManager?.notify(NOTIFICATION_ID_CALL, builder.build())
+        try {
+            notificationManager?.notify(NOTIFICATION_ID_CALL, builder.build())
+        } catch (e: Exception) {
+            android.util.Log.e("CallNotificationManager", "Failed to post incoming call notification: ${e.message}")
+        }
     }
 
     /**
@@ -196,16 +200,21 @@ open class CallNotificationManager @Inject constructor(
             .setCategory(NotificationCompat.CATEGORY_CALL)
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .setOngoing(true)
+            .setOnlyAlertOnce(true)
             .setContentIntent(inCallPendingIntent)
             .setUsesChronometer(true)
             .setWhen(startTime)
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            val callStyle = NotificationCompat.CallStyle.forOngoingCall(
-                callerPerson,
-                disconnectPendingIntent
-            )
-            builder.setStyle(callStyle)
+            try {
+                val callStyle = NotificationCompat.CallStyle.forOngoingCall(
+                    callerPerson,
+                    disconnectPendingIntent
+                )
+                builder.setStyle(callStyle)
+            } catch (e: Exception) {
+                // Ignore CallStyle setup failures on custom ROMs/OEMs and fallback to standard notification
+            }
 
             // Add quick secondary actions
             val muteTitle = if (session.isMuted) "Unmute" else "Mute"
@@ -243,7 +252,11 @@ open class CallNotificationManager @Inject constructor(
             )
         }
 
-        notificationManager?.notify(NOTIFICATION_ID_CALL, builder.build())
+        try {
+            notificationManager?.notify(NOTIFICATION_ID_CALL, builder.build())
+        } catch (e: Exception) {
+            android.util.Log.e("CallNotificationManager", "Failed to post active call notification: ${e.message}")
+        }
     }
 
     /**
@@ -296,7 +309,11 @@ open class CallNotificationManager @Inject constructor(
                 smsPendingIntent
             )
 
-        notificationManager?.notify(missedNotificationId, builder.build())
+        try {
+            notificationManager?.notify(missedNotificationId, builder.build())
+        } catch (e: Exception) {
+            android.util.Log.e("CallNotificationManager", "Failed to post missed call notification: ${e.message}")
+        }
     }
 
     /**

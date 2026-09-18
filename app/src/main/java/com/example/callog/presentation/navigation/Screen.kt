@@ -17,6 +17,8 @@ sealed class Screen(val route: String) {
     object DeveloperDashboard : Screen("developer_dashboard")
     object DeveloperLogs : Screen("developer_logs")
     object RecordingDiagnostics : Screen("recording_diagnostics")
+    object CallSimulator : Screen("call_simulator")
+    object EnvironmentPresets : Screen("environment_presets")
 
     // Tabs for Bottom Navigation under Main Screen
     sealed class Tab(val tabRoute: String, val title: String, val icon: ImageVector) {

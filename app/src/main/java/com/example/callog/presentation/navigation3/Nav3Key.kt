@@ -8,12 +8,14 @@ import kotlinx.serialization.Serializable
  * All destinations represent state-driven routes with strictly typed parameters.
  * Canonical contactId values are directly passed without string conversions.
  */
+@Serializable
 @Immutable
 sealed interface Nav3Key {
 
     /**
      * Authentication flow destinations
      */
+    @Serializable
     sealed interface Auth : Nav3Key {
         @Serializable
         data object Login : Auth
@@ -31,6 +33,7 @@ sealed interface Nav3Key {
     /**
      * Top-level CRM destinations
      */
+    @Serializable
     sealed interface CrmTab : Nav3Key {
         @Serializable
         data object Dashboard : CrmTab
@@ -70,11 +73,15 @@ sealed interface Nav3Key {
 
         @Serializable
         data object RingtoneSettings : CrmTab
+
+        @Serializable
+        data object CallSimulator : CrmTab
     }
 
     /**
      * Contact and CRM interaction destinations
      */
+    @Serializable
     sealed interface Contacts : Nav3Key {
         @Serializable
         data object ContactList : Contacts
@@ -89,11 +96,20 @@ sealed interface Nav3Key {
             val contactId: String,
             val canonicalContactId: String? = null
         ) : Contacts
+
+        /**
+         * Device contact details destination with local [androidContactId].
+         */
+        @Serializable
+        data class DeviceContactDetails(
+            val androidContactId: String
+        ) : Contacts
     }
 
     /**
      * Task management flow destinations
      */
+    @Serializable
     sealed interface Task : Nav3Key {
         @Serializable
         data object TaskList : Task
@@ -108,6 +124,7 @@ sealed interface Nav3Key {
     /**
      * Meeting and schedule flow destinations
      */
+    @Serializable
     sealed interface Meeting : Nav3Key {
         @Serializable
         data object MeetingList : Meeting

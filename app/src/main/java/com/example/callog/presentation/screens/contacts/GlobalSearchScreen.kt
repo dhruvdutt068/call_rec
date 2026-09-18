@@ -13,7 +13,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.example.callog.presentation.components.EmptyStateView
+import com.example.callog.presentation.components.ExpressiveEmptyState
 import com.example.callog.presentation.components.GlassyCard
 import com.example.callog.presentation.components.SearchBarField
 import com.example.callog.presentation.theme.*
@@ -43,15 +43,25 @@ fun GlobalSearchScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Global CRM Search", fontWeight = FontWeight.Bold) },
+                title = {
+                    Text(
+                        text = "Global CRM Search",
+                        style = CallogTypography.sectionTitle,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                },
                 navigationIcon = {
                     IconButton(onClick = onBackClick) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Back",
+                            tint = MaterialTheme.colorScheme.onSurface
+                        )
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceVariant,
-                    titleContentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                    containerColor = MaterialTheme.colorScheme.surface,
+                    titleContentColor = MaterialTheme.colorScheme.onSurface
                 )
             )
         },
@@ -74,16 +84,24 @@ fun GlobalSearchScreen(
             if (query.isNotBlank()) {
                 Button(
                     onClick = { onSearchSubmitted(query.trim()) },
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = ButtonDefaults.buttonColors(containerColor = Teal300, contentColor = Slate900)
+                    modifier = Modifier.fillMaxWidth().height(48.dp),
+                    shape = CallogShapes.buttonShape,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.primary,
+                        contentColor = MaterialTheme.colorScheme.onPrimary
+                    )
                 ) {
-                    Icon(Icons.Default.Search, contentDescription = null)
+                    Icon(Icons.Default.Search, contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text("View Full Results for \"$query\"", fontWeight = FontWeight.Bold)
+                    Text("View Full Results for \"$query\"", style = CallogTypography.sectionTitle)
                 }
             }
 
-            Text("Quick Suggestions", style = MaterialTheme.typography.titleSmall, color = Slate300)
+            Text(
+                text = "Quick Suggestions",
+                style = CallogTypography.sectionTitle,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
 
             if (suggestions.isEmpty()) {
                 Box(
@@ -93,8 +111,9 @@ fun GlobalSearchScreen(
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
-                        if (query.isBlank()) "Type a name or number to search CRM" else "No immediate suggestions",
-                        color = Slate400
+                        text = if (query.isBlank()) "Type a name or number to search CRM" else "No immediate suggestions",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             } else {
@@ -109,20 +128,33 @@ fun GlobalSearchScreen(
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(8.dp),
+                                    .padding(12.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Icon(Icons.Default.Person, contentDescription = null, tint = Teal300)
+                                Icon(
+                                    imageVector = Icons.Default.Person,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(20.dp)
+                                )
                                 Spacer(modifier = Modifier.width(12.dp))
                                 Column(modifier = Modifier.weight(1f)) {
-                                    Text(contact.name, fontWeight = FontWeight.SemiBold, color = Slate50)
                                     Text(
-                                        contact.phoneNumbers.firstOrNull() ?: "",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = Slate400
+                                        text = contact.name,
+                                        style = CallogTypography.entityName,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                    Text(
+                                        text = contact.phoneNumbers.firstOrNull() ?: "",
+                                        style = CallogTypography.denseData,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                 }
-                                Icon(Icons.Default.ChevronRight, contentDescription = null, tint = Slate400)
+                                Icon(
+                                    imageVector = Icons.Default.ChevronRight,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                                )
                             }
                         }
                     }
@@ -154,33 +186,39 @@ fun SearchResultsScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Results for \"$query\"", fontWeight = FontWeight.Bold) },
+                title = {
+                    Text(
+                        text = "Results for \"$query\"",
+                        style = CallogTypography.sectionTitle,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                },
                 navigationIcon = {
                     IconButton(onClick = onBackClick) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Back",
+                            tint = MaterialTheme.colorScheme.onSurface
+                        )
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceVariant,
-                    titleContentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                    containerColor = MaterialTheme.colorScheme.surface,
+                    titleContentColor = MaterialTheme.colorScheme.onSurface
                 )
             )
         },
         containerColor = MaterialTheme.colorScheme.background
     ) { innerPadding ->
         if (results.isEmpty()) {
-            Box(
+            ExpressiveEmptyState(
+                title = "No Matches Found",
+                description = "No contacts matched your search query \"$query\". Try searching with a different keyword.",
+                icon = Icons.Default.SearchOff,
                 modifier = modifier
                     .fillMaxSize()
-                    .padding(innerPadding),
-                contentAlignment = Alignment.Center
-            ) {
-                EmptyStateView(
-                    title = "No Matches Found",
-                    description = "No contacts matched your search query \"$query\".",
-                    icon = Icons.Default.SearchOff
-                )
-            }
+                    .padding(innerPadding)
+            )
         } else {
             LazyColumn(
                 modifier = modifier
@@ -195,15 +233,31 @@ fun SearchResultsScreen(
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(12.dp),
+                                .padding(14.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Column(modifier = Modifier.weight(1f)) {
-                                Text(contact.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = Slate50)
-                                Text("ID: ${contact.contactId}", style = MaterialTheme.typography.labelSmall, color = Teal300)
-                                Text(contact.phoneNumbers.joinToString(", "), style = MaterialTheme.typography.bodySmall, color = Slate400)
+                                Text(
+                                    text = contact.name,
+                                    style = CallogTypography.entityName,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                Text(
+                                    text = "ID: ${contact.contactId}",
+                                    style = CallogTypography.statusLabel,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                                Text(
+                                    text = contact.phoneNumbers.joinToString(", "),
+                                    style = CallogTypography.denseData,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
                             }
-                            Icon(Icons.Default.ArrowForward, contentDescription = null, tint = Teal300)
+                            Icon(
+                                imageVector = Icons.Default.ArrowForward,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary
+                            )
                         }
                     }
                 }
@@ -211,3 +265,4 @@ fun SearchResultsScreen(
         }
     }
 }
+

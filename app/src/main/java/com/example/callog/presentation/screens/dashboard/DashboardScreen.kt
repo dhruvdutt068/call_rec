@@ -1,26 +1,31 @@
 package com.example.callog.presentation.screens.dashboard
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.example.callog.core.extensions.toDurationString
+import com.example.callog.data.local.dao.ReminderWithCall
+import com.example.callog.domain.model.CallLogEntry
 import com.example.callog.presentation.components.*
+import com.example.callog.presentation.components.pullrefresh.ElasticPullRefreshLayout
 import com.example.callog.presentation.theme.*
 import com.example.callog.presentation.viewmodel.AnalyticsViewModel
 import com.example.callog.presentation.viewmodel.CallViewModel
@@ -73,20 +78,80 @@ fun DashboardScreen(
         "RECORDED" to "Recorded"
     )
 
-    val recentCalls = callLogs.take(3)
-    
-    // Find unique favorite contacts (group by number)
+    val recentCalls = callLogs.take(4)
     val favoriteContacts = favoriteLogs.distinctBy { it.number }.take(10)
 
     Box(modifier = modifier.fillMaxSize()) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .verticalScroll(rememberScrollState())
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(20.dp)
+        ElasticPullRefreshLayout(
+            isRefreshing = isSyncing,
+            onRefresh = { callViewModel.syncLogs() },
+            modifier = Modifier.fillMaxSize()
         ) {
-        // Welcome and Seeding Status
+            DashboardContent(
+                deviceOwnerName = deviceOwnerName,
+                selectedSimId = selectedSimId,
+                selectedSimCarrier = selectedSimCarrier,
+                selectedSimDisplayName = selectedSimDisplayName,
+                selectedSimPhoneNumber = selectedSimPhoneNumber,
+                isSyncing = isSyncing,
+                syncProgress = syncProgress,
+                onSyncClick = { callViewModel.syncLogs() },
+                analyticsState = analyticsState,
+                favoriteContacts = favoriteContacts,
+                pendingReminders = pendingReminders,
+                onCompleteReminder = { callViewModel.markReminderCompleted(it) },
+                onDeleteReminder = { callViewModel.deleteReminder(it) },
+                recentCalls = recentCalls,
+                activeFilter = activeFilter ?: "ALL",
+                filterOptions = filterOptions,
+                onFilterSelect = { callViewModel.setCallTypeFilter(it) },
+                onViewAllLogsClick = onViewAllLogsClick,
+                onCallClick = onCallClick,
+                onFavoriteToggle = { callViewModel.toggleFavorite(it) }
+            )
+        }
+
+        SnackbarHost(
+            hostState = snackbarHostState,
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(bottom = 16.dp)
+        )
+    }
+}
+
+@Composable
+fun DashboardContent(
+    deviceOwnerName: String,
+    selectedSimId: Int,
+    selectedSimCarrier: String,
+    selectedSimDisplayName: String,
+    selectedSimPhoneNumber: String,
+    isSyncing: Boolean,
+    syncProgress: String?,
+    onSyncClick: () -> Unit,
+    analyticsState: com.example.callog.presentation.viewmodel.AnalyticsUiState,
+    favoriteContacts: List<CallLogEntry>,
+    pendingReminders: List<ReminderWithCall>,
+    onCompleteReminder: (Long) -> Unit,
+    onDeleteReminder: (Long) -> Unit,
+    recentCalls: List<CallLogEntry>,
+    activeFilter: String,
+    filterOptions: List<Pair<String, String>>,
+    onFilterSelect: (String) -> Unit,
+    onViewAllLogsClick: () -> Unit,
+    onCallClick: (Long) -> Unit,
+    onFavoriteToggle: (Long) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(20.dp)
+    ) {
+        // Welcome and Header Hero
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -95,33 +160,37 @@ fun DashboardScreen(
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = if (deviceOwnerName.isNotEmpty()) "Hello, $deviceOwnerName" else "Call Intelligence",
-                    style = MaterialTheme.typography.headlineMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = Slate50
+                    style = CallogTypography.heroTitle,
+                    color = MaterialTheme.colorScheme.onBackground
                 )
                 
+                Spacer(modifier = Modifier.height(2.dp))
+
                 val simLabel = if (selectedSimDisplayName.isNotEmpty()) selectedSimDisplayName else selectedSimCarrier
-                val simDetailText = if (selectedSimId != android.telephony.SubscriptionManager.INVALID_SUBSCRIPTION_ID) {
-                    "Business SIM: $simLabel ($selectedSimPhoneNumber)"
+                val isSimValid = selectedSimId != android.telephony.SubscriptionManager.INVALID_SUBSCRIPTION_ID
+                val simDetailText = if (isSimValid) {
+                    "Business Line: $simLabel ($selectedSimPhoneNumber)"
                 } else {
                     "SIM Config required - Sync suspended"
                 }
                 
                 Text(
                     text = simDetailText,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = if (selectedSimId != android.telephony.SubscriptionManager.INVALID_SUBSCRIPTION_ID) Teal300 else Red500,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = if (isSimValid) AllSetTeal else Red500,
                     fontWeight = FontWeight.Medium
                 )
             }
             Spacer(modifier = Modifier.width(8.dp))
             Button(
-                onClick = { callViewModel.syncLogs() },
+                onClick = onSyncClick,
                 enabled = !isSyncing,
+                shape = CallogShapes.interactive,
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = if (isSyncing) MaterialTheme.colorScheme.surfaceVariant else Teal500
+                    containerColor = if (isSyncing) MaterialTheme.colorScheme.surfaceVariant else AllSetBlue,
+                    contentColor = if (isSyncing) MaterialTheme.colorScheme.onSurfaceVariant else Color.White
                 ),
-                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp)
             ) {
                 if (isSyncing) {
                     CircularProgressIndicator(
@@ -138,58 +207,56 @@ fun DashboardScreen(
                 }
                 Spacer(modifier = Modifier.width(6.dp))
                 Text(
-                    text = if (isSyncing) (syncProgress ?: "Syncing...") else "Sync Cloud",
-                    style = MaterialTheme.typography.bodySmall,
+                    text = if (isSyncing) (syncProgress ?: "Syncing...") else "Sync Vault",
+                    style = MaterialTheme.typography.labelMedium,
                     fontWeight = FontWeight.Bold
                 )
             }
         }
 
-        // Quick Statistics row
+        // Expressive KPI Statistics Row
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             StatCard(
-                title = "Total Calls",
+                title = "Total Logged Calls",
                 value = analyticsState.totalCalls.toString(),
                 icon = Icons.Default.Call,
-                iconColor = Teal300,
+                iconColor = AllSetBlue,
                 modifier = Modifier.weight(1f)
             )
             
             StatCard(
-                title = "Avg Length",
+                title = "Avg Call Duration",
                 value = analyticsState.avgDurationSeconds.toDurationString(),
                 icon = Icons.Default.HourglassEmpty,
-                iconColor = Green500,
+                iconColor = AllSetTeal,
                 modifier = Modifier.weight(1f)
             )
         }
 
-        // Horizontal Favorites Contacts
+        // Horizontal Favorites Contacts with Tactile Avatars
         if (favoriteContacts.isNotEmpty()) {
             Column {
                 Text(
-                    text = "Quick Contacts",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = Slate50,
+                    text = "Starred Contacts",
+                    style = CallogTypography.sectionTitle,
+                    color = MaterialTheme.colorScheme.onBackground,
                     modifier = Modifier.padding(bottom = 8.dp)
                 )
                 
                 LazyRow(
-                    horizontalArrangement = Arrangement.spacedBy(16.dp),
+                    horizontalArrangement = Arrangement.spacedBy(14.dp),
                     contentPadding = PaddingValues(vertical = 4.dp),
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    items(favoriteContacts) { contact ->
+                    items(favoriteContacts, key = { it.id }) { contact ->
                         Column(
                             horizontalAlignment = Alignment.CenterHorizontally,
                             modifier = Modifier
-                                .width(70.dp)
+                                .width(68.dp)
                                 .clickable {
-                                    // Clicking a quick contact opens their last call log details
                                     onCallClick(contact.id)
                                 }
                         ) {
@@ -197,15 +264,15 @@ fun DashboardScreen(
                                 name = contact.displayName,
                                 initials = contact.initials,
                                 photoUri = contact.contactPhotoUri,
-                                modifier = Modifier.size(56.dp)
+                                modifier = Modifier.size(52.dp)
                             )
                             Spacer(modifier = Modifier.height(6.dp))
                             Text(
                                 text = contact.displayName,
-                                style = MaterialTheme.typography.bodySmall,
+                                style = MaterialTheme.typography.labelSmall,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
-                                color = Slate400,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 textAlign = TextAlign.Center,
                                 modifier = Modifier.fillMaxWidth()
                             )
@@ -220,15 +287,14 @@ fun DashboardScreen(
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(
                     text = "Upcoming Callback Reminders",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = Slate50
+                    style = CallogTypography.sectionTitle,
+                    color = MaterialTheme.colorScheme.onBackground
                 )
                 pendingReminders.forEach { reminder ->
                     ReminderItemCard(
                         reminder = reminder,
-                        onCompleteClick = { callViewModel.markReminderCompleted(reminder.reminder.id) },
-                        onDeleteClick = { callViewModel.deleteReminder(reminder.reminder.id) }
+                        onCompleteClick = { onCompleteReminder(reminder.reminder.id) },
+                        onDeleteClick = { onDeleteReminder(reminder.reminder.id) }
                     )
                 }
             }
@@ -242,75 +308,115 @@ fun DashboardScreen(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "Recent Calls",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = Slate50
+                    text = "Recent Interactions",
+                    style = CallogTypography.sectionTitle,
+                    color = MaterialTheme.colorScheme.onBackground
                 )
                 Text(
                     text = "View All",
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    color = Teal300,
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.clickable { onViewAllLogsClick() }
                 )
             }
 
-            // Filter chips row
-            LazyRow(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                contentPadding = PaddingValues(vertical = 4.dp)
-            ) {
-                items(filterOptions) { (key, label) ->
-                    val isSelected = activeFilter == key
-                    @OptIn(ExperimentalMaterial3Api::class)
-                    FilterChip(
-                        selected = isSelected,
-                        onClick = { callViewModel.setCallTypeFilter(key) },
-                        label = { Text(label) },
-                        colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = MaterialTheme.colorScheme.primary,
-                            selectedLabelColor = MaterialTheme.colorScheme.onPrimary,
-                            containerColor = MaterialTheme.colorScheme.surfaceVariant,
-                            labelColor = MaterialTheme.colorScheme.onSurfaceVariant
-                        ),
-                        border = FilterChipDefaults.filterChipBorder(
-                            borderColor = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
-                            enabled = true,
-                            selected = isSelected
-                        )
-                    )
-                }
-            }
+            // Segmented Filter Bar
+            ExpressiveSegmentedButtonGroup(
+                options = filterOptions.take(4).map { (key, label) ->
+                    val icon = when (key) {
+                        "ALL" -> Icons.Outlined.List
+                        "INCOMING" -> Icons.Outlined.CallReceived
+                        "OUTGOING" -> Icons.Outlined.CallMade
+                        "MISSED" -> Icons.Outlined.CallMissed
+                        else -> null
+                    }
+                    SegmentedOption(value = key, label = label, icon = icon)
+                },
+                selectedValue = activeFilter,
+                onValueSelected = onFilterSelect
+            )
 
             if (recentCalls.isEmpty()) {
-                GlassyCard(modifier = Modifier.fillMaxWidth()) {
-                    Text(
-                        text = "No calls found. Grant permissions or sync logs to see call log aggregates.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = Slate400,
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                }
+                ExpressiveEmptyState(
+                    icon = Icons.Outlined.PhoneDisabled,
+                    title = "No Calls Found",
+                    description = "Grant call log permissions or sync vault to see recent interactions."
+                )
             } else {
                 recentCalls.forEach { call ->
                     CallCard(
                         call = call,
                         onClick = { onCallClick(call.id) },
-                        onFavoriteToggle = { callViewModel.toggleFavorite(call.id) }
+                        onFavoriteToggle = { onFavoriteToggle(call.id) }
                     )
                 }
             }
         }
     }
-
-    SnackbarHost(
-        hostState = snackbarHostState,
-        modifier = Modifier
-            .align(Alignment.BottomCenter)
-            .padding(bottom = 16.dp)
-    )
 }
+
+@androidx.compose.ui.tooling.preview.Preview(name = "Dashboard Screen Default", showBackground = true)
+@Composable
+fun DashboardScreenPreview() {
+    CallogTheme {
+        DashboardContent(
+            deviceOwnerName = "Dhruv Dutt",
+            selectedSimId = 1,
+            selectedSimCarrier = "Jio 5G",
+            selectedSimDisplayName = "Work SIM",
+            selectedSimPhoneNumber = "+919876543210",
+            isSyncing = false,
+            syncProgress = null,
+            onSyncClick = {},
+            analyticsState = com.example.callog.presentation.viewmodel.AnalyticsUiState(
+                totalCalls = 42,
+                avgDurationSeconds = 185
+            ),
+            favoriteContacts = listOf(
+                CallLogEntry(
+                    id = 1L,
+                    name = "Alice Johnson",
+                    number = "+919876543210",
+                    duration = 120,
+                    timestamp = System.currentTimeMillis(),
+                    callType = "INCOMING",
+                    recordingPath = null,
+                    isFavorite = true,
+                    notes = null,
+                    tags = emptyList(),
+                    contactPhotoUri = null
+                )
+            ),
+            pendingReminders = emptyList<ReminderWithCall>(),
+            onCompleteReminder = {},
+            onDeleteReminder = {},
+            recentCalls = listOf(
+                CallLogEntry(
+                    id = 1L,
+                    name = "Alice Johnson",
+                    number = "+919876543210",
+                    duration = 125,
+                    timestamp = System.currentTimeMillis() - 600000,
+                    callType = "INCOMING",
+                    recordingPath = "/storage/emulated/0/Recordings/Call_Alice.m4a",
+                    isFavorite = false,
+                    notes = null,
+                    tags = listOf("Lead", "Followup"),
+                    contactPhotoUri = null
+                )
+            ),
+            activeFilter = "ALL",
+            filterOptions = listOf(
+                "ALL" to "All",
+                "INCOMING" to "Incoming",
+                "OUTGOING" to "Outgoing",
+                "MISSED" to "Missed"
+            ),
+            onFilterSelect = {},
+            onViewAllLogsClick = {},
+            onCallClick = {},
+            onFavoriteToggle = {}
+        )
+    }
 }

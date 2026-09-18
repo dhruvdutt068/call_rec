@@ -114,6 +114,11 @@ class FirestoreService @Inject constructor(
                     .setProjectId(config.projectId)
                     .setApiKey(config.apiKey)
                     .setApplicationId(config.appId)
+                    .apply {
+                        config.storageBucket?.takeIf { it.isNotBlank() }?.let { setStorageBucket(it) }
+                        config.gcmSenderId?.takeIf { it.isNotBlank() }?.let { setGcmSenderId(it) }
+                        config.databaseUrl?.takeIf { it.isNotBlank() }?.let { setDatabaseUrl(it) }
+                    }
                     .build()
                 
                 val testApp = FirebaseApp.initializeApp(context, options, "customApp")
@@ -152,6 +157,11 @@ class FirestoreService @Inject constructor(
                             .setProjectId(savedConfig.projectId)
                             .setApiKey(savedConfig.apiKey)
                             .setApplicationId(savedConfig.appId)
+                            .apply {
+                                savedConfig.storageBucket?.takeIf { it.isNotBlank() }?.let { setStorageBucket(it) }
+                                savedConfig.gcmSenderId?.takeIf { it.isNotBlank() }?.let { setGcmSenderId(it) }
+                                savedConfig.databaseUrl?.takeIf { it.isNotBlank() }?.let { setDatabaseUrl(it) }
+                            }
                             .build()
                         FirebaseApp.initializeApp(context, options, "customApp")
                     }

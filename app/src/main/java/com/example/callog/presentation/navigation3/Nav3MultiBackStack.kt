@@ -64,34 +64,37 @@ class Nav3MultiBackStackState<Tab : Any, Key : Any>(
 }
 
 /**
- * Creates and remembers a [Nav3MultiBackStackState].
+ * Creates and remembers a [Nav3MultiBackStackState] for enum tabs and [Nav3Key] destinations
+ * with safe JSON state persistence across Activity lifecycles.
  */
 @Composable
-fun <Tab : Any, Key : Any> rememberNav3MultiBackStack(
+inline fun <reified Tab : Enum<Tab>> rememberNav3MultiBackStack(
     initialTab: Tab,
-    tabRoots: Map<Tab, Key>
-): Nav3MultiBackStackState<Tab, Key> {
+    tabRoots: Map<Tab, Nav3Key>
+): Nav3MultiBackStackState<Tab, Nav3Key> {
     return rememberSaveable(
-        saver = Saver(
-            save = { state ->
-                listOf(
-                    state.selectedTab,
-                    state.stacks.mapValues { it.value.items.toList() }
-                )
-            },
-            restore = { saved ->
-                @Suppress("UNCHECKED_CAST")
-                val restoredTab = saved[0] as Tab
-                @Suppress("UNCHECKED_CAST")
-                val restoredMap = saved[1] as Map<Tab, List<Key>>
-                val state = Nav3MultiBackStackState(restoredTab, tabRoots)
-                restoredMap.forEach { (tab, items) ->
-                    state.stacks[tab] = Nav3BackStack(items)
-                }
-                state
-            }
+        saver = Nav3StatePersistence.nav3MultiBackStackSaver(
+            initialTab = initialTab,
+            tabRoots = tabRoots,
+            tabToString = { it.name },
+            stringToTab = { name -> enumValues<Tab>().firstOrNull { it.name == name } }
         )
     ) {
         Nav3MultiBackStackState(initialTab, tabRoots)
     }
 }
+
+/**
+ * Creates and remembers a generic [Nav3MultiBackStackState] with a dedicated type-safe [Saver].
+ */
+@Composable
+fun <Tab : Any, Key : Any> rememberGenericNav3MultiBackStack(
+    initialTab: Tab,
+    tabRoots: Map<Tab, Key>,
+    saver: Saver<Nav3MultiBackStackState<Tab, Key>, out Any>
+): Nav3MultiBackStackState<Tab, Key> {
+    return rememberSaveable(saver = saver) {
+        Nav3MultiBackStackState(initialTab, tabRoots)
+    }
+}
+

@@ -58,6 +58,28 @@ fun PermissionScreen(
         }
     }
 
+    PermissionContent(
+        hasDeclined = hasDeclined,
+        onGrantClick = {
+            permissionLauncher.launch(
+                arrayOf(
+                    Manifest.permission.READ_CALL_LOG,
+                    Manifest.permission.READ_CONTACTS,
+                    Manifest.permission.READ_PHONE_STATE,
+                    storagePermission
+                )
+            )
+        },
+        modifier = modifier
+    )
+}
+
+@Composable
+fun PermissionContent(
+    hasDeclined: Boolean,
+    onGrantClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -161,16 +183,7 @@ fun PermissionScreen(
         Spacer(modifier = Modifier.height(32.dp))
 
         Button(
-            onClick = {
-                permissionLauncher.launch(
-                    arrayOf(
-                        Manifest.permission.READ_CALL_LOG,
-                        Manifest.permission.READ_CONTACTS,
-                        Manifest.permission.READ_PHONE_STATE,
-                        storagePermission
-                    )
-                )
-            },
+            onClick = onGrantClick,
             colors = ButtonDefaults.buttonColors(containerColor = Teal500),
             shape = RoundedCornerShape(12.dp),
             modifier = Modifier
@@ -188,7 +201,7 @@ fun PermissionScreen(
 }
 
 @Composable
-private fun PermissionItemCard(
+fun PermissionItemCard(
     title: String,
     description: String,
     icon: ImageVector,
@@ -234,6 +247,43 @@ private fun PermissionItemCard(
                     color = Slate400
                 )
             }
+        }
+    }
+}
+
+@androidx.compose.ui.tooling.preview.Preview(name = "Permission Screen Default", showBackground = true)
+@Composable
+fun PermissionScreenPreview() {
+    CallogTheme {
+        PermissionContent(
+            hasDeclined = false,
+            onGrantClick = {}
+        )
+    }
+}
+
+@androidx.compose.ui.tooling.preview.Preview(name = "Permission Screen Declined", showBackground = true)
+@Composable
+fun PermissionScreenDeclinedPreview() {
+    CallogTheme {
+        PermissionContent(
+            hasDeclined = true,
+            onGrantClick = {}
+        )
+    }
+}
+
+@androidx.compose.ui.tooling.preview.Preview(name = "Permission Item Card", showBackground = true)
+@Composable
+fun PermissionItemCardPreview() {
+    CallogTheme {
+        Box(modifier = Modifier.padding(16.dp)) {
+            PermissionItemCard(
+                title = "Call Logs Access",
+                description = "Reads incoming, outgoing, and missed call lists to build call database charts.",
+                icon = Icons.Default.History,
+                iconColor = Teal500
+            )
         }
     }
 }

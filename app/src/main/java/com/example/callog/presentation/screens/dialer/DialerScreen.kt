@@ -28,6 +28,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.tooling.preview.Preview
+import android.content.res.Configuration
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.example.callog.core.telecom.T9MatchResult
 import com.example.callog.domain.model.LeadPriority
@@ -40,6 +42,7 @@ import com.example.callog.sim.SimInfo
 fun DialerScreen(
     onNavigateToContact: ((String) -> Unit)? = null,
     onMenuClick: (() -> Unit)? = null,
+    onNavigateToCallSimulator: (() -> Unit)? = null,
     viewModel: DialerViewModel = hiltViewModel(),
     modifier: Modifier = Modifier
 ) {
@@ -49,12 +52,65 @@ fun DialerScreen(
     val activeSims by viewModel.activeSims.collectAsState()
     val clipboardSuggestion by viewModel.clipboardSuggestion.collectAsState()
     val isDefaultDialer = remember { com.example.callog.core.telecom.TelecomRoleHelper.isDefaultDialer(context) }
+    var showSimulatorSheet by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         viewModel.refreshSims()
         viewModel.checkClipboard()
     }
 
+    DialerContent(
+        inputNumber = inputNumber,
+        t9Results = t9Results,
+        activeSims = activeSims,
+        clipboardSuggestion = clipboardSuggestion,
+        isDefaultDialer = isDefaultDialer,
+        onPasteClipboard = { viewModel.onPasteClipboard() },
+        onDigitClick = { viewModel.onDigitClick(it) },
+        onPlusLongClick = { viewModel.onPlusLongClick() },
+        onSpeedDialLongPress = { viewModel.onSpeedDialLongPress(it) },
+        onBackspaceClick = { viewModel.onBackspaceClick() },
+        onSelectContactNumber = { viewModel.setInputNumber(it) },
+        onCallClick = { number, sim -> viewModel.placeCall(number, sim) },
+        onOpenSimulator = { showSimulatorSheet = true },
+        onNavigateToContact = onNavigateToContact,
+        onMenuClick = onMenuClick,
+        modifier = modifier
+    )
+
+    if (showSimulatorSheet) {
+        SimulateCallBottomSheet(
+            initialNumber = inputNumber,
+            activeSims = activeSims,
+            simulatorManager = viewModel.simulatorManager,
+            onDismiss = { showSimulatorSheet = false },
+            onNavigateToStudio = {
+                showSimulatorSheet = false
+                onNavigateToCallSimulator?.invoke()
+            }
+        )
+    }
+}
+
+@Composable
+fun DialerContent(
+    inputNumber: String,
+    t9Results: List<T9MatchResult>,
+    activeSims: List<SimInfo>,
+    clipboardSuggestion: String?,
+    isDefaultDialer: Boolean,
+    onPasteClipboard: () -> Unit,
+    onDigitClick: (Char) -> Unit,
+    onPlusLongClick: () -> Unit,
+    onSpeedDialLongPress: (Int) -> Unit,
+    onBackspaceClick: () -> Unit,
+    onSelectContactNumber: (String) -> Unit,
+    onCallClick: (String, SimInfo?) -> Unit,
+    onOpenSimulator: () -> Unit,
+    modifier: Modifier = Modifier,
+    onNavigateToContact: ((String) -> Unit)? = null,
+    onMenuClick: (() -> Unit)? = null
+) {
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -92,31 +148,52 @@ fun DialerScreen(
                 )
             }
 
-            Surface(
-                shape = RoundedCornerShape(12.dp),
-                color = if (isDefaultDialer) Green500.copy(alpha = 0.15f) else Amber500.copy(alpha = 0.15f),
-                border = androidx.compose.foundation.BorderStroke(
-                    1.dp,
-                    if (isDefaultDialer) Green500.copy(alpha = 0.4f) else Amber500.copy(alpha = 0.4f)
-                )
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                // Call Simulator Quick Button
+                IconButton(
+                    onClick = onOpenSimulator,
+                    modifier = Modifier
+                        .size(34.dp)
+                        .clip(CircleShape)
+                        .background(Teal500.copy(alpha = 0.2f))
                 ) {
                     Icon(
-                        imageVector = if (isDefaultDialer) Icons.Default.CheckCircle else Icons.Default.PhoneCallback,
-                        contentDescription = null,
-                        tint = if (isDefaultDialer) Green500 else Amber500,
-                        modifier = Modifier.size(14.dp)
+                        imageVector = Icons.Default.PhoneCallback,
+                        contentDescription = "Simulate Call",
+                        tint = Teal300,
+                        modifier = Modifier.size(18.dp)
                     )
-                    Text(
-                        text = if (isDefaultDialer) "Default Phone" else "System Dialer",
-                        style = MaterialTheme.typography.labelSmall,
-                        fontWeight = FontWeight.SemiBold,
-                        color = if (isDefaultDialer) Green500 else Amber500
+                }
+
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = if (isDefaultDialer) Green500.copy(alpha = 0.15f) else Amber500.copy(alpha = 0.15f),
+                    border = androidx.compose.foundation.BorderStroke(
+                        1.dp,
+                        if (isDefaultDialer) Green500.copy(alpha = 0.4f) else Amber500.copy(alpha = 0.4f)
                     )
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Icon(
+                            imageVector = if (isDefaultDialer) Icons.Default.CheckCircle else Icons.Default.PhoneCallback,
+                            contentDescription = null,
+                            tint = if (isDefaultDialer) Green500 else Amber500,
+                            modifier = Modifier.size(14.dp)
+                        )
+                        Text(
+                            text = if (isDefaultDialer) "Default Phone" else "System Dialer",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.SemiBold,
+                            color = if (isDefaultDialer) Green500 else Amber500
+                        )
+                    }
                 }
             }
         }
@@ -134,7 +211,7 @@ fun DialerScreen(
                 exit = fadeOut() + shrinkVertically()
             ) {
                 Surface(
-                    onClick = { viewModel.onPasteClipboard() },
+                    onClick = onPasteClipboard,
                     shape = RoundedCornerShape(12.dp),
                     color = Teal500.copy(alpha = 0.15f),
                     border = androidx.compose.foundation.BorderStroke(1.dp, Teal500.copy(alpha = 0.4f)),
@@ -182,10 +259,10 @@ fun DialerScreen(
                         T9ContactItem(
                             match = match,
                             onItemClick = {
-                                viewModel.setInputNumber(match.phoneNumber)
+                                onSelectContactNumber(match.phoneNumber)
                             },
                             onCallClick = { sim ->
-                                viewModel.placeCall(match.phoneNumber, sim)
+                                onCallClick(match.phoneNumber, sim)
                             },
                             activeSims = activeSims
                         )
@@ -221,7 +298,7 @@ fun DialerScreen(
 
                 if (inputNumber.isNotEmpty()) {
                     IconButton(
-                        onClick = { viewModel.onBackspaceClick() }
+                        onClick = onBackspaceClick
                     ) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.Backspace,
@@ -236,12 +313,12 @@ fun DialerScreen(
 
         // Keypad Grid
         DialpadGrid(
-            onDigitClick = { digit -> viewModel.onDigitClick(digit) },
+            onDigitClick = onDigitClick,
             onDigitLongClick = { digit ->
                 if (digit == '0') {
-                    viewModel.onPlusLongClick()
+                    onPlusLongClick()
                 } else if (digit in '1'..'9') {
-                    viewModel.onSpeedDialLongPress(digit.digitToInt())
+                    onSpeedDialLongPress(digit.digitToInt())
                 }
             }
         )
@@ -253,7 +330,7 @@ fun DialerScreen(
             inputNumber = inputNumber,
             activeSims = activeSims,
             onCallClick = { sim ->
-                viewModel.placeCall(inputNumber, sim)
+                onCallClick(inputNumber, sim)
             }
         )
     }
@@ -594,3 +671,71 @@ private fun DualSimCallButtons(
         }
     }
 }
+
+// ==========================================
+// PREVIEWS
+// ==========================================
+
+@Preview(name = "Dialer Screen - Dual SIM", showBackground = true)
+@Preview(name = "Dialer Screen Dark", uiMode = Configuration.UI_MODE_NIGHT_YES, showBackground = true)
+@Composable
+fun DialerScreenPreview() {
+    CallogTheme {
+        DialerContent(
+            inputNumber = "5678",
+            t9Results = listOf(
+                T9MatchResult(
+                    personId = "person_1",
+                    displayName = "John Doe",
+                    phoneNumber = "+1 (555) 5678",
+                    normalizedPhoneNumber = "+15555678",
+                    matchedNameRange = 0..3,
+                    crmStatus = LeadStatus.HOT,
+                    companyName = "Acme Corp"
+                )
+            ),
+            activeSims = listOf(
+                SimInfo(
+                    subscriptionId = 1,
+                    slotIndex = 0,
+                    carrierName = "Jio",
+                    displayName = "Business",
+                    phoneNumber = "+91 98765 43210"
+                ),
+                SimInfo(
+                    subscriptionId = 2,
+                    slotIndex = 1,
+                    carrierName = "Airtel",
+                    displayName = "Personal",
+                    phoneNumber = "+91 91234 56789"
+                )
+            ),
+            clipboardSuggestion = "+1 (555) 234-5678",
+            isDefaultDialer = true,
+            onPasteClipboard = {},
+            onDigitClick = {},
+            onPlusLongClick = {},
+            onSpeedDialLongPress = {},
+            onBackspaceClick = {},
+            onSelectContactNumber = {},
+            onCallClick = { _, _ -> },
+            onOpenSimulator = {}
+        )
+    }
+}
+
+@Preview(name = "Dialpad Key", showBackground = true)
+@Composable
+fun DialpadButtonPreview() {
+    CallogTheme {
+        Box(modifier = Modifier.padding(16.dp)) {
+            DialpadButton(
+                digit = '2',
+                letters = "ABC",
+                onClick = {},
+                onLongClick = {}
+            )
+        }
+    }
+}
+

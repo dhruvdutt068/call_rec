@@ -78,7 +78,17 @@ fun SplashScreen(
         onNavigateNext(hasCallLogPermission && hasContactsPermission && hasPhoneStatePermission && hasStoragePermission)
     }
 
-    // Theme-adaptive premium radial gradient
+    SplashContent(
+        scale = scaleAnim.value,
+        modifier = modifier
+    )
+}
+
+@Composable
+fun SplashContent(
+    scale: Float,
+    modifier: Modifier = Modifier
+) {
     val isDark = androidx.compose.foundation.isSystemInDarkTheme()
     val gradientColors = if (isDark) {
         listOf(
@@ -109,10 +119,26 @@ fun SplashScreen(
             painter = painterResource(id = R.drawable.ic_allset_logo),
             contentDescription = "AllSet Logo",
             modifier = Modifier
-                .scale(scaleAnim.value)
+                .scale(scale)
                 .fillMaxWidth(0.75f),
             contentScale = ContentScale.Fit
         )
+    }
+}
+
+@androidx.compose.ui.tooling.preview.Preview(name = "Splash Screen Light", showBackground = true)
+@Composable
+fun SplashScreenPreview() {
+    CallogTheme(darkTheme = false) {
+        SplashContent(scale = 1.0f)
+    }
+}
+
+@androidx.compose.ui.tooling.preview.Preview(name = "Splash Screen Dark", showBackground = true)
+@Composable
+fun SplashScreenDarkPreview() {
+    CallogTheme(darkTheme = true) {
+        SplashContent(scale = 1.0f)
     }
 }
 

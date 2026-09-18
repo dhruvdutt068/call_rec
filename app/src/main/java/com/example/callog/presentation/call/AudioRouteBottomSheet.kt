@@ -34,100 +34,114 @@ fun AudioRouteBottomSheet(
         shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
         modifier = modifier
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 24.dp, vertical = 16.dp)
-                .navigationBarsPadding(),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            Text(
-                text = "Audio Output Route",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onSurface
-            )
-            Text(
-                text = "Select active audio output device for this call:",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Spacer(modifier = Modifier.height(4.dp))
-
-            val allRoutes = listOf(
-                AudioRouteItem(AudioRoute.EARPIECE, "Phone (Earpiece)", Icons.Default.PhoneAndroid),
-                AudioRouteItem(AudioRoute.SPEAKER, "Speakerphone", Icons.AutoMirrored.Filled.VolumeUp),
-                AudioRouteItem(AudioRoute.BLUETOOTH, "Bluetooth Headset", Icons.Default.Bluetooth),
-                AudioRouteItem(AudioRoute.WIRED_HEADSET, "Wired Headset", Icons.Default.Headphones)
-            )
-
-            val displayRoutes = allRoutes.filter { item ->
-                supportedRoutes.isEmpty() || supportedRoutes.contains(item.route) || item.route == currentRoute
+        AudioRouteContent(
+            currentRoute = currentRoute,
+            supportedRoutes = supportedRoutes,
+            onSelectRoute = {
+                onSelectRoute(it)
+                onDismiss()
             }
+        )
+    }
+}
 
-            displayRoutes.forEach { item ->
-                val isSelected = item.route == currentRoute
+@Composable
+fun AudioRouteContent(
+    currentRoute: AudioRoute,
+    supportedRoutes: List<AudioRoute>,
+    onSelectRoute: (AudioRoute) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = 24.dp, vertical = 16.dp)
+            .navigationBarsPadding(),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        Text(
+            text = "Audio Output Route",
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onSurface
+        )
+        Text(
+            text = "Select active audio output device for this call:",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Spacer(modifier = Modifier.height(4.dp))
 
-                Surface(
-                    onClick = {
-                        onSelectRoute(item.route)
-                        onDismiss()
-                    },
-                    shape = RoundedCornerShape(16.dp),
-                    color = if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.12f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-                    border = BorderStroke(
-                        1.dp,
-                        if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
-                    ),
-                    modifier = Modifier.fillMaxWidth()
+        val allRoutes = listOf(
+            AudioRouteItem(AudioRoute.EARPIECE, "Phone (Earpiece)", Icons.Default.PhoneAndroid),
+            AudioRouteItem(AudioRoute.SPEAKER, "Speakerphone", Icons.AutoMirrored.Filled.VolumeUp),
+            AudioRouteItem(AudioRoute.BLUETOOTH, "Bluetooth Headset", Icons.Default.Bluetooth),
+            AudioRouteItem(AudioRoute.WIRED_HEADSET, "Wired Headset", Icons.Default.Headphones)
+        )
+
+        val displayRoutes = allRoutes.filter { item ->
+            supportedRoutes.isEmpty() || supportedRoutes.contains(item.route) || item.route == currentRoute
+        }
+
+        displayRoutes.forEach { item ->
+            val isSelected = item.route == currentRoute
+
+            Surface(
+                onClick = { onSelectRoute(item.route) },
+                shape = RoundedCornerShape(16.dp),
+                color = if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.12f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                border = BorderStroke(
+                    1.dp,
+                    if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
+                ),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 14.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 14.dp),
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
+                        horizontalArrangement = Arrangement.spacedBy(16.dp)
                     ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(16.dp)
+                        Surface(
+                            shape = CircleShape,
+                            color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
+                            modifier = Modifier.size(40.dp)
                         ) {
-                            Surface(
-                                shape = CircleShape,
-                                color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
-                                modifier = Modifier.size(40.dp)
-                            ) {
-                                Box(contentAlignment = Alignment.Center) {
-                                    Icon(
-                                        imageVector = item.icon,
-                                        contentDescription = null,
-                                        tint = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
-                                        modifier = Modifier.size(20.dp)
-                                    )
-                                }
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(
+                                    imageVector = item.icon,
+                                    contentDescription = null,
+                                    tint = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.size(20.dp)
+                                )
                             }
-                            Text(
-                                text = item.label,
-                                style = MaterialTheme.typography.bodyLarge,
-                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                                color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
-                            )
                         }
+                        Text(
+                            text = item.label,
+                            style = MaterialTheme.typography.bodyLarge,
+                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                            color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+                        )
+                    }
 
-                        if (isSelected) {
-                            Icon(
-                                imageVector = Icons.Default.Check,
-                                contentDescription = "Active",
-                                tint = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(22.dp)
-                            )
-                        }
+                    if (isSelected) {
+                        Icon(
+                            imageVector = Icons.Default.Check,
+                            contentDescription = "Active",
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(22.dp)
+                        )
                     }
                 }
             }
-
-            Spacer(modifier = Modifier.height(12.dp))
         }
+
+        Spacer(modifier = Modifier.height(12.dp))
     }
 }
 
@@ -136,3 +150,17 @@ private data class AudioRouteItem(
     val label: String,
     val icon: ImageVector
 )
+
+@androidx.compose.ui.tooling.preview.Preview(name = "Audio Route Sheet", showBackground = true)
+@Composable
+fun AudioRouteBottomSheetPreview() {
+    com.example.callog.presentation.theme.CallogTheme {
+        Surface {
+            AudioRouteContent(
+                currentRoute = AudioRoute.SPEAKER,
+                supportedRoutes = listOf(AudioRoute.EARPIECE, AudioRoute.SPEAKER, AudioRoute.BLUETOOTH),
+                onSelectRoute = {}
+            )
+        }
+    }
+}

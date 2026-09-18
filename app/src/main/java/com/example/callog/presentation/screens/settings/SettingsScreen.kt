@@ -1,5 +1,6 @@
 package com.example.callog.presentation.screens.settings
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -43,6 +44,7 @@ fun SettingsScreen(
     onDarkThemeChange: (Boolean) -> Unit,
     onNavigateToDeveloperDashboard: () -> Unit,
     onNavigateToRingtoneSettings: (() -> Unit)? = null,
+    onNavigateToEnvironmentPresets: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val coroutineScope = rememberCoroutineScope()
@@ -52,6 +54,7 @@ fun SettingsScreen(
     var showDeveloperPinDialog by remember { mutableStateOf(false) }
     var developerPinInput by remember { mutableStateOf("") }
     val isDeveloperModeActive by viewModel.isDeveloperModeActive.collectAsState()
+    val autoLockTimeoutMinutes by viewModel.autoLockTimeoutMinutes.collectAsState()
 
     val folderPickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocumentTree()
@@ -677,8 +680,60 @@ fun SettingsScreen(
                             style = MaterialTheme.typography.bodySmall
                         )
 
+                        // Auto-Lock Inactivity Setting
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text(
+                                    text = "Auto-Lock Environment",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = Slate50
+                                )
+                                Text(
+                                    text = "${autoLockTimeoutMinutes} min idle",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = Teal300,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                            Text(
+                                text = "Locks preferences & developer tools automatically when not in use.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Slate400
+                            )
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                listOf(1, 3, 5, 10, 15).forEach { minutes ->
+                                    val isSelected = autoLockTimeoutMinutes == minutes
+                                    FilterChip(
+                                        selected = isSelected,
+                                        onClick = {
+                                            viewModel.setAutoLockTimeoutMinutes(minutes)
+                                            Toast.makeText(context, "Auto-lock set to $minutes min", Toast.LENGTH_SHORT).show()
+                                        },
+                                        label = { Text("${minutes}m") },
+                                        colors = FilterChipDefaults.filterChipColors(
+                                            selectedContainerColor = Teal500.copy(alpha = 0.25f),
+                                            selectedLabelColor = Teal300,
+                                            containerColor = Slate800,
+                                            labelColor = Slate300
+                                        )
+                                    )
+                                }
+                            }
+                        }
+
                         Button(
-                            onClick = onNavigateToDeveloperDashboard,
+                            onClick = {
+                                viewModel.recordDeveloperActivity()
+                                onNavigateToDeveloperDashboard()
+                            },
                             modifier = Modifier.fillMaxWidth(),
                             colors = ButtonDefaults.buttonColors(
                                 containerColor = Teal500,
@@ -686,6 +741,40 @@ fun SettingsScreen(
                             )
                         ) {
                             Text("Open Developer Tools", fontWeight = FontWeight.Bold)
+                        }
+
+                        if (onNavigateToEnvironmentPresets != null) {
+                            OutlinedButton(
+                                onClick = {
+                                    viewModel.recordDeveloperActivity()
+                                    onNavigateToEnvironmentPresets()
+                                },
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = ButtonDefaults.outlinedButtonColors(
+                                    contentColor = Teal300
+                                ),
+                                border = BorderStroke(1.dp, Teal500.copy(alpha = 0.5f))
+                            ) {
+                                Icon(Icons.Default.Dns, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("Manage Environment Presets", fontWeight = FontWeight.SemiBold)
+                            }
+                        }
+
+                        OutlinedButton(
+                            onClick = {
+                                viewModel.setDeveloperModeActive(false)
+                                Toast.makeText(context, "Preferences & Tools locked", Toast.LENGTH_SHORT).show()
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = ButtonDefaults.outlinedButtonColors(
+                                contentColor = Amber500
+                            ),
+                            border = BorderStroke(1.dp, Amber500.copy(alpha = 0.4f))
+                        ) {
+                            Icon(Icons.Default.Lock, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Lock Environment Now", fontWeight = FontWeight.SemiBold)
                         }
                     }
                 }

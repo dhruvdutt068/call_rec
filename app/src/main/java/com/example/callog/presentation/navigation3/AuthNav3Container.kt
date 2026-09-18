@@ -52,6 +52,7 @@ fun AuthNav3Container(
                     onBackClick = { backStack.pop() }
                 )
             }
+            else -> {}
         }
     }
 }

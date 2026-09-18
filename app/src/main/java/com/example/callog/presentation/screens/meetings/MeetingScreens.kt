@@ -16,7 +16,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import com.example.callog.presentation.components.EmptyStateView
+import com.example.callog.presentation.components.ExpressiveEmptyState
 import com.example.callog.presentation.components.GlassyCard
 import com.example.callog.presentation.theme.*
 import com.example.callog.presentation.viewmodel.CallViewModel
@@ -69,42 +69,51 @@ fun MeetingListScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Meetings & Calls", fontWeight = FontWeight.Bold) },
+                title = {
+                    Text(
+                        text = "Meetings & Calls",
+                        style = CallogTypography.sectionTitle,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                },
                 actions = {
                     IconButton(onClick = onScheduleMeetingClick) {
-                        Icon(Icons.Default.Add, contentDescription = "Schedule", tint = Teal300)
+                        Icon(
+                            imageVector = Icons.Default.Add,
+                            contentDescription = "Schedule",
+                            tint = MaterialTheme.colorScheme.primary
+                        )
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceVariant,
-                    titleContentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                    containerColor = MaterialTheme.colorScheme.surface,
+                    titleContentColor = MaterialTheme.colorScheme.onSurface
                 )
             )
         },
         floatingActionButton = {
             FloatingActionButton(
                 onClick = onScheduleMeetingClick,
-                containerColor = Teal300,
-                contentColor = Slate900
+                containerColor = MaterialTheme.colorScheme.primary,
+                contentColor = MaterialTheme.colorScheme.onPrimary,
+                shape = CallogShapes.cardShape
             ) {
-                Icon(Icons.Default.Add, contentDescription = "Schedule")
+                Icon(Icons.Default.Add, contentDescription = "Schedule Meeting")
             }
         },
         containerColor = MaterialTheme.colorScheme.background
     ) { innerPadding ->
         if (meetings.isEmpty()) {
-            Box(
+            ExpressiveEmptyState(
+                title = "No Scheduled Meetings",
+                description = "Schedule client calls and demo sessions to sync them directly with your CRM calendar.",
+                icon = Icons.Default.Event,
+                actionLabel = "Schedule Meeting",
+                onActionClick = onScheduleMeetingClick,
                 modifier = modifier
                     .fillMaxSize()
-                    .padding(innerPadding),
-                contentAlignment = Alignment.Center
-            ) {
-                EmptyStateView(
-                    title = "No Scheduled Meetings",
-                    description = "Schedule client calls and sync them with your CRM.",
-                    icon = Icons.Default.Event
-                )
-            }
+                    .padding(innerPadding)
+            )
         } else {
             LazyColumn(
                 modifier = modifier
@@ -112,7 +121,7 @@ fun MeetingListScreen(
                     .padding(innerPadding)
                     .padding(horizontal = 16.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
-                contentPadding = PaddingValues(vertical = 12.dp, horizontal = 0.dp)
+                contentPadding = PaddingValues(vertical = 12.dp)
             ) {
                 items(meetings, key = { it.id }) { meeting ->
                     MeetingCard(
@@ -138,41 +147,46 @@ private fun MeetingCard(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(12.dp),
+                .padding(14.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Box(
                 modifier = Modifier
-                    .size(44.dp)
-                    .clip(CircleShape)
-                    .background(Teal300.copy(alpha = 0.15f)),
+                    .size(46.dp)
+                    .clip(CallogShapes.badgeShape)
+                    .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)),
                 contentAlignment = Alignment.Center
             ) {
-                Icon(Icons.Default.CalendarMonth, contentDescription = null, tint = Teal300)
+                Icon(
+                    imageVector = Icons.Default.CalendarMonth,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(24.dp)
+                )
             }
 
-            Spacer(modifier = Modifier.width(12.dp))
+            Spacer(modifier = Modifier.width(14.dp))
 
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = meeting.title,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    color = Slate50,
+                    style = CallogTypography.entityName,
+                    color = MaterialTheme.colorScheme.onSurface,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
                     text = "${meeting.date} at ${meeting.time} (${meeting.durationMinutes}m)",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = Teal300
+                    style = CallogTypography.denseData,
+                    color = MaterialTheme.colorScheme.primary
                 )
                 if (meeting.linkedContactName != null) {
+                    Spacer(modifier = Modifier.height(2.dp))
                     Text(
                         text = "With ${meeting.linkedContactName}",
                         style = MaterialTheme.typography.bodySmall,
-                        color = Slate400
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             }
@@ -180,7 +194,7 @@ private fun MeetingCard(
             Icon(
                 imageVector = Icons.Default.ChevronRight,
                 contentDescription = "Details",
-                tint = Slate400
+                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
             )
         }
     }
@@ -209,15 +223,25 @@ fun ScheduleMeetingScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Schedule CRM Meeting", fontWeight = FontWeight.Bold) },
+                title = {
+                    Text(
+                        text = "Schedule CRM Meeting",
+                        style = CallogTypography.sectionTitle,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                },
                 navigationIcon = {
                     IconButton(onClick = onBackClick) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Back",
+                            tint = MaterialTheme.colorScheme.onSurface
+                        )
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceVariant,
-                    titleContentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                    containerColor = MaterialTheme.colorScheme.surface,
+                    titleContentColor = MaterialTheme.colorScheme.onSurface
                 )
             )
         },
@@ -235,14 +259,35 @@ fun ScheduleMeetingScreen(
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(8.dp),
+                            .padding(12.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(Icons.Default.Person, contentDescription = null, tint = Teal300)
+                        Box(
+                            modifier = Modifier
+                                .size(36.dp)
+                                .clip(CircleShape)
+                                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Person,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
                         Spacer(modifier = Modifier.width(12.dp))
                         Column {
-                            Text("Meeting Attendee", style = MaterialTheme.typography.labelSmall, color = Slate400)
-                            Text(initialContact.name, style = MaterialTheme.typography.titleSmall, color = Slate50)
+                            Text(
+                                text = "Meeting Attendee",
+                                style = CallogTypography.statusLabel,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Text(
+                                text = initialContact.name,
+                                style = CallogTypography.entityName,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
                         }
                     }
                 }
@@ -254,6 +299,7 @@ fun ScheduleMeetingScreen(
                 label = { Text("Meeting Title / Agenda") },
                 placeholder = { Text("e.g. Contract Discussion") },
                 modifier = Modifier.fillMaxWidth(),
+                shape = CallogShapes.inputShape,
                 singleLine = true
             )
 
@@ -266,6 +312,7 @@ fun ScheduleMeetingScreen(
                     onValueChange = { date = it },
                     label = { Text("Date") },
                     modifier = Modifier.weight(1f),
+                    shape = CallogShapes.inputShape,
                     singleLine = true
                 )
                 OutlinedTextField(
@@ -273,6 +320,7 @@ fun ScheduleMeetingScreen(
                     onValueChange = { time = it },
                     label = { Text("Time") },
                     modifier = Modifier.weight(1f),
+                    shape = CallogShapes.inputShape,
                     singleLine = true
                 )
             }
@@ -282,6 +330,7 @@ fun ScheduleMeetingScreen(
                 onValueChange = { duration = it },
                 label = { Text("Duration (minutes)") },
                 modifier = Modifier.fillMaxWidth(),
+                shape = CallogShapes.inputShape,
                 singleLine = true
             )
 
@@ -290,6 +339,7 @@ fun ScheduleMeetingScreen(
                 onValueChange = { location = it },
                 label = { Text("Location or Link") },
                 modifier = Modifier.fillMaxWidth(),
+                shape = CallogShapes.inputShape,
                 singleLine = true
             )
 
@@ -316,11 +366,21 @@ fun ScheduleMeetingScreen(
                 },
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(50.dp),
+                    .height(52.dp),
                 enabled = title.isNotBlank(),
-                colors = ButtonDefaults.buttonColors(containerColor = Teal300, contentColor = Slate900)
+                shape = CallogShapes.buttonShape,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    contentColor = MaterialTheme.colorScheme.onPrimary
+                )
             ) {
-                Text("Schedule Meeting", fontWeight = FontWeight.Bold)
+                Icon(
+                    imageVector = Icons.Default.EventAvailable,
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("Schedule Meeting", style = CallogTypography.sectionTitle)
             }
         }
     }
@@ -338,15 +398,25 @@ fun MeetingDetailsScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Meeting Details", fontWeight = FontWeight.Bold) },
+                title = {
+                    Text(
+                        text = "Meeting Details",
+                        style = CallogTypography.sectionTitle,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                },
                 navigationIcon = {
                     IconButton(onClick = onBackClick) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Back",
+                            tint = MaterialTheme.colorScheme.onSurface
+                        )
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceVariant,
-                    titleContentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                    containerColor = MaterialTheme.colorScheme.surface,
+                    titleContentColor = MaterialTheme.colorScheme.onSurface
                 )
             )
         },
@@ -359,7 +429,11 @@ fun MeetingDetailsScreen(
                     .padding(innerPadding),
                 contentAlignment = Alignment.Center
             ) {
-                Text("Meeting not found", color = Slate400)
+                Text(
+                    text = "Meeting not found",
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
         } else {
             Column(
@@ -373,21 +447,39 @@ fun MeetingDetailsScreen(
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(12.dp),
+                            .padding(16.dp),
                         verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
-                        Text(meeting.title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = Slate50)
-                        Text("${meeting.date} at ${meeting.time}", style = MaterialTheme.typography.bodyLarge, color = Teal300)
+                        Text(
+                            text = meeting.title,
+                            style = CallogTypography.heroTitle,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Text(
+                            text = "${meeting.date} at ${meeting.time}",
+                            style = CallogTypography.denseData,
+                            color = MaterialTheme.colorScheme.primary
+                        )
 
-                        HorizontalDivider(color = Slate700)
+                        HorizontalDivider(
+                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                        )
 
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text("Duration", color = Slate400)
-                            Text("${meeting.durationMinutes} minutes", color = Slate50)
+                            Text(
+                                text = "Duration",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Text(
+                                text = "${meeting.durationMinutes} minutes",
+                                style = CallogTypography.denseData,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
                         }
 
                         Row(
@@ -395,8 +487,16 @@ fun MeetingDetailsScreen(
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text("Channel", color = Slate400)
-                            Text(meeting.locationOrLink, color = Slate50)
+                            Text(
+                                text = "Channel",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Text(
+                                text = meeting.locationOrLink,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
                         }
 
                         if (meeting.linkedContactName != null) {
@@ -405,8 +505,16 @@ fun MeetingDetailsScreen(
                                 horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Text("Client", color = Slate400)
-                                Text(meeting.linkedContactName, fontWeight = FontWeight.SemiBold, color = Amber500)
+                                Text(
+                                    text = "Client",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Text(
+                                    text = meeting.linkedContactName,
+                                    style = CallogTypography.entityName,
+                                    color = MaterialTheme.colorScheme.secondary
+                                )
                             }
                         }
                     }
@@ -418,12 +526,17 @@ fun MeetingDetailsScreen(
                     onClick = onBackClick,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(50.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = Teal300, contentColor = Slate900)
+                        .height(52.dp),
+                    shape = CallogShapes.buttonShape,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.primary,
+                        contentColor = MaterialTheme.colorScheme.onPrimary
+                    )
                 ) {
-                    Text("Close", fontWeight = FontWeight.Bold)
+                    Text("Close", style = CallogTypography.sectionTitle)
                 }
             }
         }
     }
 }
+

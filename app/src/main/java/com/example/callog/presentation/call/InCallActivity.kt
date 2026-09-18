@@ -9,6 +9,7 @@ import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import com.example.callog.core.diagnostics.DeveloperLogger
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -36,20 +37,10 @@ import kotlinx.coroutines.delay
 @AndroidEntryPoint
 class InCallActivity : ComponentActivity() {
 
-    private var proximityWakeLock: android.os.PowerManager.WakeLock? = null
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        val powerManager = getSystemService(Context.POWER_SERVICE) as? android.os.PowerManager
-        if (powerManager?.isWakeLockLevelSupported(android.os.PowerManager.PROXIMITY_SCREEN_OFF_WAKE_LOCK) == true) {
-            proximityWakeLock = powerManager.newWakeLock(
-                android.os.PowerManager.PROXIMITY_SCREEN_OFF_WAKE_LOCK,
-                "callog:in_call_proximity"
-            )
-        }
-
-        // Configure window for lock-screen presentation and keep screen on
+        // Configure window for lock-screen presentation
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
             setShowWhenLocked(true)
             setTurnScreenOn(true)
@@ -61,7 +52,6 @@ class InCallActivity : ComponentActivity() {
                         WindowManager.LayoutParams.FLAG_DISMISS_KEYGUARD
             )
         }
-        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
 
         enableEdgeToEdge()
 
@@ -77,44 +67,48 @@ class InCallActivity : ComponentActivity() {
                     val viewModel: CallSessionViewModel = hiltViewModel()
                     val state by viewModel.uiState.collectAsStateWithLifecycle()
 
+                    // If there is genuinely no session, finish activity promptly
+                    if (state is CallUiState.NoSession) {
+                        LaunchedEffect(Unit) {
+                            DeveloperLogger.info("INCALL_ACTIVITY", "No active call session. Finishing InCallActivity.")
+                            finishAndRemoveTask()
+                        }
+                    }
+
                     AnimatedContent(
                         targetState = state,
+                        contentKey = { targetState ->
+                            when (targetState) {
+                                is CallUiState.NoSession -> "no_session"
+                                is CallUiState.Incoming -> "incoming"
+                                is CallUiState.Connecting, is CallUiState.Active -> "active_call"
+                                is CallUiState.Ended -> "ended"
+                            }
+                        },
                         label = "call_state_transition"
                     ) { targetState ->
                         when (targetState) {
-                            is CallUiState.Idle -> {
-                                LaunchedEffect(Unit) {
-                                    delay(4000)
-                                    if (viewModel.uiState.value is CallUiState.Idle) {
-                                        finishAndRemoveTask()
-                                    }
-                                }
+                            is CallUiState.NoSession -> {
                                 Box(
                                     modifier = Modifier
                                         .fillMaxSize()
-                                        .background(MaterialTheme.colorScheme.background),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Column(
-                                        horizontalAlignment = Alignment.CenterHorizontally,
-                                        verticalArrangement = Arrangement.spacedBy(12.dp)
-                                    ) {
-                                        androidx.compose.material3.CircularProgressIndicator(
-                                            color = MaterialTheme.colorScheme.primary,
-                                            modifier = Modifier.size(36.dp)
-                                        )
-                                        Text(
-                                            text = "Connecting Call...",
-                                            style = MaterialTheme.typography.bodyMedium,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
-                                    }
-                                }
+                                        .background(MaterialTheme.colorScheme.background)
+                                )
                             }
                             is CallUiState.Incoming -> {
                                 IncomingCallScreen(
                                     session = targetState.session,
                                     onAction = viewModel::onAction
+                                )
+                            }
+                            is CallUiState.Connecting -> {
+                                ActiveCallScreen(
+                                    session = targetState.session,
+                                    otherSessions = targetState.otherSessions,
+                                    onAction = viewModel::onAction,
+                                    onOpenPersonDetails = { personId ->
+                                        openCanonicalPersonDetails(personId)
+                                    }
                                 )
                             }
                             is CallUiState.Active -> {
@@ -123,7 +117,7 @@ class InCallActivity : ComponentActivity() {
                                     otherSessions = targetState.otherSessions,
                                     onAction = viewModel::onAction,
                                     onOpenPersonDetails = { personId ->
-                                         openCanonicalPersonDetails(personId)
+                                        openCanonicalPersonDetails(personId)
                                     }
                                 )
                             }
@@ -155,26 +149,7 @@ class InCallActivity : ComponentActivity() {
         }
     }
 
-    override fun onResume() {
-        super.onResume()
-        if (proximityWakeLock?.isHeld == false) {
-            proximityWakeLock?.acquire()
-        }
-    }
 
-    override fun onPause() {
-        super.onPause()
-        if (proximityWakeLock?.isHeld == true) {
-            proximityWakeLock?.release()
-        }
-    }
-
-    override fun onDestroy() {
-        super.onDestroy()
-        if (proximityWakeLock?.isHeld == true) {
-            proximityWakeLock?.release()
-        }
-    }
 
     @Deprecated("Deprecated in Java")
     override fun onBackPressed() {

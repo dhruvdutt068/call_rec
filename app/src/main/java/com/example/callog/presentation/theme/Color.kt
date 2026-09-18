@@ -55,6 +55,22 @@ val GlassSurface: Color
     @Composable
     get() = if (isDarkTheme) Color(0x80282828) else Color(0x80FFFFFF)
 
+val Teal400: Color
+    @Composable
+    get() = if (isDarkTheme) AllSetLavender else AllSetBlue
+
+val Slate100: Color
+    @Composable
+    get() = MaterialTheme.colorScheme.surfaceContainerHighest
+
+val Slate500: Color
+    @Composable
+    get() = MaterialTheme.colorScheme.onSurfaceVariant
+
+val Slate600: Color
+    @Composable
+    get() = if (isDarkTheme) Color(0xFF94A3B8) else Color(0xFF64748B)
+
 // Dynamic Composable Mappings (resolves text contrast dynamically based on current theme)
 val Slate50: Color
     @Composable
@@ -80,3 +96,85 @@ val Slate900: Color
 val Slate950: Color
     @Composable
     get() = MaterialTheme.colorScheme.background
+
+/**
+ * Material 3 Expressive Semantic Color System for Callog / AllSet CRM.
+ * Explicitly associates domain lifecycle events with clear, accessible visual tokens.
+ */
+object CallogSemanticColors {
+    // Call States
+    val CallIncoming = AllSetTeal
+    val CallOutgoing = AllSetBlue
+    val CallMissed = Color(0xFFE85C5C)
+    val CallRejected = Color(0xFF8E8E93)
+    val CallConnected = AllSetTeal
+    val CallEnded = Color(0xFF8E8E93)
+    val Incoming = CallIncoming
+    val Outgoing = CallOutgoing
+    val Missed = CallMissed
+    val Rejected = CallRejected
+
+    // CRM Lead Lifecycle
+    val LeadHot = Color(0xFFE85C5C)
+    val LeadWarm = AllSetAmber
+    val LeadCold = Color(0xFF4A90E2)
+    val LeadFollowUp = AllSetTeal
+    val LeadCustomer = Color(0xFF9B51E0)
+    val LeadVip = Color(0xFFF2994A)
+    val LeadWon = Color(0xFF45C79A)
+
+    // Sync States
+    val SyncSuccess = AllSetTeal
+    val SyncInProgress = AllSetAmber
+    val SyncFailed = Color(0xFFE85C5C)
+    val SyncPending = Color(0xFF8E8E93)
+
+    // Recording States
+    val RecordingActive = Color(0xFFE85C5C)
+    val RecordingSaved = AllSetTeal
+    val RecordingPaused = AllSetAmber
+    val RecordingMatched = AllSetTeal
+    val RecordingUnmatched = AllSetAmber
+    val RecordingCorrupted = Color(0xFFE85C5C)
+
+    object LeadColors {
+        val Hot = Color(0xFFE85C5C)
+        val Warm = AllSetAmber
+        val Cold = Color(0xFF4A90E2)
+        val FollowUp = AllSetTeal
+        val Customer = Color(0xFF9B51E0)
+        val Vip = Color(0xFFF2994A)
+        val Won = Color(0xFF45C79A)
+        val New = AllSetBlue
+    }
+
+    object SyncColors {
+        val Synced = AllSetTeal
+        val Success = AllSetTeal
+        val Pending = Color(0xFF8E8E93)
+        val InProgress = AllSetAmber
+        val Failed = Color(0xFFE85C5C)
+    }
+
+    object RecordingColors {
+        val Active = Color(0xFFE85C5C)
+        val Recording = Color(0xFFE85C5C)
+        val Saved = AllSetTeal
+        val Matched = AllSetTeal
+        val Unmatched = AllSetAmber
+        val Corrupted = Color(0xFFE85C5C)
+        val Paused = AllSetAmber
+    }
+
+    object CallColors {
+        val Incoming = AllSetTeal
+        val Outgoing = AllSetBlue
+        val Missed = Color(0xFFE85C5C)
+        val Rejected = Color(0xFF8E8E93)
+    }
+}
+
+val LeadColors = CallogSemanticColors.LeadColors
+val SyncColors = CallogSemanticColors.SyncColors
+val RecordingColors = CallogSemanticColors.RecordingColors
+val CallColors = CallogSemanticColors.CallColors

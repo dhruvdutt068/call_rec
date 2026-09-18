@@ -228,17 +228,32 @@ class PersonRepositoryImpl @Inject constructor(
             }
             val remotePeople = remotePeopleResult.getOrNull() ?: emptyList()
 
+            val remoteDevices = supabaseService.fetchGlobalDevices().getOrNull() ?: emptyList()
             val remotePhones = supabaseService.fetchGlobalPhoneNumbers().getOrNull() ?: emptyList()
             val remoteAliases = supabaseService.fetchGlobalContactAliases().getOrNull() ?: emptyList()
 
-            // 1. Upsert People into Room
+            // 1. Upsert Devices into Room (avoids Foreign Key constraint failure on ContactAliasEntity)
+            for (d in remoteDevices) {
+                val entity = DeviceEntity(
+                    id = d.id,
+                    deviceName = d.deviceName,
+                    devicePhone = d.devicePhone,
+                    deviceIdentifier = d.deviceIdentifier,
+                    createdAt = parseTimestamp(d.createdAt),
+                    updatedAt = parseTimestamp(d.updatedAt),
+                    lastSyncAt = d.lastSyncAt?.let { parseTimestamp(it) }
+                )
+                personDao.insertDevice(entity)
+            }
+
+            // 2. Upsert People into Room
             for (p in remotePeople) {
-                val existing = personDao.getPersonById(p.id)
+                val cleanName = p.displayName.trim().let { if (it == "." || it.isBlank()) "Unknown Contact" else it }
                 val entity = PersonEntity(
                     id = p.id,
-                    displayName = p.displayName.ifBlank { "Unknown Contact" },
-                    companyName = p.companyName,
-                    notes = p.notes,
+                    displayName = cleanName,
+                    companyName = p.companyName?.trim()?.ifBlank { null },
+                    notes = p.notes?.trim()?.ifBlank { null },
                     createdAt = parseTimestamp(p.createdAt),
                     updatedAt = parseTimestamp(p.updatedAt),
                     syncStatus = "SYNCED"
@@ -246,8 +261,18 @@ class PersonRepositoryImpl @Inject constructor(
                 personDao.insertPerson(entity)
             }
 
-            // 2. Upsert Phone Numbers
+            // 3. Upsert Phone Numbers (ensuring parent Person exists to satisfy foreign key)
             for (ph in remotePhones) {
+                if (personDao.getPersonById(ph.personId) == null) {
+                    val fallbackPerson = PersonEntity(
+                        id = ph.personId,
+                        displayName = "Unknown Contact",
+                        createdAt = parseTimestamp(ph.createdAt),
+                        updatedAt = parseTimestamp(ph.createdAt),
+                        syncStatus = "SYNCED"
+                    )
+                    personDao.insertPerson(fallbackPerson)
+                }
                 val entity = PhoneNumberEntity(
                     id = ph.id,
                     personId = ph.personId,
@@ -261,14 +286,37 @@ class PersonRepositoryImpl @Inject constructor(
                 personDao.insertPhoneNumber(entity)
             }
 
-            // 3. Upsert Aliases
+            // 4. Upsert Aliases (ensuring parent Person and Device exist to satisfy foreign keys)
             for (al in remoteAliases) {
+                if (personDao.getPersonById(al.personId) == null) {
+                    val cleanName = al.aliasName.trim().let { if (it == "." || it.isBlank()) "Unknown Contact" else it }
+                    val fallbackPerson = PersonEntity(
+                        id = al.personId,
+                        displayName = cleanName,
+                        createdAt = parseTimestamp(al.createdAt),
+                        updatedAt = parseTimestamp(al.createdAt),
+                        syncStatus = "SYNCED"
+                    )
+                    personDao.insertPerson(fallbackPerson)
+                }
+                if (personDao.getDeviceById(al.deviceId) == null) {
+                    val fallbackDevice = DeviceEntity(
+                        id = al.deviceId,
+                        deviceName = "Synced Device",
+                        devicePhone = al.phoneNumber,
+                        deviceIdentifier = al.deviceId,
+                        createdAt = parseTimestamp(al.createdAt),
+                        updatedAt = parseTimestamp(al.createdAt)
+                    )
+                    personDao.insertDevice(fallbackDevice)
+                }
+                val cleanAliasName = al.aliasName.trim().let { if (it == "." || it.isBlank()) "Unknown Contact" else it }
                 val entity = ContactAliasEntity(
                     id = al.id,
                     personId = al.personId,
                     deviceId = al.deviceId,
                     androidContactId = al.androidContactId,
-                    aliasName = al.aliasName,
+                    aliasName = cleanAliasName,
                     phoneNumber = al.phoneNumber,
                     normalizedNumber = al.normalizedNumber,
                     createdAt = parseTimestamp(al.createdAt),

@@ -172,6 +172,25 @@ fun AllSetCrmHost(
                     )
                 }
 
+                is AllSetNavKey.Contacts.DeviceContactDetails -> {
+                    val context = androidx.compose.ui.platform.LocalContext.current
+                    val entryPoint = remember(context) {
+                        dagger.hilt.android.EntryPointAccessors.fromApplication(
+                            context.applicationContext,
+                            com.example.callog.di.ContactsDirectoryEntryPoint::class.java
+                        )
+                    }
+                    com.example.callog.presentation.screens.contacts.DeviceContactDetailsScreen(
+                        androidContactId = key.androidContactId,
+                        deviceContactsRepository = entryPoint.deviceContactsRepository(),
+                        personRepository = entryPoint.personRepository(),
+                        onBackClick = { multiStack.pop() },
+                        onNavigateToCloudProfile = { personId ->
+                            multiStack.navigate(AllSetNavKey.Contacts.ContactDetails(personId))
+                        }
+                    )
+                }
+
                 is AllSetNavKey.Contacts.SubSection.WhatsApp -> {
                     WhatsAppScreen(
                         contactId = key.contactId,

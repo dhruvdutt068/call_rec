@@ -36,7 +36,48 @@ fun OnboardingScreen(
     val context = LocalContext.current
     var ownerName by remember { mutableStateOf("") }
     var phoneNumber by remember { mutableStateOf("") }
-    
+
+    OnboardingContent(
+        ownerName = ownerName,
+        onOwnerNameChange = { ownerName = it },
+        phoneNumber = phoneNumber,
+        onPhoneNumberChange = { input ->
+            if (input.all { it.isDigit() || it == '+' }) {
+                phoneNumber = input
+            }
+        },
+        onSaveClick = {
+            val trimmedName = ownerName.trim()
+            val trimmedPhone = phoneNumber.trim()
+
+            if (trimmedName.isEmpty() || trimmedPhone.isEmpty()) {
+                Toast.makeText(context, "Please fill in all fields", Toast.LENGTH_SHORT).show()
+                return@OnboardingContent
+            }
+            if (trimmedPhone.length < 10) {
+                Toast.makeText(context, "Please enter a valid phone number", Toast.LENGTH_SHORT).show()
+                return@OnboardingContent
+            }
+
+            viewModel.saveDeviceOwnerName(trimmedName)
+            viewModel.saveDevicePhoneNumber(trimmedPhone)
+            
+            Toast.makeText(context, "Configuration Saved!", Toast.LENGTH_SHORT).show()
+            onSetupComplete()
+        },
+        modifier = modifier
+    )
+}
+
+@Composable
+fun OnboardingContent(
+    ownerName: String,
+    onOwnerNameChange: (String) -> Unit,
+    phoneNumber: String,
+    onPhoneNumberChange: (String) -> Unit,
+    onSaveClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
     val primary = MaterialTheme.colorScheme.primary
     val secondary = MaterialTheme.colorScheme.secondary
     val background = MaterialTheme.colorScheme.background
@@ -114,7 +155,7 @@ fun OnboardingScreen(
                         )
                         OutlinedTextField(
                             value = ownerName,
-                            onValueChange = { ownerName = it },
+                            onValueChange = onOwnerNameChange,
                             placeholder = { Text("e.g. John Doe") },
                             leadingIcon = {
                                 Icon(Icons.Default.Person, contentDescription = null, tint = Slate400)
@@ -139,12 +180,7 @@ fun OnboardingScreen(
                         )
                         OutlinedTextField(
                             value = phoneNumber,
-                            onValueChange = { input ->
-                                // Allow only digits and '+'
-                                if (input.all { it.isDigit() || it == '+' }) {
-                                    phoneNumber = input
-                                }
-                            },
+                            onValueChange = onPhoneNumberChange,
                             placeholder = { Text("e.g. +919876543210") },
                             leadingIcon = {
                                 Icon(Icons.Default.Phone, contentDescription = null, tint = Slate400)
@@ -190,25 +226,7 @@ fun OnboardingScreen(
 
                     // Setup complete action button
                     Button(
-                        onClick = {
-                            val trimmedName = ownerName.trim()
-                            val trimmedPhone = phoneNumber.trim()
-
-                            if (trimmedName.isEmpty() || trimmedPhone.isEmpty()) {
-                                Toast.makeText(context, "Please fill in all fields", Toast.LENGTH_SHORT).show()
-                                return@Button
-                            }
-                            if (trimmedPhone.length < 10) {
-                                Toast.makeText(context, "Please enter a valid phone number", Toast.LENGTH_SHORT).show()
-                                return@Button
-                            }
-
-                            viewModel.saveDeviceOwnerName(trimmedName)
-                            viewModel.saveDevicePhoneNumber(trimmedPhone)
-                            
-                            Toast.makeText(context, "Configuration Saved!", Toast.LENGTH_SHORT).show()
-                            onSetupComplete()
-                        },
+                        onClick = onSaveClick,
                         modifier = Modifier.fillMaxWidth().height(48.dp),
                         shape = RoundedCornerShape(12.dp),
                         colors = ButtonDefaults.buttonColors(
@@ -231,3 +249,31 @@ fun OnboardingScreen(
 // Utility extension for max width modifier
 private fun Modifier.maxWidth(width: androidx.compose.ui.unit.Dp): Modifier =
     this.widthIn(max = width)
+
+@androidx.compose.ui.tooling.preview.Preview(name = "Onboarding Screen Empty", showBackground = true)
+@Composable
+fun OnboardingScreenPreview() {
+    CallogTheme {
+        OnboardingContent(
+            ownerName = "",
+            onOwnerNameChange = {},
+            phoneNumber = "",
+            onPhoneNumberChange = {},
+            onSaveClick = {}
+        )
+    }
+}
+
+@androidx.compose.ui.tooling.preview.Preview(name = "Onboarding Screen Filled", showBackground = true)
+@Composable
+fun OnboardingScreenFilledPreview() {
+    CallogTheme {
+        OnboardingContent(
+            ownerName = "Dhruv Dutt",
+            onOwnerNameChange = {},
+            phoneNumber = "+919876543210",
+            onPhoneNumberChange = {},
+            onSaveClick = {}
+        )
+    }
+}

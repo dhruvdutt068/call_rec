@@ -170,3 +170,31 @@ fun MultiCallLineCard(
         }
     }
 }
+
+@androidx.compose.ui.tooling.preview.Preview(name = "Multi Call Line Card", showBackground = true)
+@Composable
+fun MultiCallLineCardPreview() {
+    CallogTheme {
+        MultiCallLineCard(
+            activeSession = CallSessionState(
+                callId = "call_1",
+                phoneNumber = "+919876543210",
+                callerDisplayName = "Alice Johnson",
+                initials = "AJ"
+            ),
+            heldSessions = listOf(
+                CallSessionState(
+                    callId = "call_2",
+                    phoneNumber = "+919123456780",
+                    callerDisplayName = "Bob Smith",
+                    state = CallState.ON_HOLD,
+                    durationSeconds = 195,
+                    initials = "BS"
+                )
+            ),
+            onSwapCalls = {},
+            onMergeCalls = { _, _ -> },
+            onEndHeldCall = {}
+        )
+    }
+}

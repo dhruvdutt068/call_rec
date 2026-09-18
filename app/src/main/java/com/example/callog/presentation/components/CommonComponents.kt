@@ -1,34 +1,42 @@
 package com.example.callog.presentation.components
 
+import android.content.res.Configuration
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
-import com.example.callog.core.extensions.toRelativeTimeSpan
-import com.example.callog.core.extensions.toDurationString
 import com.example.callog.core.extensions.toDateTimeString
-import androidx.compose.ui.text.style.TextAlign
+import com.example.callog.core.extensions.toDurationString
+import com.example.callog.core.extensions.toRelativeTimeSpan
 import com.example.callog.data.local.dao.ReminderWithCall
+import com.example.callog.data.local.entity.CallEntity
+import com.example.callog.data.local.entity.ReminderEntity
 import com.example.callog.domain.model.CallLogEntry
 import com.example.callog.presentation.theme.*
 
+/**
+ * Material 3 Expressive Card with subtle tonal surface elevation and delicate outline.
+ */
 @Composable
 fun GlassyCard(
     modifier: Modifier = Modifier,
@@ -38,22 +46,22 @@ fun GlassyCard(
 ) {
     val cardModifier = if (onClick != null) {
         modifier
-            .clip(RoundedCornerShape(16.dp))
+            .clip(CallogShapes.card)
             .clickable(onClick = onClick)
-            .background(MaterialTheme.colorScheme.surfaceVariant)
+            .background(MaterialTheme.colorScheme.surfaceContainerLow)
             .border(
                 borderWidth.dp,
-                MaterialTheme.colorScheme.outline.copy(alpha = 0.5f),
-                RoundedCornerShape(16.dp)
+                MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
+                CallogShapes.card
             )
     } else {
         modifier
-            .clip(RoundedCornerShape(16.dp))
-            .background(MaterialTheme.colorScheme.surfaceVariant)
+            .clip(CallogShapes.card)
+            .background(MaterialTheme.colorScheme.surfaceContainerLow)
             .border(
                 borderWidth.dp,
-                MaterialTheme.colorScheme.outline.copy(alpha = 0.5f),
-                RoundedCornerShape(16.dp)
+                MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
+                CallogShapes.card
             )
     }
 
@@ -63,6 +71,9 @@ fun GlassyCard(
     )
 }
 
+/**
+ * Contact Avatar with gradient fallback and photo loading.
+ */
 @Composable
 fun ContactAvatar(
     name: String?,
@@ -72,11 +83,10 @@ fun ContactAvatar(
 ) {
     Box(
         modifier = modifier
-            .size(48.dp)
-            .clip(CircleShape)
+            .clip(CallogShapes.avatar)
             .background(
                 Brush.linearGradient(
-                    colors = listOf(Teal500, Teal300)
+                    colors = listOf(AllSetBlue, AllSetLavender)
                 )
             ),
         contentAlignment = Alignment.Center
@@ -91,7 +101,7 @@ fun ContactAvatar(
         } else {
             Text(
                 text = initials,
-                color = MidnightNavy,
+                color = Color.White,
                 style = MaterialTheme.typography.bodyLarge,
                 fontWeight = FontWeight.Bold
             )
@@ -99,27 +109,33 @@ fun ContactAvatar(
     }
 }
 
+/**
+ * Call Direction & Lifecycle Icon using CallogSemanticColors.
+ */
 @Composable
 fun CallTypeIcon(
     callType: String,
     modifier: Modifier = Modifier
 ) {
     val (icon, color) = when (callType.uppercase()) {
-        "INCOMING" -> Icons.Default.CallReceived to Green500
-        "OUTGOING" -> Icons.Default.CallMade to Teal300
-        "MISSED" -> Icons.Default.CallMissed to Red500
-        "REJECTED", "BLOCKED" -> Icons.Default.Block to Amber500
+        "INCOMING" -> Icons.Default.CallReceived to CallogSemanticColors.CallIncoming
+        "OUTGOING" -> Icons.Default.CallMade to CallogSemanticColors.CallOutgoing
+        "MISSED" -> Icons.Default.CallMissed to CallogSemanticColors.CallMissed
+        "REJECTED", "BLOCKED" -> Icons.Default.Block to CallogSemanticColors.CallRejected
         else -> Icons.Default.Call to Slate400
     }
 
     Icon(
         imageVector = icon,
-        contentDescription = callType,
+        contentDescription = "Call Type: $callType",
         tint = color,
         modifier = modifier.size(18.dp)
     )
 }
 
+/**
+ * Search Bar Input with Material 3 styling and quick-clear action.
+ */
 @Composable
 fun SearchBarField(
     query: String,
@@ -151,18 +167,21 @@ fun SearchBarField(
         },
         singleLine = true,
         colors = OutlinedTextFieldDefaults.colors(
-            focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
-            unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
+            focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+            unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerLow,
             focusedBorderColor = MaterialTheme.colorScheme.primary,
-            unfocusedBorderColor = MaterialTheme.colorScheme.outline,
+            unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant,
             focusedTextColor = MaterialTheme.colorScheme.onSurface,
             unfocusedTextColor = MaterialTheme.colorScheme.onSurface
         ),
-        shape = RoundedCornerShape(12.dp),
+        shape = CallogShapes.interactive,
         modifier = modifier.fillMaxWidth()
     )
 }
 
+/**
+ * Expressive KPI Stat Card featuring displayMetric typography.
+ */
 @Composable
 fun StatCard(
     title: String,
@@ -171,31 +190,38 @@ fun StatCard(
     iconColor: Color,
     modifier: Modifier = Modifier
 ) {
-    GlassyCard(modifier = modifier) {
+    Surface(
+        modifier = modifier
+            .clip(CallogShapes.container)
+            .border(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f), CallogShapes.container),
+        shape = CallogShapes.container,
+        color = MaterialTheme.colorScheme.surfaceContainerLow
+    ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween,
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp)
         ) {
-            Column {
+            Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = title,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = Slate400
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
                     text = value,
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold,
-                    color = Slate50
+                    style = CallogTypography.displayMetric,
+                    color = MaterialTheme.colorScheme.onBackground
                 )
             }
             Box(
                 modifier = Modifier
-                    .size(40.dp)
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(iconColor.copy(alpha = 0.15f)),
+                    .size(44.dp)
+                    .clip(CallogShapes.interactive)
+                    .background(iconColor.copy(alpha = 0.14f)),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
@@ -209,42 +235,69 @@ fun StatCard(
     }
 }
 
+/**
+ * CRM Category Tag Chip.
+ */
 @Composable
 fun TagChip(
-    tag: String,
-    modifier: Modifier = Modifier
+    tag: String = "",
+    text: String = tag,
+    modifier: Modifier = Modifier,
+    isRemovable: Boolean = false,
+    onRemove: (() -> Unit)? = null
 ) {
-    val backgroundColor = when (tag.lowercase()) {
-        "work" -> Teal500.copy(alpha = 0.2f)
-        "family", "personal" -> Amber500.copy(alpha = 0.2f)
-        "spam" -> Red500.copy(alpha = 0.2f)
-        "friend" -> Green500.copy(alpha = 0.2f)
-        else -> Slate700.copy(alpha = 0.4f)
+    val displayTag = if (tag.isNotEmpty()) tag else text
+    val backgroundColor = when (displayTag.lowercase()) {
+        "work" -> AllSetBlue.copy(alpha = 0.15f)
+        "family", "personal" -> AllSetAmber.copy(alpha = 0.15f)
+        "spam" -> Red500.copy(alpha = 0.15f)
+        "friend" -> AllSetTeal.copy(alpha = 0.15f)
+        else -> MaterialTheme.colorScheme.surfaceVariant
     }
 
-    val textColor = when (tag.lowercase()) {
-        "work" -> Teal300
-        "family", "personal" -> Amber500
+    val textColor = when (displayTag.lowercase()) {
+        "work" -> AllSetBlue
+        "family", "personal" -> AllSetAmber
         "spam" -> Red500
-        "friend" -> Green500
-        else -> Slate400
+        "friend" -> AllSetTeal
+        else -> MaterialTheme.colorScheme.onSurfaceVariant
     }
 
-    Box(
-        modifier = modifier
-            .clip(RoundedCornerShape(6.dp))
-            .background(backgroundColor)
-            .padding(horizontal = 8.dp, vertical = 4.dp)
+    Surface(
+        modifier = modifier.clip(CallogShapes.subtle),
+        shape = CallogShapes.subtle,
+        color = backgroundColor
     ) {
-        Text(
-            text = tag,
-            style = MaterialTheme.typography.bodySmall,
-            color = textColor,
-            fontWeight = FontWeight.SemiBold
-        )
+        Row(
+            modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            Text(
+                text = displayTag,
+                style = CallogTypography.statusLabel,
+                color = textColor
+            )
+            if (isRemovable && onRemove != null) {
+                IconButton(
+                    onClick = onRemove,
+                    modifier = Modifier.size(14.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Close,
+                        contentDescription = "Remove tag",
+                        tint = textColor,
+                        modifier = Modifier.size(12.dp)
+                    )
+                }
+            }
+        }
     }
 }
 
+/**
+ * Call Card with Spring-animated favorite toggle and semantic status indicators.
+ */
 @Composable
 fun CallCard(
     call: CallLogEntry,
@@ -254,6 +307,13 @@ fun CallCard(
 ) {
     val timeString = call.timestamp.toRelativeTimeSpan()
     val durationString = call.duration.toDurationString()
+
+    // Tactile spring scale for favorite star
+    val starScale by animateFloatAsState(
+        targetValue = if (call.isFavorite) 1.2f else 1.0f,
+        animationSpec = CallogMotion.bouncySpring(),
+        label = "starScale"
+    )
 
     GlassyCard(
         modifier = modifier,
@@ -276,9 +336,8 @@ fun CallCard(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
                         text = call.displayName,
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold,
-                        color = Slate50,
+                        style = CallogTypography.entityName,
+                        color = MaterialTheme.colorScheme.onBackground,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
@@ -286,21 +345,21 @@ fun CallCard(
                         Spacer(modifier = Modifier.width(6.dp))
                         Icon(
                             imageVector = Icons.Default.Mic,
-                            contentDescription = "Recorded",
-                            tint = Teal300,
-                            modifier = Modifier.size(16.dp)
+                            contentDescription = "Has Recording",
+                            tint = AllSetTeal,
+                            modifier = Modifier.size(15.dp)
                         )
                     }
                 }
 
-                Spacer(modifier = Modifier.height(4.dp))
+                Spacer(modifier = Modifier.height(3.dp))
 
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     CallTypeIcon(call.callType)
-                    
+
                     val statusText = when {
                         call.duration > 0 -> durationString
                         call.callType.equals("MISSED", ignoreCase = true) -> "Missed"
@@ -309,24 +368,24 @@ fun CallCard(
                     Text(
                         text = statusText,
                         style = MaterialTheme.typography.bodySmall,
-                        color = Slate400
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
-                    
+
                     Text(
                         text = "•",
                         style = MaterialTheme.typography.bodySmall,
-                        color = Slate700
+                        color = MaterialTheme.colorScheme.outline
                     )
 
                     Text(
                         text = timeString,
                         style = MaterialTheme.typography.bodySmall,
-                        color = Slate400
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
-                
+
                 if (call.tags.isNotEmpty()) {
-                    Spacer(modifier = Modifier.height(8.dp))
+                    Spacer(modifier = Modifier.height(6.dp))
                     Row(
                         horizontalArrangement = Arrangement.spacedBy(4.dp),
                         verticalAlignment = Alignment.CenterVertically
@@ -338,23 +397,11 @@ fun CallCard(
                 }
             }
 
-            val syncIcon = when (call.syncStatus.uppercase()) {
-                "SYNCED" -> Icons.Default.CloudDone
-                "UPLOADING" -> Icons.Default.CloudUpload
-                "FAILED" -> Icons.Default.CloudOff
-                else -> Icons.Default.Cloud
-            }
-            val syncColor = when (call.syncStatus.uppercase()) {
-                "SYNCED" -> Teal300
-                "UPLOADING" -> Amber500
-                "FAILED" -> Red500
-                else -> Slate400
-            }
-            val syncDesc = when (call.syncStatus.uppercase()) {
-                "SYNCED" -> "Synced to Firestore"
-                "UPLOADING" -> "Syncing..."
-                "FAILED" -> "Sync failed"
-                else -> "Pending sync"
+            val (syncIcon, syncColor, syncDesc) = when (call.syncStatus.uppercase()) {
+                "SYNCED" -> Triple(Icons.Default.CloudDone, CallogSemanticColors.SyncSuccess, "Synced to Cloud")
+                "UPLOADING" -> Triple(Icons.Default.CloudUpload, CallogSemanticColors.SyncInProgress, "Syncing...")
+                "FAILED" -> Triple(Icons.Default.CloudOff, CallogSemanticColors.SyncFailed, "Sync failed")
+                else -> Triple(Icons.Default.Cloud, CallogSemanticColors.SyncPending, "Pending sync")
             }
 
             Icon(
@@ -362,21 +409,28 @@ fun CallCard(
                 contentDescription = syncDesc,
                 tint = syncColor,
                 modifier = Modifier
-                    .size(20.dp)
+                    .size(18.dp)
                     .padding(end = 4.dp)
             )
 
-            IconButton(onClick = onFavoriteToggle) {
+            IconButton(
+                onClick = onFavoriteToggle,
+                modifier = Modifier.size(44.dp)
+            ) {
                 Icon(
                     imageVector = if (call.isFavorite) Icons.Default.Star else Icons.Default.StarBorder,
-                    contentDescription = "Toggle Favorite",
-                    tint = if (call.isFavorite) Amber500 else Slate400
+                    contentDescription = if (call.isFavorite) "Remove Favorite" else "Add Favorite",
+                    tint = if (call.isFavorite) AllSetAmber else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                    modifier = Modifier.scale(starScale)
                 )
             }
         }
     }
 }
 
+/**
+ * Reminder Card with tactile action buttons.
+ */
 @Composable
 fun ReminderItemCard(
     reminder: ReminderWithCall,
@@ -394,14 +448,14 @@ fun ReminderItemCard(
             Box(
                 modifier = Modifier
                     .size(40.dp)
-                    .clip(CircleShape)
-                    .background(Amber500.copy(alpha = 0.15f)),
+                    .clip(CallogShapes.avatar)
+                    .background(AllSetAmber.copy(alpha = 0.15f)),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
                     imageVector = Icons.Default.NotificationsActive,
                     contentDescription = null,
-                    tint = Amber500,
+                    tint = AllSetAmber,
                     modifier = Modifier.size(20.dp)
                 )
             }
@@ -413,35 +467,41 @@ fun ReminderItemCard(
                     text = "Callback: ${reminder.call.name ?: reminder.call.number}",
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold,
-                    color = Slate50
+                    color = MaterialTheme.colorScheme.onBackground
                 )
                 Spacer(modifier = Modifier.height(2.dp))
                 Text(
                     text = "Scheduled: $dateTimeString",
                     style = MaterialTheme.typography.bodySmall,
-                    color = Slate400
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 if (!reminder.reminder.notes.isNullOrEmpty()) {
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
                         text = reminder.reminder.notes,
                         style = MaterialTheme.typography.bodySmall,
-                        color = Teal300,
+                        color = MaterialTheme.colorScheme.primary,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
                 }
             }
 
-            IconButton(onClick = onCompleteClick) {
+            IconButton(
+                onClick = onCompleteClick,
+                modifier = Modifier.size(44.dp)
+            ) {
                 Icon(
                     imageVector = Icons.Default.CheckCircle,
                     contentDescription = "Mark Complete",
-                    tint = Green500
+                    tint = AllSetTeal
                 )
             }
 
-            IconButton(onClick = onDeleteClick) {
+            IconButton(
+                onClick = onDeleteClick,
+                modifier = Modifier.size(44.dp)
+            ) {
                 Icon(
                     imageVector = Icons.Default.Delete,
                     contentDescription = "Delete Reminder",
@@ -452,6 +512,9 @@ fun ReminderItemCard(
     }
 }
 
+/**
+ * Backward-compatible EmptyStateView delegating to ExpressiveEmptyState.
+ */
 @Composable
 fun EmptyStateView(
     title: String,
@@ -459,32 +522,84 @@ fun EmptyStateView(
     icon: ImageVector,
     modifier: Modifier = Modifier
 ) {
-    Column(
+    ExpressiveEmptyState(
+        icon = icon,
+        title = title,
+        description = description,
         modifier = modifier
-            .fillMaxWidth()
-            .padding(32.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
-    ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = null,
-            tint = Slate700,
-            modifier = Modifier.size(64.dp)
-        )
-        Spacer(modifier = Modifier.height(16.dp))
-        Text(
-            text = title,
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.Bold,
-            color = Slate50
-        )
-        Spacer(modifier = Modifier.height(8.dp))
-        Text(
-            text = description,
-            style = MaterialTheme.typography.bodyMedium,
-            color = Slate400,
-            textAlign = TextAlign.Center
-        )
+    )
+}
+
+// ==========================================
+// PREVIEWS
+// ==========================================
+
+@Preview(name = "Light Mode", showBackground = true)
+@Preview(name = "Dark Mode", uiMode = Configuration.UI_MODE_NIGHT_YES, showBackground = true)
+@Composable
+fun CallCardPreview() {
+    CallogTheme {
+        Box(modifier = Modifier.padding(16.dp)) {
+            CallCard(
+                call = CallLogEntry(
+                    id = 1L,
+                    name = "Alice Smith",
+                    number = "+1 (555) 234-5678",
+                    duration = 145,
+                    timestamp = System.currentTimeMillis() - 1000 * 60 * 15,
+                    callType = "INCOMING",
+                    recordingPath = "/path/to/recording.m4a",
+                    isFavorite = true,
+                    notes = "Discussed Q3 sales contract",
+                    tags = listOf("work", "client"),
+                    contactPhotoUri = null,
+                    syncStatus = "SYNCED"
+                ),
+                onClick = {},
+                onFavoriteToggle = {}
+            )
+        }
+    }
+}
+
+@Preview(name = "Stat Cards", showBackground = true)
+@Composable
+fun StatCardPreview() {
+    CallogTheme {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(16.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            StatCard(
+                title = "Total Calls",
+                value = "128",
+                icon = Icons.Default.Call,
+                iconColor = AllSetBlue,
+                modifier = Modifier.weight(1f)
+            )
+            StatCard(
+                title = "Avg Duration",
+                value = "3m 42s",
+                icon = Icons.Default.HourglassEmpty,
+                iconColor = AllSetTeal,
+                modifier = Modifier.weight(1f)
+            )
+        }
+    }
+}
+
+@Preview(name = "Tag Chips", showBackground = true)
+@Composable
+fun TagChipsPreview() {
+    CallogTheme {
+        Row(
+            modifier = Modifier.padding(16.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            TagChip(tag = "work")
+            TagChip(tag = "family")
+            TagChip(tag = "spam")
+            TagChip(tag = "friend")
+        }
     }
 }

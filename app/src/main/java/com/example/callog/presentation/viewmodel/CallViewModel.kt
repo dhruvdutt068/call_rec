@@ -16,6 +16,8 @@ import com.example.callog.domain.repository.FirestoreRepository
 import com.example.callog.domain.usecase.*
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -217,9 +219,47 @@ class CallViewModel @Inject constructor(
     private val _isDeveloperModeActive = MutableStateFlow(DeveloperLogger.isDeveloperModeEnabled)
     val isDeveloperModeActive = _isDeveloperModeActive.asStateFlow()
 
+    private var autoLockJob: Job? = null
+    private val _autoLockTimeoutMinutes = MutableStateFlow(5)
+    val autoLockTimeoutMinutes = _autoLockTimeoutMinutes.asStateFlow()
+
+    private val _lastActivityTimestamp = MutableStateFlow(System.currentTimeMillis())
+    val lastActivityTimestamp = _lastActivityTimestamp.asStateFlow()
+
+    fun setAutoLockTimeoutMinutes(minutes: Int) {
+        _autoLockTimeoutMinutes.value = minutes.coerceIn(1, 60)
+        if (_isDeveloperModeActive.value) {
+            restartAutoLockTimer()
+        }
+    }
+
+    fun recordDeveloperActivity() {
+        _lastActivityTimestamp.value = System.currentTimeMillis()
+        if (_isDeveloperModeActive.value) {
+            restartAutoLockTimer()
+        }
+    }
+
+    private fun restartAutoLockTimer() {
+        autoLockJob?.cancel()
+        val timeoutMs = _autoLockTimeoutMinutes.value * 60 * 1000L
+        autoLockJob = viewModelScope.launch {
+            delay(timeoutMs)
+            setDeveloperModeActive(false)
+            DeveloperLogger.info("AUTH", "Preferences and developer tools automatically locked after ${_autoLockTimeoutMinutes.value} minutes of inactivity.")
+        }
+    }
+
     fun setDeveloperModeActive(active: Boolean) {
         DeveloperLogger.isDeveloperModeEnabled = active
         _isDeveloperModeActive.value = active
+        if (active) {
+            _lastActivityTimestamp.value = System.currentTimeMillis()
+            restartAutoLockTimer()
+        } else {
+            autoLockJob?.cancel()
+            autoLockJob = null
+        }
     }
 
     private val _connectionStatus = MutableStateFlow<String?>(null) // null/idle, "TESTING", "SUCCESS", "FAILED:<error>"
@@ -519,9 +559,16 @@ class CallViewModel @Inject constructor(
             val phoneList = person.phoneNumbers.map { it.phoneNumber }.ifEmpty {
                 person.aliases.map { it.phoneNumber }.distinct()
             }
+            val cleanName = person.displayName.trim().let {
+                if (it.isBlank() || it == ".") {
+                    person.companyName?.trim()?.ifBlank { null }
+                        ?: phoneList.firstOrNull()
+                        ?: "Cloud Contact ${person.id.takeLast(4)}"
+                } else it
+            }
             ContactDto(
                 contactId = person.id,
-                name = person.displayName,
+                name = cleanName,
                 phoneNumbers = phoneList,
                 emails = emptyList(),
                 photoUri = null,

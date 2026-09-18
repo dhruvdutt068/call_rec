@@ -1,23 +1,32 @@
 package com.example.callog.presentation.screens.tasks
 
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import com.example.callog.presentation.components.EmptyStateView
+import com.example.callog.presentation.components.ExpressiveEmptyState
+import com.example.callog.presentation.components.ExpressiveSegmentedButtonGroup
+import com.example.callog.presentation.components.ExpressiveSegmentedButtonItem
 import com.example.callog.presentation.components.GlassyCard
+import com.example.callog.presentation.components.PriorityPill
 import com.example.callog.presentation.theme.*
 import com.example.callog.presentation.viewmodel.CallViewModel
 
@@ -86,26 +95,44 @@ fun TaskListScreen(
         }
     }
 
+    val pendingCount = remember(tasks) { tasks.count { !it.isCompleted } }
+    val completedCount = remember(tasks) { tasks.count { it.isCompleted } }
+
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("CRM Tasks", fontWeight = FontWeight.Bold) },
+                title = {
+                    Text(
+                        text = "CRM Tasks",
+                        style = CallogTypography.sectionTitle,
+                        fontWeight = FontWeight.Bold
+                    )
+                },
                 actions = {
-                    IconButton(onClick = onCreateTaskClick) {
-                        Icon(Icons.Default.Add, contentDescription = "Create Task", tint = Teal300)
+                    IconButton(
+                        onClick = onCreateTaskClick,
+                        modifier = Modifier.sizeIn(minWidth = 48.dp, minHeight = 48.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Add,
+                            contentDescription = "Create Task",
+                            tint = MaterialTheme.colorScheme.primary
+                        )
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceVariant,
-                    titleContentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                    containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+                    titleContentColor = MaterialTheme.colorScheme.onSurface,
+                    actionIconContentColor = MaterialTheme.colorScheme.onSurface
                 )
             )
         },
         floatingActionButton = {
             FloatingActionButton(
                 onClick = onCreateTaskClick,
-                containerColor = Teal300,
-                contentColor = Slate900
+                containerColor = MaterialTheme.colorScheme.primary,
+                contentColor = MaterialTheme.colorScheme.onPrimary,
+                shape = CallogShapes.interactive
             ) {
                 Icon(Icons.Default.Add, contentDescription = "Add Task")
             }
@@ -117,27 +144,20 @@ fun TaskListScreen(
                 .fillMaxSize()
                 .padding(innerPadding)
                 .padding(horizontal = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+            verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
-            // Filter chips
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 8.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                listOf("All", "Pending", "Completed").forEach { filter ->
-                    FilterChip(
-                        selected = selectedFilter == filter,
-                        onClick = { selectedFilter = filter },
-                        label = { Text(filter) },
-                        colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = Teal300.copy(alpha = 0.2f),
-                            selectedLabelColor = Teal300
-                        )
-                    )
-                }
-            }
+            // Expressive Segmented Button Group
+            val filterItems = listOf(
+                ExpressiveSegmentedButtonItem(key = "All", label = "All", count = tasks.size),
+                ExpressiveSegmentedButtonItem(key = "Pending", label = "Pending", count = pendingCount),
+                ExpressiveSegmentedButtonItem(key = "Completed", label = "Done", count = completedCount)
+            )
+            ExpressiveSegmentedButtonGroup(
+                items = filterItems,
+                selectedKey = selectedFilter,
+                onItemSelected = { selectedFilter = it },
+                modifier = Modifier.padding(top = 8.dp)
+            )
 
             if (filteredTasks.isEmpty()) {
                 Box(
@@ -146,10 +166,12 @@ fun TaskListScreen(
                         .weight(1f),
                     contentAlignment = Alignment.Center
                 ) {
-                    EmptyStateView(
-                        title = "No Tasks",
-                        description = "You are all caught up! Create a new task to stay organized.",
-                        icon = Icons.Default.CheckCircle
+                    ExpressiveEmptyState(
+                        title = if (selectedFilter == "Completed") "No Completed Tasks" else "No Tasks",
+                        description = if (selectedFilter == "Completed") "Completed tasks will be recorded here." else "You are all caught up! Create a new task to stay organized.",
+                        icon = Icons.Outlined.CheckCircle,
+                        actionLabel = if (selectedFilter != "Completed") "Create Task" else null,
+                        onActionClick = onCreateTaskClick
                     )
                 }
             } else {
@@ -185,11 +207,13 @@ private fun TaskCard(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val priorityColor = when (task.priority) {
-        "High" -> Red500
-        "Medium" -> Amber500
-        else -> Teal300
-    }
+    val checkInteraction = remember { MutableInteractionSource() }
+    val checkPressed by checkInteraction.collectIsPressedAsState()
+    val checkScale by animateFloatAsState(
+        targetValue = if (checkPressed) 0.85f else 1f,
+        animationSpec = CallogMotion.bouncySpring(),
+        label = "checkScale"
+    )
 
     GlassyCard(
         modifier = modifier,
@@ -198,23 +222,31 @@ private fun TaskCard(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(8.dp),
+                .padding(12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            IconButton(onClick = onToggleComplete) {
+            IconButton(
+                onClick = onToggleComplete,
+                interactionSource = checkInteraction,
+                modifier = Modifier
+                    .sizeIn(minWidth = 48.dp, minHeight = 48.dp)
+                    .scale(checkScale)
+            ) {
                 Icon(
                     imageVector = if (task.isCompleted) Icons.Default.CheckCircle else Icons.Default.RadioButtonUnchecked,
-                    contentDescription = "Toggle Complete",
-                    tint = if (task.isCompleted) Teal300 else Slate400
+                    contentDescription = if (task.isCompleted) "Mark incomplete" else "Mark complete",
+                    tint = if (task.isCompleted) CallogSemanticColors.SyncSuccess else MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
+
+            Spacer(modifier = Modifier.width(4.dp))
 
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = task.title,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    color = if (task.isCompleted) Slate400 else Slate50,
+                    style = CallogTypography.entityName,
+                    color = if (task.isCompleted) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface,
+                    textDecoration = if (task.isCompleted) TextDecoration.LineThrough else TextDecoration.None,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
@@ -223,24 +255,11 @@ private fun TaskCard(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    // Priority tag
-                    Box(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(4.dp))
-                            .background(priorityColor.copy(alpha = 0.15f))
-                            .padding(horizontal = 6.dp, vertical = 2.dp)
-                    ) {
-                        Text(
-                            text = task.priority,
-                            style = MaterialTheme.typography.labelSmall,
-                            color = priorityColor,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
+                    PriorityPill(priority = task.priority)
                     Text(
                         text = "Due: ${task.dueDate}",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = Slate400
+                        style = CallogTypography.denseData,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             }
@@ -248,7 +267,7 @@ private fun TaskCard(
             Icon(
                 imageVector = Icons.Default.ChevronRight,
                 contentDescription = "Details",
-                tint = Slate400
+                tint = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
     }
@@ -276,15 +295,28 @@ fun CreateTaskScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("New Follow-up Task", fontWeight = FontWeight.Bold) },
+                title = {
+                    Text(
+                        text = "New Follow-up Task",
+                        style = CallogTypography.sectionTitle,
+                        fontWeight = FontWeight.Bold
+                    )
+                },
                 navigationIcon = {
-                    IconButton(onClick = onBackClick) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                    IconButton(
+                        onClick = onBackClick,
+                        modifier = Modifier.sizeIn(minWidth = 48.dp, minHeight = 48.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Back"
+                        )
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceVariant,
-                    titleContentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                    containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+                    titleContentColor = MaterialTheme.colorScheme.onSurface,
+                    navigationIconContentColor = MaterialTheme.colorScheme.onSurface
                 )
             )
         },
@@ -302,14 +334,35 @@ fun CreateTaskScreen(
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(8.dp),
+                            .padding(12.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(Icons.Default.Person, contentDescription = null, tint = Teal300)
+                        Surface(
+                            shape = CallogShapes.avatar,
+                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
+                            modifier = Modifier.size(36.dp)
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(
+                                    imageVector = Icons.Default.Person,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                        }
                         Spacer(modifier = Modifier.width(12.dp))
                         Column {
-                            Text("Linked Contact", style = MaterialTheme.typography.labelSmall, color = Slate400)
-                            Text(initialContact.name, style = MaterialTheme.typography.titleSmall, color = Slate50)
+                            Text(
+                                text = "Linked Contact",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Text(
+                                text = initialContact.name,
+                                style = MaterialTheme.typography.titleSmall,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
                         }
                     }
                 }
@@ -321,6 +374,7 @@ fun CreateTaskScreen(
                 label = { Text("Task Title") },
                 placeholder = { Text("e.g., Call back about contract terms") },
                 modifier = Modifier.fillMaxWidth(),
+                shape = CallogShapes.card,
                 singleLine = true
             )
 
@@ -330,25 +384,29 @@ fun CreateTaskScreen(
                 label = { Text("Description") },
                 placeholder = { Text("Add notes and details...") },
                 modifier = Modifier.fillMaxWidth(),
+                shape = CallogShapes.card,
                 minLines = 3
             )
 
-            Text("Priority", style = MaterialTheme.typography.titleSmall, color = Slate300)
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                listOf("High", "Medium", "Low").forEach { p ->
-                    FilterChip(
-                        selected = priority == p,
-                        onClick = { priority = p },
-                        label = { Text(p) }
-                    )
-                }
-            }
+            Text(
+                text = "Priority Level",
+                style = CallogTypography.sectionTitle,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            val priorityOptions = listOf("High", "Medium", "Low")
+            val priorityItems = priorityOptions.map { ExpressiveSegmentedButtonItem(key = it, label = it) }
+            ExpressiveSegmentedButtonGroup(
+                items = priorityItems,
+                selectedKey = priority,
+                onItemSelected = { priority = it }
+            )
 
             OutlinedTextField(
                 value = dueDate,
                 onValueChange = { dueDate = it },
                 label = { Text("Due Date & Time") },
                 modifier = Modifier.fillMaxWidth(),
+                shape = CallogShapes.card,
                 singleLine = true
             )
 
@@ -375,9 +433,9 @@ fun CreateTaskScreen(
                 },
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(50.dp),
+                    .height(52.dp),
                 enabled = title.isNotBlank(),
-                colors = ButtonDefaults.buttonColors(containerColor = Teal300, contentColor = Slate900)
+                shape = CallogShapes.interactive
             ) {
                 Text("Save Task", fontWeight = FontWeight.Bold)
             }
@@ -397,15 +455,28 @@ fun TaskDetailsScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Task Details", fontWeight = FontWeight.Bold) },
+                title = {
+                    Text(
+                        text = "Task Details",
+                        style = CallogTypography.sectionTitle,
+                        fontWeight = FontWeight.Bold
+                    )
+                },
                 navigationIcon = {
-                    IconButton(onClick = onBackClick) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                    IconButton(
+                        onClick = onBackClick,
+                        modifier = Modifier.sizeIn(minWidth = 48.dp, minHeight = 48.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Back"
+                        )
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceVariant,
-                    titleContentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                    containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+                    titleContentColor = MaterialTheme.colorScheme.onSurface,
+                    navigationIconContentColor = MaterialTheme.colorScheme.onSurface
                 )
             )
         },
@@ -418,7 +489,13 @@ fun TaskDetailsScreen(
                     .padding(innerPadding),
                 contentAlignment = Alignment.Center
             ) {
-                Text("Task not found", color = Slate400)
+                ExpressiveEmptyState(
+                    title = "Task Not Found",
+                    description = "This task may have been removed or does not exist.",
+                    icon = Icons.Outlined.CheckCircle,
+                    actionLabel = "Go Back",
+                    onActionClick = onBackClick
+                )
             }
         } else {
             Column(
@@ -432,21 +509,33 @@ fun TaskDetailsScreen(
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(12.dp),
-                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                            .padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(14.dp)
                     ) {
-                        Text(task.title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = Slate50)
-                        Text(task.description, style = MaterialTheme.typography.bodyMedium, color = Slate300)
+                        Text(
+                            text = task.title,
+                            style = CallogTypography.heroTitle,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Text(
+                            text = task.description,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
 
-                        HorizontalDivider(color = Slate700)
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
 
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text("Priority", color = Slate400)
-                            Text(task.priority, fontWeight = FontWeight.Bold, color = if (task.priority == "High") Red500 else Amber500)
+                            Text(
+                                text = "Priority",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            PriorityPill(priority = task.priority)
                         }
 
                         Row(
@@ -454,8 +543,16 @@ fun TaskDetailsScreen(
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text("Due Date", color = Slate400)
-                            Text(task.dueDate, color = Slate50)
+                            Text(
+                                text = "Due Date",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Text(
+                                text = task.dueDate,
+                                style = CallogTypography.denseData,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
                         }
 
                         if (task.linkedContactName != null) {
@@ -464,8 +561,17 @@ fun TaskDetailsScreen(
                                 horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Text("Linked Contact", color = Slate400)
-                                Text(task.linkedContactName, fontWeight = FontWeight.SemiBold, color = Teal300)
+                                Text(
+                                    text = "Linked Contact",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Text(
+                                    text = task.linkedContactName,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
                             }
                         }
                     }
@@ -483,15 +589,24 @@ fun TaskDetailsScreen(
                     },
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(50.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = if (task.isCompleted) Amber500 else Teal300,
-                        contentColor = Slate900
-                    )
+                        .height(52.dp),
+                    shape = CallogShapes.interactive,
+                    colors = if (task.isCompleted) {
+                        ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                            contentColor = MaterialTheme.colorScheme.onSecondaryContainer
+                        )
+                    } else {
+                        ButtonDefaults.buttonColors()
+                    }
                 ) {
-                    Text(if (task.isCompleted) "Mark as Incomplete" else "Mark as Completed", fontWeight = FontWeight.Bold)
+                    Text(
+                        text = if (task.isCompleted) "Mark as Incomplete" else "Mark as Completed",
+                        fontWeight = FontWeight.Bold
+                    )
                 }
             }
         }
     }
 }
+

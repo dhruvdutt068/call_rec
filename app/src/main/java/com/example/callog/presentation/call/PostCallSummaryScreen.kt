@@ -417,3 +417,32 @@ fun PostCallSummaryScreen(
         }
     }
 }
+
+@androidx.compose.ui.tooling.preview.Preview(name = "Post Call Summary Screen", showBackground = true)
+@Composable
+fun PostCallSummaryScreenPreview() {
+    CallogTheme {
+        PostCallSummaryScreen(
+            session = CallSessionState(
+                callId = "call_wrapup_01",
+                phoneNumber = "+91 98765 43210",
+                callerDisplayName = "Sarah Connor",
+                companyName = "Cyberdyne Systems",
+                direction = CallDirection.INCOMING,
+                durationSeconds = 184,
+                initials = "SC",
+                personId = "person_456",
+                simInfo = com.example.callog.sim.SimInfo(
+                    subscriptionId = 1,
+                    slotIndex = 0,
+                    carrierName = "Jio 5G",
+                    displayName = "Work SIM",
+                    phoneNumber = "+919876543210"
+                )
+            ),
+            onSaveWrapUp = { _, _, _, _ -> },
+            onOpenPersonDetails = {},
+            onDismiss = {}
+        )
+    }
+}

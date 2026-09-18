@@ -90,19 +90,32 @@ class AllSetBackStack<T : Any>(
 }
 
 /**
- * Remembers an [AllSetBackStack] across configuration changes.
+ * Remembers an [AllSetBackStack] across configuration changes using [Nav3StatePersistence].
  */
 @Composable
-fun <T : Any> rememberAllSetBackStack(
+fun <T : AllSetNavKey> rememberAllSetBackStack(
     vararg initialKeys: T
 ): AllSetBackStack<T> {
     require(initialKeys.isNotEmpty()) { "Back stack must have at least one initial destination key." }
+    val rootKey = initialKeys.first()
     return rememberSaveable(
-        saver = Saver(
-            save = { stack -> stack.items.toList() },
-            restore = { saved -> AllSetBackStack(saved) }
-        )
+        saver = com.example.callog.presentation.navigation3.Nav3StatePersistence.allSetBackStackSaver(rootKey)
     ) {
         AllSetBackStack(initialKeys.toList())
     }
 }
+
+/**
+ * Remembers a generic [AllSetBackStack] with a dedicated [Saver].
+ */
+@Composable
+fun <T : Any> rememberGenericAllSetBackStack(
+    saver: Saver<AllSetBackStack<T>, out Any>,
+    vararg initialKeys: T
+): AllSetBackStack<T> {
+    require(initialKeys.isNotEmpty()) { "Back stack must have at least one initial destination key." }
+    return rememberSaveable(saver = saver) {
+        AllSetBackStack(initialKeys.toList())
+    }
+}
+

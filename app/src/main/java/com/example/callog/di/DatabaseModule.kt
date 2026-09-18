@@ -371,6 +371,44 @@ object DatabaseModule {
         }
     }
 
+    private val MIGRATION_19_20 = object : Migration(19, 20) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            try {
+                db.execSQL("""
+                    CREATE TABLE IF NOT EXISTS `app_presets` (
+                        `id` TEXT NOT NULL,
+                        `name` TEXT NOT NULL,
+                        `environment` TEXT NOT NULL,
+                        `description` TEXT,
+                        `supabaseUrl` TEXT,
+                        `firebaseProjectId` TEXT,
+                        `storageBucket` TEXT,
+                        `apiBaseUrl` TEXT,
+                        `featuresJson` TEXT NOT NULL DEFAULT '{}',
+                        `isActive` INTEGER NOT NULL DEFAULT 0,
+                        `createdAt` INTEGER NOT NULL,
+                        `updatedAt` INTEGER NOT NULL,
+                        PRIMARY KEY(`id`)
+                    )
+                """.trimIndent())
+            } catch (e: Exception) {
+                android.util.Log.e("DatabaseModule", "Failed to migrate database to v20", e)
+            }
+        }
+    }
+
+    private val MIGRATION_20_21 = object : Migration(20, 21) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            try {
+                db.execSQL("ALTER TABLE `app_presets` ADD COLUMN `firebaseAppId` TEXT")
+                db.execSQL("ALTER TABLE `app_presets` ADD COLUMN `gcmSenderId` TEXT")
+                db.execSQL("ALTER TABLE `app_presets` ADD COLUMN `databaseUrl` TEXT")
+            } catch (e: Exception) {
+                android.util.Log.e("DatabaseModule", "Failed to migrate database to v21", e)
+            }
+        }
+    }
+
     @Provides
     @Singleton
     fun provideDatabase(
@@ -380,7 +418,7 @@ object DatabaseModule {
             context,
             CallVaultDatabase::class.java,
             Constants.DATABASE_NAME
-        ).addMigrations(MIGRATION_5_6, MIGRATION_13_14, MIGRATION_14_15, MIGRATION_15_16, MIGRATION_16_17, MIGRATION_17_18, MIGRATION_18_19)
+        ).addMigrations(MIGRATION_5_6, MIGRATION_13_14, MIGRATION_14_15, MIGRATION_15_16, MIGRATION_16_17, MIGRATION_17_18, MIGRATION_18_19, MIGRATION_19_20, MIGRATION_20_21)
          .fallbackToDestructiveMigration()
          .build()
      }
@@ -433,5 +471,10 @@ object DatabaseModule {
     @Provides
     fun provideConversationDao(db: CallVaultDatabase): com.example.callog.data.local.dao.ConversationDao {
         return db.conversationDao()
+    }
+
+    @Provides
+    fun providePresetDao(db: CallVaultDatabase): com.example.callog.data.local.dao.PresetDao {
+        return db.presetDao()
     }
 }

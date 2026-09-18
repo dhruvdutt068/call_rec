@@ -141,3 +141,53 @@ val Typography = Typography(
         letterSpacing = 0.5.sp
     )
 )
+
+/**
+ * Material 3 Expressive Typography Tokens for Callog CRM.
+ */
+object CallogTypography {
+    val displayMetric = TextStyle(
+        fontFamily = ManropeFontFamily,
+        fontWeight = FontWeight.Bold,
+        fontSize = 28.sp,
+        lineHeight = 34.sp,
+        letterSpacing = (-0.2).sp
+    )
+
+    val heroTitle = TextStyle(
+        fontFamily = EbGaramondFontFamily,
+        fontWeight = FontWeight.Bold,
+        fontSize = 28.sp,
+        lineHeight = 34.sp
+    )
+
+    val sectionTitle = TextStyle(
+        fontFamily = ManropeFontFamily,
+        fontWeight = FontWeight.Bold,
+        fontSize = 16.sp,
+        lineHeight = 22.sp,
+        letterSpacing = 0.15.sp
+    )
+
+    val entityName = TextStyle(
+        fontFamily = ManropeFontFamily,
+        fontWeight = FontWeight.SemiBold,
+        fontSize = 16.sp,
+        lineHeight = 22.sp
+    )
+
+    val statusLabel = TextStyle(
+        fontFamily = ManropeFontFamily,
+        fontWeight = FontWeight.Bold,
+        fontSize = 11.sp,
+        lineHeight = 14.sp,
+        letterSpacing = 0.3.sp
+    )
+
+    val denseData = TextStyle(
+        fontFamily = FontFamily.Monospace,
+        fontWeight = FontWeight.Medium,
+        fontSize = 12.sp,
+        lineHeight = 16.sp
+    )
+}

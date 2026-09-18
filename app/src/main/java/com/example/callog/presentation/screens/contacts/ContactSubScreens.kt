@@ -19,7 +19,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.example.callog.presentation.components.EmptyStateView
+import com.example.callog.presentation.components.ExpressiveEmptyState
 import com.example.callog.presentation.components.GlassyCard
 import com.example.callog.presentation.theme.*
 import com.example.callog.presentation.viewmodel.CallViewModel
@@ -64,17 +64,36 @@ fun WhatsAppScreen(
             TopAppBar(
                 title = {
                     Column {
-                        Text("WhatsApp • ${contact?.name ?: contactId}", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
                         Text(
-                            text = if (isAiHandling) "🟢 AI Active • Auto-Replying" else "🟠 Human Handling • ${conversation?.assignedUserName ?: "Assigned"}",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = if (isAiHandling) Green500 else Amber500
+                            text = "WhatsApp • ${contact?.name ?: contactId}",
+                            style = CallogTypography.sectionTitle,
+                            color = MaterialTheme.colorScheme.onSurface
                         )
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Icon(
+                                imageVector = if (isAiHandling) Icons.Default.SmartToy else Icons.Default.Person,
+                                contentDescription = null,
+                                tint = if (isAiHandling) CallogSemanticColors.LeadColors.Won else AllSetAmber,
+                                modifier = Modifier.size(12.dp)
+                            )
+                            Text(
+                                text = if (isAiHandling) "AI Active • Auto-Replying" else "Human Handling • ${conversation?.assignedUserName ?: "Assigned"}",
+                                style = CallogTypography.statusLabel,
+                                color = if (isAiHandling) CallogSemanticColors.LeadColors.Won else AllSetAmber
+                            )
+                        }
                     }
                 },
                 navigationIcon = {
                     IconButton(onClick = onBackClick) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Back",
+                            tint = MaterialTheme.colorScheme.onSurface
+                        )
                     }
                 },
                 actions = {
@@ -85,12 +104,16 @@ fun WhatsAppScreen(
                         }
                         context.startActivity(intent)
                     }) {
-                        Icon(Icons.Default.Share, contentDescription = "External WhatsApp", tint = Slate300)
+                        Icon(
+                            imageVector = Icons.Default.Share,
+                            contentDescription = "External WhatsApp",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceVariant,
-                    titleContentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                    containerColor = MaterialTheme.colorScheme.surface,
+                    titleContentColor = MaterialTheme.colorScheme.onSurface
                 )
             )
         },
@@ -116,47 +139,69 @@ fun WhatsAppScreen(
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
                             Box(
                                 modifier = Modifier
-                                    .size(10.dp)
+                                    .size(28.dp)
                                     .clip(CircleShape)
-                                    .background(if (isAiHandling) Green500 else Amber500)
-                            )
+                                    .background(
+                                        if (isAiHandling) CallogSemanticColors.LeadColors.Won.copy(alpha = 0.15f)
+                                        else AllSetAmber.copy(alpha = 0.15f)
+                                    ),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = if (isAiHandling) Icons.Default.SmartToy else Icons.Default.Person,
+                                    contentDescription = null,
+                                    tint = if (isAiHandling) CallogSemanticColors.LeadColors.Won else AllSetAmber,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            }
                             Text(
                                 text = if (isAiHandling) "AI Agent Active" else "Human Handling",
-                                style = MaterialTheme.typography.titleSmall,
-                                fontWeight = FontWeight.Bold,
-                                color = if (isAiHandling) Green500 else Amber500
+                                style = CallogTypography.entityName,
+                                color = if (isAiHandling) CallogSemanticColors.LeadColors.Won else AllSetAmber
                             )
                         }
 
                         if (isAiHandling) {
                             Button(
                                 onClick = { showHandoverDialog = true },
-                                colors = ButtonDefaults.buttonColors(containerColor = Amber500, contentColor = Slate900),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = AllSetAmber,
+                                    contentColor = Slate900
+                                ),
+                                shape = CallogShapes.buttonShape,
                                 contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
                             ) {
                                 Icon(Icons.Default.Person, contentDescription = null, modifier = Modifier.size(16.dp))
                                 Spacer(modifier = Modifier.width(6.dp))
-                                Text("Handover to Rep", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+                                Text("Handover to Rep", style = CallogTypography.statusLabel)
                             }
                         } else {
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                 OutlinedButton(
                                     onClick = { showHandoverDialog = true },
+                                    shape = CallogShapes.buttonShape,
                                     contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp)
                                 ) {
-                                    Text("Reassign", style = MaterialTheme.typography.labelSmall)
+                                    Text("Reassign", style = CallogTypography.statusLabel)
                                 }
                                 Button(
                                     onClick = { conversation?.id?.let { viewModel.releaseConversationToAi(it) } },
-                                    colors = ButtonDefaults.buttonColors(containerColor = Teal300, contentColor = Slate900),
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = MaterialTheme.colorScheme.primary,
+                                        contentColor = MaterialTheme.colorScheme.onPrimary
+                                    ),
+                                    shape = CallogShapes.buttonShape,
                                     contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
                                 ) {
                                     Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
                                     Spacer(modifier = Modifier.width(6.dp))
-                                    Text("Return to AI", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+                                    Text("Return to AI", style = CallogTypography.statusLabel)
                                 }
                             }
                         }
@@ -169,7 +214,7 @@ fun WhatsAppScreen(
                             "Assigned to ${conversation?.assignedUserName ?: "Sales Rep"}. Reason: ${conversation?.handoverReason?.name ?: "Manual"}. Automated AI replies are paused."
                         },
                         style = MaterialTheme.typography.bodySmall,
-                        color = Slate400
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             }
@@ -184,10 +229,11 @@ fun WhatsAppScreen(
             ) {
                 if (messages.isEmpty()) {
                     item {
-                        EmptyStateView(
+                        ExpressiveEmptyState(
                             title = "No Messages Yet",
                             description = "Start the conversation or wait for incoming WhatsApp messages.",
-                            icon = Icons.Default.ChatBubbleOutline
+                            icon = Icons.Default.ChatBubbleOutline,
+                            modifier = Modifier.fillMaxWidth().padding(top = 32.dp)
                         )
                     }
                 } else {
@@ -208,6 +254,7 @@ fun WhatsAppScreen(
                     onValueChange = { messageText = it },
                     placeholder = { Text("Reply as Sales Rep...") },
                     modifier = Modifier.weight(1f),
+                    shape = CallogShapes.inputShape,
                     maxLines = 3,
                     singleLine = false
                 )
@@ -224,10 +271,14 @@ fun WhatsAppScreen(
                     modifier = Modifier
                         .size(48.dp)
                         .clip(CircleShape)
-                        .background(Teal300),
+                        .background(MaterialTheme.colorScheme.primary),
                     enabled = messageText.isNotBlank()
                 ) {
-                    Icon(Icons.Default.Send, contentDescription = "Send Reply", tint = Slate900)
+                    Icon(
+                        imageVector = Icons.Default.Send,
+                        contentDescription = "Send Reply",
+                        tint = MaterialTheme.colorScheme.onPrimary
+                    )
                 }
             }
         }
@@ -237,10 +288,20 @@ fun WhatsAppScreen(
     if (showHandoverDialog) {
         AlertDialog(
             onDismissRequest = { showHandoverDialog = false },
-            title = { Text("Escalate & Handover Conversation", fontWeight = FontWeight.Bold) },
+            title = {
+                Text(
+                    text = "Escalate & Handover Conversation",
+                    style = CallogTypography.sectionTitle,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+            },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text("Select reason for escalating conversation to a human sales rep:", style = MaterialTheme.typography.bodyMedium, color = Slate300)
+                    Text(
+                        text = "Select reason for escalating conversation to a human sales rep:",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                     
                     com.example.callog.domain.model.HandoverReason.entries.forEach { reason ->
                         Row(
@@ -252,7 +313,11 @@ fun WhatsAppScreen(
                                 onClick = { selectedReason = reason }
                             )
                             Spacer(modifier = Modifier.width(8.dp))
-                            Text(reason.name.replace("_", " "), style = MaterialTheme.typography.bodyMedium)
+                            Text(
+                                text = reason.name.replace("_", " "),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
                         }
                     }
 
@@ -261,6 +326,7 @@ fun WhatsAppScreen(
                         onValueChange = { repName = it },
                         label = { Text("Assignee Name") },
                         singleLine = true,
+                        shape = CallogShapes.inputShape,
                         modifier = Modifier.fillMaxWidth()
                     )
                 }
@@ -278,16 +344,25 @@ fun WhatsAppScreen(
                         }
                         showHandoverDialog = false
                     },
-                    colors = ButtonDefaults.buttonColors(containerColor = Amber500, contentColor = Slate900)
+                    shape = CallogShapes.buttonShape,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = AllSetAmber,
+                        contentColor = Slate900
+                    )
                 ) {
-                    Text("Confirm Handover", fontWeight = FontWeight.Bold)
+                    Text("Confirm Handover", style = CallogTypography.sectionTitle)
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showHandoverDialog = false }) {
-                    Text("Cancel")
+                TextButton(
+                    onClick = { showHandoverDialog = false },
+                    shape = CallogShapes.buttonShape
+                ) {
+                    Text("Cancel", style = CallogTypography.statusLabel)
                 }
-            }
+            },
+            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+            shape = CallogShapes.modalShape
         )
     }
 }
@@ -305,14 +380,14 @@ private fun MessageBubble(msg: com.example.callog.domain.model.ConversationMessa
             contentAlignment = Alignment.Center
         ) {
             Surface(
-                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
-                shape = CircleShape,
-                border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.3f))
+                color = MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.7f),
+                shape = CallogShapes.pillShape,
+                border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
             ) {
                 Text(
                     text = msg.messageText,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = Amber500,
+                    style = CallogTypography.statusLabel,
+                    color = AllSetAmber,
                     modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)
                 )
             }
@@ -322,23 +397,34 @@ private fun MessageBubble(msg: com.example.callog.domain.model.ConversationMessa
             modifier = Modifier.fillMaxWidth(),
             horizontalAlignment = if (isCustomer) Alignment.Start else Alignment.End
         ) {
-            // Sender Badge
+            // Sender Badge with Vector Icon instead of Emoji
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(4.dp),
                 modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
             ) {
+                if (isAi) {
+                    Icon(
+                        imageVector = Icons.Default.SmartToy,
+                        contentDescription = "AI",
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(12.dp)
+                    )
+                } else if (isHuman) {
+                    Icon(
+                        imageVector = Icons.Default.Person,
+                        contentDescription = "Human Rep",
+                        tint = MaterialTheme.colorScheme.secondary,
+                        modifier = Modifier.size(12.dp)
+                    )
+                }
                 Text(
-                    text = when {
-                        isAi -> "🤖 ${msg.senderName}"
-                        isHuman -> "👤 ${msg.senderName}"
-                        else -> msg.senderName
-                    },
-                    style = MaterialTheme.typography.labelSmall,
+                    text = msg.senderName,
+                    style = CallogTypography.statusLabel,
                     color = when {
-                        isAi -> Color(0xFFB8BCFF)
-                        isHuman -> Teal300
-                        else -> Slate400
+                        isAi -> MaterialTheme.colorScheme.primary
+                        isHuman -> MaterialTheme.colorScheme.secondary
+                        else -> MaterialTheme.colorScheme.onSurfaceVariant
                     },
                     fontWeight = FontWeight.Bold
                 )
@@ -347,17 +433,17 @@ private fun MessageBubble(msg: com.example.callog.domain.model.ConversationMessa
             // Message Bubble Surface
             Surface(
                 color = when {
-                    isCustomer -> MaterialTheme.colorScheme.surfaceVariant
-                    isAi -> Color(0xFF2E2C54)
-                    else -> Color(0xFF1E3D34)
+                    isCustomer -> MaterialTheme.colorScheme.surfaceContainerHigh
+                    isAi -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.7f)
+                    else -> MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.7f)
                 },
-                shape = MaterialTheme.shapes.medium,
+                shape = CallogShapes.cardShape,
                 border = androidx.compose.foundation.BorderStroke(
                     1.dp,
                     when {
-                        isCustomer -> MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
-                        isAi -> Color(0xFF4A4FD8).copy(alpha = 0.5f)
-                        else -> Teal300.copy(alpha = 0.5f)
+                        isCustomer -> MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)
+                        isAi -> MaterialTheme.colorScheme.primary.copy(alpha = 0.3f)
+                        else -> MaterialTheme.colorScheme.secondary.copy(alpha = 0.3f)
                     }
                 ),
                 modifier = Modifier.widthIn(max = 280.dp)
@@ -391,15 +477,25 @@ fun EditContactScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Edit Client Details", fontWeight = FontWeight.Bold) },
+                title = {
+                    Text(
+                        text = "Edit Client Details",
+                        style = CallogTypography.sectionTitle,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                },
                 navigationIcon = {
                     IconButton(onClick = onBackClick) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Back",
+                            tint = MaterialTheme.colorScheme.onSurface
+                        )
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceVariant,
-                    titleContentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                    containerColor = MaterialTheme.colorScheme.surface,
+                    titleContentColor = MaterialTheme.colorScheme.onSurface
                 )
             )
         },
@@ -412,12 +508,17 @@ fun EditContactScreen(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            Text("Editing Canonical Contact ID: $contactId", color = Teal300, style = MaterialTheme.typography.labelMedium)
+            Text(
+                text = "Editing Canonical Contact ID: $contactId",
+                color = MaterialTheme.colorScheme.primary,
+                style = CallogTypography.statusLabel
+            )
 
             OutlinedTextField(
                 value = name,
                 onValueChange = { name = it },
                 label = { Text("Client Name") },
+                shape = CallogShapes.inputShape,
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true
             )
@@ -426,6 +527,7 @@ fun EditContactScreen(
                 value = email,
                 onValueChange = { email = it },
                 label = { Text("Email Address") },
+                shape = CallogShapes.inputShape,
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true
             )
@@ -436,11 +538,15 @@ fun EditContactScreen(
                 onClick = {
                     onSaveSuccess(name.trim())
                 },
-                modifier = Modifier.fillMaxWidth().height(50.dp),
+                modifier = Modifier.fillMaxWidth().height(52.dp),
+                shape = CallogShapes.buttonShape,
                 enabled = name.isNotBlank(),
-                colors = ButtonDefaults.buttonColors(containerColor = Teal300, contentColor = Slate900)
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    contentColor = MaterialTheme.colorScheme.onPrimary
+                )
             ) {
-                Text("Save Changes", fontWeight = FontWeight.Bold)
+                Text("Save Changes", style = CallogTypography.sectionTitle)
             }
         }
     }
@@ -460,15 +566,25 @@ fun AddFeedbackScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Add Client Feedback", fontWeight = FontWeight.Bold) },
+                title = {
+                    Text(
+                        text = "Add Client Feedback",
+                        style = CallogTypography.sectionTitle,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                },
                 navigationIcon = {
                     IconButton(onClick = onBackClick) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Back",
+                            tint = MaterialTheme.colorScheme.onSurface
+                        )
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceVariant,
-                    titleContentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                    containerColor = MaterialTheme.colorScheme.surface,
+                    titleContentColor = MaterialTheme.colorScheme.onSurface
                 )
             )
         },
@@ -481,15 +597,23 @@ fun AddFeedbackScreen(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            Text("Client Satisfaction Rating", style = MaterialTheme.typography.titleMedium, color = Slate50)
+            Text(
+                text = "Client Satisfaction Rating",
+                style = CallogTypography.heroTitle,
+                color = MaterialTheme.colorScheme.onSurface
+            )
 
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 (1..5).forEach { star ->
-                    IconButton(onClick = { rating = star }) {
+                    IconButton(
+                        onClick = { rating = star },
+                        modifier = Modifier.size(48.dp)
+                    ) {
                         Icon(
                             imageVector = if (star <= rating) Icons.Default.Star else Icons.Default.StarBorder,
                             contentDescription = "$star Stars",
-                            tint = Amber500
+                            tint = AllSetAmber,
+                            modifier = Modifier.size(28.dp)
                         )
                     }
                 }
@@ -500,6 +624,7 @@ fun AddFeedbackScreen(
                 onValueChange = { notes = it },
                 label = { Text("Feedback Notes / Key Highlights") },
                 placeholder = { Text("e.g. Expressed high interest in enterprise plan...") },
+                shape = CallogShapes.inputShape,
                 modifier = Modifier.fillMaxWidth(),
                 minLines = 4
             )
@@ -508,11 +633,16 @@ fun AddFeedbackScreen(
 
             Button(
                 onClick = { onFeedbackSubmitted(rating, notes.trim()) },
-                modifier = Modifier.fillMaxWidth().height(50.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = Teal300, contentColor = Slate900)
+                modifier = Modifier.fillMaxWidth().height(52.dp),
+                shape = CallogShapes.buttonShape,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    contentColor = MaterialTheme.colorScheme.onPrimary
+                )
             ) {
-                Text("Submit Feedback", fontWeight = FontWeight.Bold)
+                Text("Submit Feedback", style = CallogTypography.sectionTitle)
             }
         }
     }
 }
+

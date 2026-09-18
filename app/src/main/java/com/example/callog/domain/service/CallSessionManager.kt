@@ -45,7 +45,9 @@ class CallSessionManager @Inject constructor(
     private val proximityController: ProximityController,
     private val notificationManager: CallNotificationManager,
     private val callHapticManager: CallHapticManager,
-    private val dtmfTonePlayer: DtmfTonePlayer
+    private val dtmfTonePlayer: DtmfTonePlayer,
+    private val contactsProvider: com.example.callog.data.provider.ContactsProvider,
+    private val dialerRoleManager: DialerRoleManager
 ) {
     companion object {
         private const val TAG = "CallSessionManager"
@@ -58,22 +60,27 @@ class CallSessionManager @Inject constructor(
 
     // Call Sessions Map: callId -> CallSessionState
     private val _sessionsMap = MutableStateFlow<Map<String, CallSessionState>>(emptyMap())
-    val callSessions: StateFlow<List<CallSessionState>> = _sessionsMap
-        .map { it.values.toList() }
-        .stateIn(scope, SharingStarted.Eagerly, emptyList())
+
+    private val _callSessions = MutableStateFlow<List<CallSessionState>>(emptyList())
+    val callSessions: StateFlow<List<CallSessionState>> = _callSessions.asStateFlow()
 
     // Active primary call session (first ringing or active or connecting call)
-    val activeCallSession: StateFlow<CallSessionState?> = _sessionsMap
-        .map { map ->
-            val list = map.values.toList()
-            // Priority: Ringing first, then Active, then Connecting, then OnHold, then any
-            list.firstOrNull { it.state == CallState.RINGING }
+    private val _activeCallSession = MutableStateFlow<CallSessionState?>(null)
+    val activeCallSession: StateFlow<CallSessionState?> = _activeCallSession.asStateFlow()
+
+    private inline fun updateSessionsMap(transform: (Map<String, CallSessionState>) -> Map<String, CallSessionState>) {
+        _sessionsMap.update { current ->
+            val updated = transform(current)
+            val list = updated.values.toList()
+            _callSessions.value = list
+            _activeCallSession.value = list.firstOrNull { it.state == CallState.RINGING }
                 ?: list.firstOrNull { it.state == CallState.ACTIVE }
                 ?: list.firstOrNull { it.state == CallState.CONNECTING }
                 ?: list.firstOrNull { it.state == CallState.ON_HOLD }
                 ?: list.firstOrNull()
+            updated
         }
-        .stateIn(scope, SharingStarted.Eagerly, null)
+    }
 
     // Audio state
     private val _audioState = MutableStateFlow(CallAudioModel())
@@ -119,7 +126,7 @@ class CallSessionManager @Inject constructor(
             simInfo = simInfo
         )
 
-        _sessionsMap.update { current ->
+        updateSessionsMap { current ->
             val cleaned = current.filterKeys { !it.startsWith("outgoing_") }
             cleaned + (callId to session)
         }
@@ -161,11 +168,12 @@ class CallSessionManager @Inject constructor(
         val subId = simRepository.resolveSubscriptionId(accountHandleId, accountComponentName)
         val simInfo = simRepository.getInstalledSims().find { it.subscriptionId == subId }
 
-        // Find existing pre-session if any
+        // Find existing pre-session if any (outgoing or telephony receiver pre-session matching this call)
         val existingPreSession = _sessionsMap.value.values.find {
-            it.callId.startsWith("outgoing_") &&
-                (it.normalizedPhoneNumber == normalized || it.phoneNumber == rawNumber ||
-                 (normalized.isNotEmpty() && (normalized.endsWith(it.normalizedPhoneNumber) || it.normalizedPhoneNumber.endsWith(normalized))))
+            (it.callId.startsWith("outgoing_") || it.callId.startsWith("call_")) &&
+                ((normalized.isNotBlank() && (it.normalizedPhoneNumber == normalized || normalized.endsWith(it.normalizedPhoneNumber) || it.normalizedPhoneNumber.endsWith(normalized))) ||
+                 (rawNumber.isNotBlank() && it.phoneNumber == rawNumber) ||
+                 (normalized.isBlank() && rawNumber.isBlank() && it.direction == direction))
         }
 
         val initialSession = CallSessionState(
@@ -179,6 +187,7 @@ class CallSessionManager @Inject constructor(
             crmStatus = existingPreSession?.crmStatus ?: LeadStatus.UNKNOWN,
             priority = existingPreSession?.priority ?: LeadPriority.MEDIUM,
             initials = existingPreSession?.initials ?: computeInitials(initialDisplayName),
+            avatarUrl = existingPreSession?.avatarUrl,
             recentInteractionSummary = existingPreSession?.recentInteractionSummary,
             pendingFollowUp = existingPreSession?.pendingFollowUp,
             personId = existingPreSession?.personId,
@@ -187,7 +196,7 @@ class CallSessionManager @Inject constructor(
             connectTimeMillis = if (initialState == CallState.ACTIVE) System.currentTimeMillis() else (existingPreSession?.connectTimeMillis ?: 0L)
         )
 
-        _sessionsMap.update { current ->
+        updateSessionsMap { current ->
             val cleaned = if (existingPreSession != null) current - existingPreSession.callId else current
             cleaned + (callId to initialSession)
         }
@@ -234,8 +243,8 @@ class CallSessionManager @Inject constructor(
                     "Follow-up: ${it.toRelativeTimeSpan()}"
                 }
 
-                _sessionsMap.update { current ->
-                    val existing = current[callId] ?: return@update current
+                updateSessionsMap { current ->
+                    val existing = current[callId] ?: return@updateSessionsMap current
                     current + (callId to existing.copy(
                         personId = person.id,
                         callerDisplayName = person.displayName,
@@ -259,12 +268,33 @@ class CallSessionManager @Inject constructor(
             } else {
                 DeveloperLogger.info(
                     "CANONICAL_PERSON_NOT_FOUND",
-                    "No canonical Person found for $rawNumber. Treating as Unknown / Local contact."
+                    "No canonical Person found for $rawNumber. Querying Android Contacts."
                 )
+                val contactInfo = contactsProvider.lookupContactByNumber(rawNumber.ifBlank { normalizedNumber })
+                val contactName = contactInfo?.first
+                val contactPhoto = contactInfo?.second
+
+                if (!contactName.isNullOrBlank()) {
+                    DeveloperLogger.info(
+                        "SYSTEM_CONTACT_RESOLVED",
+                        "Resolved system Contact: $contactName for $rawNumber"
+                    )
+                    updateSessionsMap { current ->
+                        val existing = current[callId] ?: return@updateSessionsMap current
+                        current + (callId to existing.copy(
+                            callerDisplayName = contactName,
+                            initials = computeInitials(contactName),
+                            avatarUrl = contactPhoto
+                        ))
+                    }
+                }
+
                 val currentSession = _sessionsMap.value[callId]
                 if (currentSession?.state == CallState.RINGING) {
                     ringtoneController.startRingtone(null, null)
                     notificationManager.showIncomingCallNotification(currentSession)
+                } else if (currentSession?.state == CallState.ACTIVE) {
+                    notificationManager.showActiveCallNotification(currentSession)
                 }
             }
         } catch (e: Exception) {
@@ -285,8 +315,8 @@ class CallSessionManager @Inject constructor(
             "Call $callId state changed to: $newState"
         )
 
-        _sessionsMap.update { current ->
-            val existing = current[callId] ?: return@update current
+        updateSessionsMap { current ->
+            val existing = current[callId] ?: return@updateSessionsMap current
             val updatedConnectTime = if (newState == CallState.ACTIVE && existing.connectTimeMillis == 0L) {
                 System.currentTimeMillis()
             } else {
@@ -307,6 +337,7 @@ class CallSessionManager @Inject constructor(
 
     private fun handleStateChange(callId: String, state: CallState) {
         val session = _sessionsMap.value[callId]
+        val isSimulated = callId.startsWith("sim_")
         when (state) {
             CallState.RINGING -> {
                 if (session != null) {
@@ -317,7 +348,7 @@ class CallSessionManager @Inject constructor(
                     val lead = person?.let { leadRepository.getLeadForPerson(it.id) }
                     ringtoneController.startRingtone(person, lead)
                 }
-                launchInCallActivity()
+                launchInCallActivity(isSimulated)
             }
             CallState.ACTIVE -> {
                 ringtoneController.stopRingtone()
@@ -326,13 +357,13 @@ class CallSessionManager @Inject constructor(
                 if (session != null) {
                     notificationManager.showActiveCallNotification(session)
                 }
-                launchInCallActivity()
+                launchInCallActivity(isSimulated)
             }
             CallState.CONNECTING, CallState.ON_HOLD -> {
                 if (session != null) {
                     notificationManager.showActiveCallNotification(session)
                 }
-                launchInCallActivity()
+                launchInCallActivity(isSimulated)
             }
             CallState.DISCONNECTED -> {
                 ringtoneController.stopRingtone()
@@ -362,7 +393,7 @@ class CallSessionManager @Inject constructor(
      */
     fun onTelecomCallRemoved(callId: String) {
         DeveloperLogger.info("TELECOM_CALL_REMOVED", "Call $callId removed.")
-        _sessionsMap.update { current -> current - callId }
+        updateSessionsMap { current -> current - callId }
 
         if (_sessionsMap.value.none { it.value.state == CallState.RINGING }) {
             ringtoneController.stopRingtone()
@@ -385,7 +416,7 @@ class CallSessionManager @Inject constructor(
 
         proximityController.onCallStateOrRouteChanged(activeCallSession.value?.state == CallState.ACTIVE, route)
 
-        _sessionsMap.update { current ->
+        updateSessionsMap { current ->
             current.mapValues { (_, session) ->
                 session.copy(
                     isMuted = isMuted,
@@ -417,6 +448,11 @@ class CallSessionManager @Inject constructor(
             return
         }
 
+        if (telecomController != null && (state == CallState.RINGING || state == CallState.CONNECTING)) {
+            // Telecom InCallService will handle onCallAdded directly
+            return
+        }
+
         val callId = existingSession?.callId ?: "call_${System.currentTimeMillis()}"
 
         when (state) {
@@ -440,7 +476,7 @@ class CallSessionManager @Inject constructor(
                     initials = computeInitials(initialDisplayName)
                 )
 
-                _sessionsMap.update { mapOf(callId to session) }
+                updateSessionsMap { mapOf(callId to session) }
                 scope.launch {
                     resolvePersonAndLead(callId, rawNumber, normalized, null)
                 }
@@ -466,13 +502,13 @@ class CallSessionManager @Inject constructor(
                     connectTimeMillis = System.currentTimeMillis()
                 )
 
-                _sessionsMap.update { mapOf(callId to session) }
+                updateSessionsMap { mapOf(callId to session) }
                 handleStateChange(callId, CallState.ACTIVE)
                 startTickerIfNeeded()
             }
             CallState.DISCONNECTED -> {
                 if (existingSession != null) {
-                    _sessionsMap.update {
+                    updateSessionsMap {
                         mapOf(callId to existingSession.copy(state = CallState.DISCONNECTED))
                     }
                     handleStateChange(callId, CallState.DISCONNECTED)
@@ -483,12 +519,89 @@ class CallSessionManager @Inject constructor(
     }
 
     /**
+     * Adds a simulated call session and triggers appropriate in-call lifecycle states.
+     */
+    fun addSimulatedSession(session: CallSessionState) {
+        DeveloperLogger.info("SIMULATED_SESSION_ADDED", "Adding simulated call session ${session.callId} (${session.direction})")
+        updateSessionsMap { current ->
+            current + (session.callId to session)
+        }
+        handleStateChange(session.callId, session.state)
+        startTickerIfNeeded()
+    }
+
+    /**
+     * Updates state for a simulated call session.
+     */
+    fun updateSimulatedSessionState(callId: String, newState: CallState) {
+        DeveloperLogger.info("SIMULATED_STATE_UPDATE", "Updating simulated call $callId to $newState")
+        updateSessionsMap { current ->
+            val existing = current[callId] ?: return@updateSessionsMap current
+            val updatedConnect = if (newState == CallState.ACTIVE && existing.connectTimeMillis == 0L) {
+                System.currentTimeMillis()
+            } else {
+                existing.connectTimeMillis
+            }
+            current + (callId to existing.copy(
+                state = newState,
+                isOnHold = newState == CallState.ON_HOLD,
+                connectTimeMillis = updatedConnect
+            ))
+        }
+        handleStateChange(callId, newState)
+        startTickerIfNeeded()
+    }
+
+    /**
+     * Removes a simulated call session.
+     */
+    fun removeSimulatedSession(callId: String) {
+        onTelecomCallRemoved(callId)
+    }
+
+    private fun tryAcceptRingingCallFallback() {
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                val tm = context.getSystemService(Context.TELECOM_SERVICE) as? TelecomManager
+                if (androidx.core.content.ContextCompat.checkSelfPermission(
+                        context,
+                        android.Manifest.permission.ANSWER_PHONE_CALLS
+                    ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+                ) {
+                    tm?.acceptRingingCall()
+                    DeveloperLogger.info("TELECOM_FALLBACK", "Accepted ringing call via TelecomManager.acceptRingingCall()")
+                }
+            }
+        } catch (e: Exception) {
+            DeveloperLogger.error("TELECOM_FALLBACK", "Failed to accept ringing call via fallback: ${e.message}")
+        }
+    }
+
+    private fun tryEndCallFallback() {
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                val tm = context.getSystemService(Context.TELECOM_SERVICE) as? TelecomManager
+                if (androidx.core.content.ContextCompat.checkSelfPermission(
+                        context,
+                        android.Manifest.permission.ANSWER_PHONE_CALLS
+                    ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+                ) {
+                    tm?.endCall()
+                    DeveloperLogger.info("TELECOM_FALLBACK", "Ended call via TelecomManager.endCall()")
+                }
+            }
+        } catch (e: Exception) {
+            DeveloperLogger.error("TELECOM_FALLBACK", "Failed to end call via fallback: ${e.message}")
+        }
+    }
+
+    /**
      * UI action dispatcher.
      */
     fun executeAction(action: CallAction) {
         val controller = telecomController
         if (controller == null) {
-            Log.w(TAG, "TelecomCallController is not connected. Executing via system telephony/audio manager fallback.")
+            Log.w(TAG, "TelecomCallController is not connected. Executing via system telephony/audio manager fallback or simulation dispatcher.")
         }
 
         when (action) {
@@ -498,57 +611,98 @@ class CallSessionManager @Inject constructor(
                 val currentActive = _sessionsMap.value.values.find { it.state == CallState.ACTIVE && it.callId != action.callId }
                 if (currentActive != null) {
                     DeveloperLogger.info("AUTO_HOLD", "Auto-holding call ${currentActive.callId} to answer incoming ${action.callId}")
-                    controller?.holdCall(currentActive.callId)
+                    if (controller != null && !currentActive.callId.startsWith("sim_")) {
+                        controller.holdCall(currentActive.callId)
+                    } else {
+                        updateSessionsMap { current ->
+                            val existing = current[currentActive.callId] ?: return@updateSessionsMap current
+                            current + (currentActive.callId to existing.copy(state = CallState.ON_HOLD, isOnHold = true))
+                        }
+                    }
                 }
 
-                if (controller != null) {
+                if (controller != null && !action.callId.startsWith("sim_")) {
                     controller.answerCall(action.callId)
-                } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                    val telecomManager = context.getSystemService(Context.TELECOM_SERVICE) as? TelecomManager
-                    try {
-                        telecomManager?.acceptRingingCall()
-                    } catch (e: Exception) {
-                        Log.e(TAG, "Failed to acceptRingingCall", e)
+                } else if (!action.callId.startsWith("sim_")) {
+                    tryAcceptRingingCallFallback()
+                    updateSessionsMap { current ->
+                        val existing = current[action.callId] ?: return@updateSessionsMap current
+                        current + (action.callId to existing.copy(
+                            state = CallState.ACTIVE,
+                            isOnHold = false,
+                            connectTimeMillis = System.currentTimeMillis()
+                        ))
                     }
+                    handleStateChange(action.callId, CallState.ACTIVE)
+                    startTickerIfNeeded()
+                } else {
+                    updateSessionsMap { current ->
+                        val existing = current[action.callId] ?: return@updateSessionsMap current
+                        current + (action.callId to existing.copy(
+                            state = CallState.ACTIVE,
+                            isOnHold = false,
+                            connectTimeMillis = System.currentTimeMillis()
+                        ))
+                    }
+                    handleStateChange(action.callId, CallState.ACTIVE)
+                    startTickerIfNeeded()
                 }
             }
             is CallAction.Reject -> {
                 ringtoneController.stopRingtone()
-                if (controller != null) {
+                if (controller != null && !action.callId.startsWith("sim_")) {
                     controller.rejectCall(action.callId)
-                } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                    val telecomManager = context.getSystemService(Context.TELECOM_SERVICE) as? TelecomManager
-                    try {
-                        telecomManager?.endCall()
-                    } catch (e: Exception) {
-                        Log.e(TAG, "Failed to endCall", e)
+                } else if (!action.callId.startsWith("sim_")) {
+                    tryEndCallFallback()
+                    updateSessionsMap { current ->
+                        val existing = current[action.callId] ?: return@updateSessionsMap current
+                        current + (action.callId to existing.copy(state = CallState.DISCONNECTED))
                     }
+                    handleStateChange(action.callId, CallState.DISCONNECTED)
+                } else {
+                    updateSessionsMap { current ->
+                        val existing = current[action.callId] ?: return@updateSessionsMap current
+                        current + (action.callId to existing.copy(state = CallState.DISCONNECTED))
+                    }
+                    handleStateChange(action.callId, CallState.DISCONNECTED)
                 }
             }
             is CallAction.RejectWithMessage -> {
                 ringtoneController.stopRingtone()
-                if (controller != null) {
+                if (controller != null && !action.callId.startsWith("sim_")) {
                     controller.rejectCallWithMessage(action.callId, action.message)
-                } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                    val telecomManager = context.getSystemService(Context.TELECOM_SERVICE) as? TelecomManager
-                    try {
-                        telecomManager?.endCall()
-                    } catch (e: Exception) {
-                        Log.e(TAG, "Failed to endCall", e)
+                } else if (!action.callId.startsWith("sim_")) {
+                    tryEndCallFallback()
+                    updateSessionsMap { current ->
+                        val existing = current[action.callId] ?: return@updateSessionsMap current
+                        current + (action.callId to existing.copy(state = CallState.DISCONNECTED))
                     }
+                    handleStateChange(action.callId, CallState.DISCONNECTED)
+                } else {
+                    updateSessionsMap { current ->
+                        val existing = current[action.callId] ?: return@updateSessionsMap current
+                        current + (action.callId to existing.copy(state = CallState.DISCONNECTED))
+                    }
+                    handleStateChange(action.callId, CallState.DISCONNECTED)
                 }
             }
             is CallAction.Disconnect -> {
                 ringtoneController.stopRingtone()
-                if (controller != null) {
+                if (controller != null && !action.callId.startsWith("sim_")) {
                     controller.disconnectCall(action.callId)
-                } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                    val telecomManager = context.getSystemService(Context.TELECOM_SERVICE) as? TelecomManager
-                    try {
-                        telecomManager?.endCall()
-                    } catch (e: Exception) {
-                        Log.e(TAG, "Failed to endCall", e)
+                } else if (!action.callId.startsWith("sim_")) {
+                    tryEndCallFallback()
+                    updateSessionsMap { current ->
+                        val existing = current[action.callId] ?: return@updateSessionsMap current
+                        current + (action.callId to existing.copy(state = CallState.DISCONNECTED))
                     }
+                    handleStateChange(action.callId, CallState.DISCONNECTED)
+                } else {
+                    updateSessionsMap { current ->
+                        val existing = current[action.callId] ?: return@updateSessionsMap current
+                        current + (action.callId to existing.copy(state = CallState.DISCONNECTED))
+                    }
+                    handleStateChange(action.callId, CallState.DISCONNECTED)
                 }
             }
             is CallAction.ToggleMute -> {
@@ -575,24 +729,54 @@ class CallSessionManager @Inject constructor(
                 callHapticManager.vibrateActionToggle()
                 val session = _sessionsMap.value[action.callId]
                 if (session != null) {
-                    if (session.isOnHold) {
-                        controller?.unholdCall(action.callId)
+                    if (controller != null && !action.callId.startsWith("sim_")) {
+                        if (session.isOnHold) {
+                            controller.unholdCall(action.callId)
+                        } else {
+                            controller.holdCall(action.callId)
+                        }
                     } else {
-                        controller?.holdCall(action.callId)
+                        val newHoldState = !session.isOnHold
+                        val newState = if (newHoldState) CallState.ON_HOLD else CallState.ACTIVE
+                        updateSessionsMap { current ->
+                            val existing = current[action.callId] ?: return@updateSessionsMap current
+                            current + (action.callId to existing.copy(state = newState, isOnHold = newHoldState))
+                        }
+                        handleStateChange(action.callId, newState)
                     }
                 }
             }
             is CallAction.SwapCalls -> {
                 callHapticManager.vibrateActionToggle()
-                controller?.swapCalls()
+                if (controller != null && _sessionsMap.value.keys.none { it.startsWith("sim_") }) {
+                    controller.swapCalls()
+                } else {
+                    updateSessionsMap { current ->
+                        current.mapValues { (_, s) ->
+                            when (s.state) {
+                                CallState.ACTIVE -> s.copy(state = CallState.ON_HOLD, isOnHold = true)
+                                CallState.ON_HOLD -> s.copy(state = CallState.ACTIVE, isOnHold = false)
+                                else -> s
+                            }
+                        }
+                    }
+                }
             }
             is CallAction.MergeCalls -> {
                 callHapticManager.vibrateActionToggle()
-                controller?.mergeCalls(action.callId1, action.callId2)
+                if (controller != null && _sessionsMap.value.keys.none { it.startsWith("sim_") }) {
+                    controller.mergeCalls(action.callId1, action.callId2)
+                } else {
+                    updateSessionsMap { current ->
+                        current.mapValues { (_, s) ->
+                            s.copy(state = CallState.ACTIVE, isOnHold = false)
+                        }
+                    }
+                }
             }
             is CallAction.SetKeypadVisibility -> {
-                _sessionsMap.update { current ->
-                    val existing = current[action.callId] ?: return@update current
+                updateSessionsMap { current ->
+                    val existing = current[action.callId] ?: return@updateSessionsMap current
                     current + (action.callId to existing.copy(isKeypadVisible = action.visible))
                 }
             }
@@ -614,7 +798,7 @@ class CallSessionManager @Inject constructor(
             while (isActive) {
                 delay(1000)
                 val now = System.currentTimeMillis()
-                _sessionsMap.update { current ->
+                updateSessionsMap { current ->
                     current.mapValues { (_, session) ->
                         if (session.state == CallState.ACTIVE && session.connectTimeMillis > 0L) {
                             val elapsedSec = ((now - session.connectTimeMillis) / 1000).toInt().coerceAtLeast(0)
@@ -630,13 +814,16 @@ class CallSessionManager @Inject constructor(
         }
     }
 
-    private fun launchInCallActivity() {
+    private fun launchInCallActivity(isSimulated: Boolean = false) {
+        // Only launch custom in-call activity if Callog is the default dialer or Telecom InCallService is active, or if this is a simulated call
+        if (!isSimulated && telecomController == null && !dialerRoleManager.isRoleHeld()) {
+            DeveloperLogger.info("INCALL_LAUNCH_SKIPPED", "Skipping InCallActivity launch: App is not default dialer and InCallService is not bound.")
+            return
+        }
         try {
             val intent = Intent(context, com.example.callog.presentation.call.InCallActivity::class.java).apply {
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK or
-                        Intent.FLAG_ACTIVITY_CLEAR_TOP or
-                        Intent.FLAG_ACTIVITY_SINGLE_TOP or
-                        Intent.FLAG_ACTIVITY_REORDER_TO_FRONT
+                        Intent.FLAG_ACTIVITY_SINGLE_TOP
             }
             context.startActivity(intent)
         } catch (e: Exception) {

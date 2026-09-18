@@ -35,4 +35,17 @@ abstract class AppModule {
     abstract fun bindConversationRepository(
         conversationRepositoryImpl: com.example.callog.data.repository.ConversationRepositoryImpl
     ): com.example.callog.domain.repository.ConversationRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindDeviceContactsRepository(
+        deviceContactsRepositoryImpl: com.example.callog.data.repository.DeviceContactsRepositoryImpl
+    ): com.example.callog.domain.repository.DeviceContactsRepository
+}
+
+@dagger.hilt.EntryPoint
+@InstallIn(SingletonComponent::class)
+interface ContactsDirectoryEntryPoint {
+    fun deviceContactsRepository(): com.example.callog.domain.repository.DeviceContactsRepository
+    fun personRepository(): com.example.callog.domain.repository.PersonRepository
 }
