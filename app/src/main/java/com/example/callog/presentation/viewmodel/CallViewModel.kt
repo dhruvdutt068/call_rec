@@ -54,8 +54,6 @@ class CallViewModel @Inject constructor(
     private val simManager: com.example.callog.data.provider.SimManager,
     private val supabaseService: SupabaseService,
     private val personRepository: com.example.callog.domain.repository.PersonRepository,
-    private val leadRepository: com.example.callog.domain.repository.LeadRepository,
-    private val callDao: com.example.callog.data.local.dao.CallDao,
     private val conversationRepository: com.example.callog.domain.repository.ConversationRepository,
     private val callSessionManager: com.example.callog.domain.service.CallSessionManager,
     private val environmentConfigManager: com.example.callog.core.config.EnvironmentConfigManager
@@ -88,7 +86,7 @@ class CallViewModel @Inject constructor(
      */
     fun initiateCall(context: android.content.Context, number: String, simSlot: Int = 0) {
         if (number.isBlank()) return
-        val cleanNumber = number.filter { it.isDigit() || it == '+' || it == '*' || it == '#' }.ifBlank { number.trim() }
+        val cleanNumber = number.trim()
         val uri = android.net.Uri.parse("tel:${android.net.Uri.encode(cleanNumber)}")
 
         // 1. Initialize outgoing call session in CallSessionManager
@@ -673,149 +671,6 @@ class CallViewModel @Inject constructor(
 
     fun getCallLogByIdFlow(id: Long): Flow<CallLogEntry?> {
         return repository.getCallLogByIdFlow(id)
-    }
-
-    @OptIn(ExperimentalCoroutinesApi::class)
-    fun getCallWithCrmDetailsFlow(id: Long): Flow<com.example.callog.domain.model.CallWithCrmDetails?> {
-        return repository.getCallLogByIdFlow(id).flatMapLatest { call ->
-            if (call == null) {
-                flowOf(null)
-            } else {
-                flow {
-                    val cleanNumber = call.number.filter { it.isDigit() || it == '+' }
-                    val normalizedNumber = com.example.callog.core.utils.PhoneNumberNormalizer.normalize(cleanNumber)
-                    val resolvedPerson = if (!call.personId.isNullOrBlank()) {
-                        personRepository.getPersonById(call.personId)
-                    } else if (normalizedNumber.isNotBlank()) {
-                        val p = personRepository.findPersonByNormalizedPhone(normalizedNumber)
-                        if (p != null) {
-                            callDao.updatePersonIdForCall(call.id, p.id)
-                        }
-                        p
-                    } else {
-                        null
-                    }
-                    emit(resolvedPerson)
-                }.flatMapLatest { person ->
-                    val personId = person?.id ?: call.personId
-                    val leadFlow = if (!personId.isNullOrBlank()) {
-                        leadRepository.getLeadForPersonFlow(personId)
-                    } else {
-                        flowOf(null)
-                    }
-                    val salesCallFlow = salesCallDao.getSalesCallByCallIdFlow(id)
-                    val historyFlow = flow {
-                        val callsForPerson = if (!personId.isNullOrBlank()) {
-                            callDao.getCallsForPerson(personId)
-                        } else {
-                            val norm = com.example.callog.core.utils.PhoneNumberNormalizer.normalize(call.number)
-                            callDao.getAllCalls().filter {
-                                com.example.callog.core.utils.PhoneNumberNormalizer.normalize(it.number) == norm
-                            }
-                        }
-                        val count = callsForPerson.size
-                        val totalDuration = callsForPerson.sumOf { it.duration }
-                        emit(Pair(count, totalDuration))
-                    }
-
-                    combine(leadFlow, salesCallFlow, historyFlow) { lead, salesCall, (historyCount, totalDuration) ->
-                        com.example.callog.domain.model.CallWithCrmDetails(
-                            call = call,
-                            person = person,
-                            lead = lead,
-                            salesCall = salesCall,
-                            totalCallCountWithContact = historyCount,
-                            totalDurationWithContact = totalDuration
-                        )
-                    }
-                }
-            }
-        }.flowOn(kotlinx.coroutines.Dispatchers.IO)
-    }
-
-    fun updateLeadStatus(personId: String, status: com.example.callog.domain.model.LeadStatus) {
-        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
-            leadRepository.updateLeadStatus(personId, status)
-            DeveloperLogger.info("CallViewModel", "Updated lead $personId status to $status")
-            syncManager.startSync()
-        }
-    }
-
-    fun updateLeadPriority(personId: String, priority: com.example.callog.domain.model.LeadPriority) {
-        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
-            leadRepository.updateLeadPriority(personId, priority)
-            DeveloperLogger.info("CallViewModel", "Updated lead $personId priority to $priority")
-            syncManager.startSync()
-        }
-    }
-
-    fun updateLeadFeedback(personId: String, feedback: String, rating: Int?) {
-        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
-            leadRepository.updateLeadFeedback(personId, feedback, rating)
-            DeveloperLogger.info("CallViewModel", "Updated lead $personId feedback")
-            syncManager.startSync()
-        }
-    }
-
-    fun updateLeadFollowUp(personId: String, nextFollowUpAt: Long?) {
-        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
-            leadRepository.updateLeadFollowUp(personId, nextFollowUpAt)
-            DeveloperLogger.info("CallViewModel", "Updated lead $personId follow up to $nextFollowUpAt")
-            syncManager.startSync()
-        }
-    }
-
-    fun saveSalesCallDisposition(
-        callId: Long,
-        personId: String?,
-        buyerNumber: String,
-        buyerName: String?,
-        rating: Int,
-        feedback: String,
-        outcome: String
-    ) {
-        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
-            val salesCall = SalesCallEntity(
-                salespersonPhone = "Self",
-                salespersonName = "Device User",
-                buyerPhone = buyerNumber,
-                buyerName = buyerName,
-                callType = outcome,
-                callId = callId,
-                duration = 0,
-                personId = personId,
-                syncStatus = "PENDING"
-            )
-            salesCallDao.insertSalesCall(salesCall)
-
-            if (!personId.isNullOrBlank()) {
-                leadRepository.updateLeadFeedback(personId, feedback, rating)
-            }
-            DeveloperLogger.info("CallViewModel", "Saved sales disposition for call $callId")
-            syncManager.startSync()
-        }
-    }
-
-    fun createAndLinkContact(
-        callId: Long,
-        name: String,
-        number: String,
-        company: String?,
-        onSuccess: (com.example.callog.domain.model.Person) -> Unit
-    ) {
-        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
-            val result = personRepository.createGlobalContact(name, number, company, null)
-            result.onSuccess { person ->
-                callDao.updatePersonIdForCall(callId, person.id)
-                callDao.updatePersonIdForNumber(number, person.id)
-                leadRepository.getOrCreateLeadForPerson(person.id)
-                DeveloperLogger.info("CallViewModel", "Created and linked contact ${person.id} for call $callId")
-                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
-                    onSuccess(person)
-                }
-                syncManager.startSync()
-            }
-        }
     }
 
     // Reminders

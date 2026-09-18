@@ -749,7 +749,6 @@ fun CrmNav3Container(
                             androidContactId = key.androidContactId,
                             deviceContactsRepository = entryPoint.deviceContactsRepository(),
                             personRepository = entryPoint.personRepository(),
-                            callViewModel = callViewModel,
                             onBackClick = { multiStack.pop() },
                             onNavigateToCloudProfile = { personId ->
                                 multiStack.navigate(Nav3Key.Contacts.ContactDetails(contactId = personId))

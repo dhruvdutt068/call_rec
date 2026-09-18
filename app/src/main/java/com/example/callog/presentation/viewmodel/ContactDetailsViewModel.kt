@@ -46,7 +46,6 @@ class ContactDetailsViewModel @Inject constructor(
     val uiState: StateFlow<ContactDetailUiState> = _uiState.asStateFlow()
 
     private var currentPersonId: String? = null
-    private var leadObserverJob: kotlinx.coroutines.Job? = null
 
     fun loadContact(contactId: String) {
         viewModelScope.launch {
@@ -55,15 +54,7 @@ class ContactDetailsViewModel @Inject constructor(
                 // 1. Try finding by canonical Person ID in Room
                 var person = personRepository.getPersonById(contactId)
                 
-                // 2. If not found by Person ID, search by normalized phone
-                if (person == null) {
-                    val norm = PhoneNumberNormalizer.normalize(contactId)
-                    if (norm.isNotEmpty()) {
-                        person = personRepository.findPersonByNormalizedPhone(norm)
-                    }
-                }
-
-                // 3. Search if contactId is an Android Contact ID
+                // 2. If not found by Person ID, search if contactId is an Android Contact ID or phone number
                 if (person == null) {
                     val rawContacts = callRepository.getContacts()
                     val matchedContact = rawContacts.find { it.contactId == contactId }
@@ -71,41 +62,10 @@ class ContactDetailsViewModel @Inject constructor(
                         val firstPhone = matchedContact.phoneNumbers.firstOrNull() ?: ""
                         person = personRepository.findPersonByNormalizedPhone(firstPhone)
                         if (person == null) {
-                            val dev = personRepository.getOrCreateCurrentDevice()
-                            val res = personRepository.resolveAndAttachContact(dev.id, matchedContact)
-                            person = personRepository.getPersonById(res.personId)
+                            personRepository.syncContactsFromDevice()
+                            person = personRepository.findPersonByNormalizedPhone(firstPhone)
                         }
                     }
-                }
-
-                // 4. If still null, create a local Person entity so Room foreign keys and leads persist
-                if (person == null) {
-                    val newPersonId = "P_" + java.util.UUID.randomUUID().toString().replace("-", "").take(8).uppercase()
-                    val cleanName = if (contactId.all { it.isDigit() || it == '+' || it == ' ' || it == '-' || it == '(' || it == ')' }) {
-                        "Contact $contactId"
-                    } else {
-                        contactId
-                    }
-                    val newPerson = Person(
-                        id = newPersonId,
-                        displayName = cleanName,
-                        createdAt = System.currentTimeMillis(),
-                        updatedAt = System.currentTimeMillis()
-                    )
-                    personRepository.insertOrUpdatePerson(newPerson)
-                    val norm = PhoneNumberNormalizer.normalize(contactId)
-                    if (norm.isNotEmpty()) {
-                        personRepository.savePhoneNumber(
-                            PhoneNumber(
-                                id = java.util.UUID.randomUUID().toString(),
-                                personId = newPersonId,
-                                phoneNumber = contactId,
-                                normalizedNumber = norm,
-                                isPrimary = true
-                            )
-                        )
-                    }
-                    person = personRepository.getPersonById(newPersonId)
                 }
 
                 val allLogs = callRepository.getCallLogsFlow().first()
@@ -145,25 +105,23 @@ class ContactDetailsViewModel @Inject constructor(
                         lastFeedbackRating = lead.feedbackRating,
                         feedbackNotes = lead.feedback ?: lead.notes
                     )
-
-                    // Start observing reactive Lead changes
-                    leadObserverJob?.cancel()
-                    leadObserverJob = viewModelScope.launch {
-                        leadRepository.getLeadForPersonFlow(person.id).collect { flowLead ->
-                            if (flowLead != null) {
-                                val current = _uiState.value
-                                if (current is ContactDetailUiState.Success) {
-                                    _uiState.value = current.copy(
-                                        lead = flowLead,
-                                        lastFeedbackRating = flowLead.feedbackRating,
-                                        feedbackNotes = flowLead.feedback ?: flowLead.notes
-                                    )
-                                }
-                            }
-                        }
-                    }
                 } else {
-                    _uiState.value = ContactDetailUiState.Error("Contact with ID $contactId not found.")
+                    // Fallback to legacy contact lookup
+                    val contacts = callRepository.getContacts()
+                    val contact = contacts.find { it.contactId == contactId }
+                    if (contact == null) {
+                        _uiState.value = ContactDetailUiState.Error("Contact with ID $contactId not found.")
+                    } else {
+                        val contactNumbers = contact.phoneNumbers.map { PhoneNumberNormalizer.normalize(it) }
+                        val matchedLogs = allLogs.filter { log ->
+                            val logNorm = PhoneNumberNormalizer.normalize(log.number)
+                            contactNumbers.any { it.isNotEmpty() && it == logNorm }
+                        }
+                        _uiState.value = ContactDetailUiState.Success(
+                            contact = contact,
+                            interactionHistory = matchedLogs
+                        )
+                    }
                 }
             } catch (e: Exception) {
                 _uiState.value = ContactDetailUiState.Error(e.message ?: "Failed to load contact.")

@@ -221,10 +221,7 @@ fun ContactDetailsScreen(
                                         accentColor = CallogSemanticColors.Incoming,
                                         onClick = {
                                             contact.phoneNumbers.firstOrNull()?.let { phone ->
-                                                val clean = phone.filter { it.isDigit() || it == '+' || it == '*' || it == '#' }.ifBlank { phone.trim() }
-                                                if (clean.isNotBlank()) {
-                                                    viewModel.initiateCall(context, clean)
-                                                }
+                                                viewModel.initiateCall(context, phone)
                                             }
                                         }
                                     )
@@ -234,15 +231,8 @@ fun ContactDetailsScreen(
                                         accentColor = MaterialTheme.colorScheme.primary,
                                         onClick = {
                                             contact.phoneNumbers.firstOrNull()?.let { phone ->
-                                                val clean = phone.filter { it.isDigit() || it == '+' || it == '*' || it == '#' }.ifBlank { phone.trim() }
-                                                if (clean.isNotBlank()) {
-                                                    try {
-                                                        val intent = Intent(Intent.ACTION_SENDTO, Uri.parse("smsto:${Uri.encode(clean)}")).apply {
-                                                            flags = Intent.FLAG_ACTIVITY_NEW_TASK
-                                                        }
-                                                        context.startActivity(intent)
-                                                    } catch (e: Exception) { }
-                                                }
+                                                val intent = Intent(Intent.ACTION_SENDTO, Uri.parse("smsto:$phone"))
+                                                context.startActivity(intent)
                                             }
                                         }
                                     )
@@ -252,12 +242,8 @@ fun ContactDetailsScreen(
                                         accentColor = CallogSemanticColors.LeadWarm,
                                         onClick = {
                                             contact.emails.firstOrNull()?.let { email ->
-                                                try {
-                                                    val intent = Intent(Intent.ACTION_SENDTO, Uri.parse("mailto:$email")).apply {
-                                                        flags = Intent.FLAG_ACTIVITY_NEW_TASK
-                                                    }
-                                                    context.startActivity(intent)
-                                                } catch (e: Exception) { }
+                                                val intent = Intent(Intent.ACTION_SENDTO, Uri.parse("mailto:$email"))
+                                                context.startActivity(intent)
                                             }
                                         }
                                     )
@@ -302,22 +288,19 @@ fun ContactDetailsScreen(
                                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                                             fontWeight = FontWeight.Bold
                                         )
-                                        val activeStatus = lead?.status?.takeIf { it != LeadStatus.UNKNOWN } ?: LeadStatus.NEW
-                                        LeadStatusPill(status = activeStatus)
+                                        LeadStatusPill(status = lead?.status ?: LeadStatus.NEW)
                                     }
                                     Spacer(modifier = Modifier.height(10.dp))
 
-                                    val selectableStatuses = listOf(LeadStatus.HOT, LeadStatus.WARM, LeadStatus.COLD, LeadStatus.NEW, LeadStatus.CUSTOMER)
-                                    val statusItems = selectableStatuses.map { status ->
+                                    val statusItems = LeadStatus.entries.map { status ->
                                         ExpressiveSegmentedButtonItem(
                                             key = status.name,
                                             label = status.name
                                         )
                                     }
-                                    val currentStatus = lead?.status?.takeIf { it != LeadStatus.UNKNOWN } ?: LeadStatus.NEW
                                     ExpressiveSegmentedButtonGroup(
                                         items = statusItems,
-                                        selectedKey = currentStatus.name,
+                                        selectedKey = (lead?.status ?: LeadStatus.NEW).name,
                                         onItemSelected = { key ->
                                             val status = LeadStatus.entries.find { it.name == key } ?: LeadStatus.NEW
                                             detailsViewModel.updateLeadStatus(status)

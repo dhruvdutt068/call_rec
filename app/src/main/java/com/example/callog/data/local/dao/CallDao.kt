@@ -67,7 +67,4 @@ interface CallDao {
 
     @Query("UPDATE calls_research SET personId = :personId WHERE number = :number")
     suspend fun updatePersonIdForNumber(number: String, personId: String)
-
-    @Query("UPDATE calls_research SET personId = :personId WHERE id = :callId")
-    suspend fun updatePersonIdForCall(callId: Long, personId: String)
 }

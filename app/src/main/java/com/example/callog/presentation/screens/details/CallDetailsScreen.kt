@@ -4,7 +4,6 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -13,12 +12,10 @@ import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
-import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -30,69 +27,34 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.example.callog.core.extensions.toDateTimeString
 import com.example.callog.core.extensions.toDurationString
-import com.example.callog.domain.model.LeadPriority
-import com.example.callog.domain.model.LeadStatus
 import com.example.callog.presentation.components.*
 import com.example.callog.presentation.theme.*
 import com.example.callog.presentation.viewmodel.CallViewModel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import java.text.SimpleDateFormat
-import java.util.*
 
-/**
- * Material 3 Expressive Call Details Screen integrating Telephony, Audio Vault,
- * Canonical Person Identity, Lead Pipeline, Sales Wrap-up, and Quick CRM Actions.
- */
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun CallDetailsScreen(
     callId: Long,
     viewModel: CallViewModel,
     onBackClick: () -> Unit,
-    onNavigateToContact: ((String) -> Unit)? = null,
-    onScheduleMeeting: ((String) -> Unit)? = null,
-    onCreateTask: ((String) -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val coroutineScope = rememberCoroutineScope()
-    val crmDetailsOpt by viewModel.getCallWithCrmDetailsFlow(callId).collectAsState(initial = null)
-    val fallbackCallOpt by viewModel.getCallLogByIdFlow(callId).collectAsState(initial = null)
+    val callEntryOpt by viewModel.getCallLogByIdFlow(callId).collectAsState(initial = null)
 
-    val call = crmDetailsOpt?.call ?: fallbackCallOpt
-    val person = crmDetailsOpt?.person
-    val lead = crmDetailsOpt?.lead
-    val salesCall = crmDetailsOpt?.salesCall
-    val historyCount = crmDetailsOpt?.totalCallCountWithContact ?: 1
-    val totalDuration = crmDetailsOpt?.totalDurationWithContact ?: (call?.duration ?: 0)
-
-    call?.let { currentCall ->
+    callEntryOpt?.let { call ->
         // States for notes and tags
-        var notesText by remember(currentCall.notes) { mutableStateOf(currentCall.notes ?: "") }
+        var notesText by remember(call.notes) { mutableStateOf(call.notes ?: "") }
         var isNotesSaved by remember { mutableStateOf(false) }
 
         // States for tags
-        val currentTags = remember(currentCall.tags) { currentCall.tags.toMutableStateList() }
+        val currentTags = remember(call.tags) { call.tags.toMutableStateList() }
         var customTagInput by remember { mutableStateOf("") }
-        val presetTags = listOf("Work", "Client", "Lead", "Sales", "Support", "FollowUp", "VIP")
-
-        // States for CRM Sales Disposition Wrap-Up
-        var salesRating by remember(lead?.feedbackRating) { mutableIntStateOf(lead?.feedbackRating ?: 5) }
-        var salesFeedback by remember(lead?.feedback) { mutableStateOf(lead?.feedback ?: "") }
-        var selectedOutcome by remember(salesCall?.callType) {
-            mutableStateOf(salesCall?.callType ?: currentCall.callType)
-        }
-        var isSalesDispositionSaved by remember { mutableStateOf(false) }
-
-        // Dialog states
-        var showReminderDialog by remember { mutableStateOf(false) }
-        var reminderNote by remember { mutableStateOf("") }
-        var showAddContactDialog by remember { mutableStateOf(false) }
-        var newContactName by remember { mutableStateOf(currentCall.name ?: "") }
-        var newContactCompany by remember { mutableStateOf("") }
+        val presetTags = listOf("Work", "Family", "Personal", "Friend", "Spam", "FollowUp")
 
         // States for audio playback (Real MediaPlayer)
         var isPlaying by remember { mutableStateOf(false) }
@@ -101,18 +63,18 @@ fun CallDetailsScreen(
         val context = androidx.compose.ui.platform.LocalContext.current
 
         // Initialize MediaPlayer
-        val mediaPlayer = remember(currentCall.recordingPath) {
-            if (currentCall.recordingPath != null) {
+        val mediaPlayer = remember(call.recordingPath) {
+            if (call.recordingPath != null) {
                 try {
                     android.media.MediaPlayer().apply {
-                        val file = java.io.File(currentCall.recordingPath)
+                        val file = java.io.File(call.recordingPath)
                         val fis = java.io.FileInputStream(file)
                         setDataSource(fis.fd)
                         prepare()
                         fis.close()
                     }
                 } catch (e: Exception) {
-                    android.util.Log.e("CallDetailsScreen", "Error preparing MediaPlayer for path ${currentCall.recordingPath}", e)
+                    android.util.Log.e("CallDetailsScreen", "Error preparing MediaPlayer for path ${call.recordingPath}", e)
                     null
                 }
             } else {
@@ -120,16 +82,19 @@ fun CallDetailsScreen(
             }
         }
 
+        // Get actual duration from media file (in seconds)
         val duration = remember(mediaPlayer) {
             mediaPlayer?.duration?.toFloat()?.div(1000f)?.coerceAtLeast(1f) ?: 1f
         }
 
+        // Release player when screen is disposed or path changes
         DisposableEffect(mediaPlayer) {
             onDispose {
                 mediaPlayer?.release()
             }
         }
 
+        // Real Playback Progress tracking
         LaunchedEffect(isPlaying, mediaPlayer) {
             if (isPlaying && mediaPlayer != null) {
                 try {
@@ -158,6 +123,10 @@ fun CallDetailsScreen(
             }
         }
 
+        // State for scheduling reminder dialog
+        var showReminderDialog by remember { mutableStateOf(false) }
+        var reminderNote by remember { mutableStateOf("") }
+
         var isUploadingManual by remember { mutableStateOf(false) }
         val audioPickerLauncher = rememberLauncherForActivityResult(
             contract = ActivityResultContracts.GetContent()
@@ -168,7 +137,7 @@ fun CallDetailsScreen(
                     try {
                         val cacheFile = java.io.File(
                             context.cacheDir,
-                            "manual_rec_${currentCall.id}_${System.currentTimeMillis()}.mp3"
+                            "manual_rec_${call.id}_${System.currentTimeMillis()}.mp3"
                         )
                         context.contentResolver.openInputStream(uri)?.use { input ->
                             cacheFile.outputStream().use { output ->
@@ -176,7 +145,7 @@ fun CallDetailsScreen(
                             }
                         }
 
-                        viewModel.associateAndUploadRecording(currentCall.id, cacheFile.absolutePath) { result ->
+                        viewModel.associateAndUploadRecording(call.id, cacheFile.absolutePath) { result ->
                             isUploadingManual = false
                         }
                     } catch (e: Exception) {
@@ -191,20 +160,11 @@ fun CallDetailsScreen(
             topBar = {
                 TopAppBar(
                     title = {
-                        Column {
-                            Text(
-                                text = "Call & CRM Details",
-                                style = CallogTypography.sectionTitle,
-                                fontWeight = FontWeight.Bold
-                            )
-                            person?.companyName?.let { company ->
-                                Text(
-                                    text = company,
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.primary
-                                )
-                            }
-                        }
+                        Text(
+                            text = "Call Details",
+                            style = CallogTypography.sectionTitle,
+                            fontWeight = FontWeight.Bold
+                        )
                     },
                     navigationIcon = {
                         IconButton(
@@ -219,18 +179,18 @@ fun CallDetailsScreen(
                     },
                     actions = {
                         IconButton(
-                            onClick = { viewModel.toggleFavorite(currentCall.id) },
+                            onClick = { viewModel.toggleFavorite(call.id) },
                             modifier = Modifier.sizeIn(minWidth = 48.dp, minHeight = 48.dp)
                         ) {
                             Icon(
-                                imageVector = if (currentCall.isFavorite) Icons.Default.Star else Icons.Default.StarBorder,
-                                contentDescription = if (currentCall.isFavorite) "Remove from favorites" else "Add to favorites",
-                                tint = if (currentCall.isFavorite) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                                imageVector = if (call.isFavorite) Icons.Default.Star else Icons.Default.StarBorder,
+                                contentDescription = if (call.isFavorite) "Remove from favorites" else "Add to favorites",
+                                tint = if (call.isFavorite) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
                         IconButton(
                             onClick = {
-                                viewModel.deleteCall(currentCall.id)
+                                viewModel.deleteCall(call.id)
                                 onBackClick()
                             },
                             modifier = Modifier.sizeIn(minWidth = 48.dp, minHeight = 48.dp)
@@ -261,593 +221,119 @@ fun CallDetailsScreen(
                     .padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                // ── 1. Header Profile & CRM Identity Card ───────────────────────
+                // Header profile card
                 GlassyCard {
-                    Column(
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                            .padding(16.dp)
                     ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            ContactAvatar(
-                                name = person?.displayName ?: currentCall.name,
-                                initials = currentCall.initials,
-                                photoUri = currentCall.contactPhotoUri,
-                                modifier = Modifier.size(64.dp)
-                            )
-
-                            Spacer(modifier = Modifier.width(16.dp))
-
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = person?.displayName ?: currentCall.displayName,
-                                    style = CallogTypography.entityName,
-                                    color = MaterialTheme.colorScheme.onSurface
-                                )
-                                Spacer(modifier = Modifier.height(2.dp))
-                                Text(
-                                    text = currentCall.number,
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-
-                                if (!person?.companyName.isNullOrBlank()) {
-                                    Spacer(modifier = Modifier.height(2.dp))
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        Icon(
-                                            imageVector = Icons.Default.Business,
-                                            contentDescription = null,
-                                            tint = MaterialTheme.colorScheme.primary,
-                                            modifier = Modifier.size(14.dp)
-                                        )
-                                        Spacer(modifier = Modifier.width(4.dp))
-                                        Text(
-                                            text = person!!.companyName!!,
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.primary,
-                                            fontWeight = FontWeight.Medium
-                                        )
-                                    }
-                                }
-
-                                Spacer(modifier = Modifier.height(6.dp))
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                                ) {
-                                    CallTypeIcon(currentCall.callType)
-                                    Text(
-                                        text = "${currentCall.callType} • ${currentCall.timestamp.toDateTimeString()}",
-                                        style = CallogTypography.denseData,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                }
-                            }
-                        }
-
-                        // Status Pills Row
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            SyncStatusPill(status = currentCall.syncStatus)
-
-                            if (lead != null) {
-                                LeadStatusPill(status = lead.status)
-                                PriorityPill(priority = lead.priority)
-                            } else {
-                                ExpressiveStatusPill(
-                                    label = "NOT IN CRM",
-                                    accentColor = MaterialTheme.colorScheme.outline,
-                                    icon = Icons.Outlined.PersonOff
-                                )
-                            }
-                        }
-
-                        // Direct CRM Profile Action or Add Contact
-                        HorizontalDivider(
-                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                        ContactAvatar(
+                            name = call.name,
+                            initials = call.initials,
+                            photoUri = call.contactPhotoUri,
+                            modifier = Modifier.size(64.dp)
                         )
 
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            if (person != null) {
-                                Text(
-                                    text = "Canonical ID: ${person.id.take(8)}...",
-                                    style = CallogTypography.denseData,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                                TextButton(
-                                    onClick = { onNavigateToContact?.invoke(person.id) },
-                                    shape = CallogShapes.pill
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.OpenInNew,
-                                        contentDescription = null,
-                                        modifier = Modifier.size(16.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Text("View CRM Profile", fontWeight = FontWeight.SemiBold)
-                                }
-                            } else {
-                                Text(
-                                    text = "Unknown contact in CRM directory",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                                FilledTonalButton(
-                                    onClick = { showAddContactDialog = true },
-                                    shape = CallogShapes.pill
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.PersonAdd,
-                                        contentDescription = null,
-                                        modifier = Modifier.size(16.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Text("Add to CRM", fontWeight = FontWeight.Bold)
-                                }
-                            }
-                        }
-                    }
-                }
+                        Spacer(modifier = Modifier.width(16.dp))
 
-                // ── 2. CRM Relationship Telemetry & Quick Action Hub ────────────
-                GlassyCard {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        Text(
-                            text = "CRM Telemetry & Quick Actions",
-                            style = CallogTypography.sectionTitle,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-
-                        Row(
-                            horizontalArrangement = Arrangement.spacedBy(12.dp),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Surface(
-                                shape = CallogShapes.card,
-                                color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                                modifier = Modifier.weight(1f)
-                            ) {
-                                Column(modifier = Modifier.padding(12.dp)) {
-                                    Text(
-                                        text = "Total Calls",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                    Spacer(modifier = Modifier.height(4.dp))
-                                    Text(
-                                        text = "$historyCount",
-                                        style = MaterialTheme.typography.headlineSmall,
-                                        fontWeight = FontWeight.Bold,
-                                        color = MaterialTheme.colorScheme.primary
-                                    )
-                                }
-                            }
-
-                            Surface(
-                                shape = CallogShapes.card,
-                                color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                                modifier = Modifier.weight(1f)
-                            ) {
-                                Column(modifier = Modifier.padding(12.dp)) {
-                                    Text(
-                                        text = "Total Talk Time",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                    Spacer(modifier = Modifier.height(4.dp))
-                                    Text(
-                                        text = totalDuration.toDurationString(),
-                                        style = MaterialTheme.typography.headlineSmall,
-                                        fontWeight = FontWeight.Bold,
-                                        color = MaterialTheme.colorScheme.secondary
-                                    )
-                                }
-                            }
-                        }
-
-                        // Action Buttons Row
-                        Row(
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            OutlinedButton(
-                                onClick = {
-                                    onScheduleMeeting?.invoke(person?.id ?: currentCall.number)
-                                },
-                                shape = CallogShapes.interactive,
-                                modifier = Modifier.weight(1f)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.CalendarMonth,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(16.dp)
-                                )
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text("Meeting", fontSize = 13.sp)
-                            }
-
-                            OutlinedButton(
-                                onClick = {
-                                    onCreateTask?.invoke(person?.id ?: currentCall.number)
-                                },
-                                shape = CallogShapes.interactive,
-                                modifier = Modifier.weight(1f)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Assignment,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(16.dp)
-                                )
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text("Task", fontSize = 13.sp)
-                            }
-
-                            OutlinedButton(
-                                onClick = { showReminderDialog = true },
-                                shape = CallogShapes.interactive,
-                                modifier = Modifier.weight(1f)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.NotificationsActive,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(16.dp)
-                                )
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text("Alert", fontSize = 13.sp)
-                            }
-                        }
-                    }
-                }
-
-                // ── 3. CRM Lead Pipeline & Lifecycle Manager ────────────────────
-                GlassyCard {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(14.dp)
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
+                        Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = "CRM Lead Pipeline",
-                                style = CallogTypography.sectionTitle,
+                                text = call.displayName,
+                                style = CallogTypography.entityName,
                                 color = MaterialTheme.colorScheme.onSurface
                             )
-                            if (lead != null) {
-                                LeadStatusPill(status = lead.status)
-                            }
-                        }
-
-                        if (person != null) {
-                            // Lead Status Selector
-                            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                                Text(
-                                    text = "Lead Stage",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                                FlowRow(
-                                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                                    verticalArrangement = Arrangement.spacedBy(6.dp),
-                                    modifier = Modifier.fillMaxWidth()
-                                ) {
-                                    val statuses = listOf(
-                                        LeadStatus.NEW,
-                                        LeadStatus.HOT,
-                                        LeadStatus.WARM,
-                                        LeadStatus.COLD,
-                                        LeadStatus.CUSTOMER
-                                    )
-                                    statuses.forEach { status ->
-                                        val isSelected = lead?.status == status
-                                        FilterChip(
-                                            selected = isSelected,
-                                            onClick = {
-                                                viewModel.updateLeadStatus(person.id, status)
-                                            },
-                                            label = { Text(status.name) },
-                                            leadingIcon = if (isSelected) {
-                                                {
-                                                    Icon(
-                                                        imageVector = Icons.Default.Check,
-                                                        contentDescription = null,
-                                                        modifier = Modifier.size(16.dp)
-                                                    )
-                                                }
-                                            } else null,
-                                            shape = CallogShapes.pill
-                                        )
-                                    }
-                                }
-                            }
-
-                            // Lead Priority Selector
-                            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                                Text(
-                                    text = "Deal Priority",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                                FlowRow(
-                                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                                    verticalArrangement = Arrangement.spacedBy(6.dp),
-                                    modifier = Modifier.fillMaxWidth()
-                                ) {
-                                    val priorities = listOf(
-                                        LeadPriority.LOW,
-                                        LeadPriority.MEDIUM,
-                                        LeadPriority.HIGH,
-                                        LeadPriority.URGENT
-                                    )
-                                    priorities.forEach { priority ->
-                                        val isSelected = lead?.priority == priority
-                                        FilterChip(
-                                            selected = isSelected,
-                                            onClick = {
-                                                viewModel.updateLeadPriority(person.id, priority)
-                                            },
-                                            label = { Text(priority.name) },
-                                            leadingIcon = if (isSelected) {
-                                                {
-                                                    Icon(
-                                                        imageVector = Icons.Default.Check,
-                                                        contentDescription = null,
-                                                        modifier = Modifier.size(16.dp)
-                                                    )
-                                                }
-                                            } else null,
-                                            shape = CallogShapes.pill
-                                        )
-                                    }
-                                }
-                            }
-
-                            // Follow-up Schedule
-                            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                                val followUpFormatted = lead?.nextFollowUpAt?.let { epoch ->
-                                    SimpleDateFormat("MMM dd, yyyy • hh:mm a", Locale.getDefault()).format(Date(epoch))
-                                } ?: "No follow-up scheduled"
-
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    modifier = Modifier.fillMaxWidth()
-                                ) {
-                                    Text(
-                                        text = "Next Follow-up",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                    Text(
-                                        text = followUpFormatted,
-                                        style = CallogTypography.denseData,
-                                        color = if (lead?.nextFollowUpAt != null) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                                        fontWeight = FontWeight.SemiBold
-                                    )
-                                }
-
-                                FlowRow(
-                                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                                    verticalArrangement = Arrangement.spacedBy(6.dp),
-                                    modifier = Modifier.fillMaxWidth()
-                                ) {
-                                    val followUpOptions = listOf(
-                                        "Tomorrow" to (24 * 60 * 60 * 1000L),
-                                        "In 3 Days" to (3 * 24 * 60 * 60 * 1000L),
-                                        "Next Week" to (7 * 24 * 60 * 60 * 1000L)
-                                    )
-
-                                    followUpOptions.forEach { (label, durationMs) ->
-                                        FilledTonalButton(
-                                            onClick = {
-                                                val targetEpoch = System.currentTimeMillis() + durationMs
-                                                viewModel.updateLeadFollowUp(person.id, targetEpoch)
-                                            },
-                                            shape = CallogShapes.pill
-                                        ) {
-                                            Text(label, fontSize = 12.sp)
-                                        }
-                                    }
-
-                                    if (lead?.nextFollowUpAt != null) {
-                                        TextButton(
-                                            onClick = {
-                                                viewModel.updateLeadFollowUp(person.id, null)
-                                            },
-                                            shape = CallogShapes.pill
-                                        ) {
-                                            Text("Clear", color = MaterialTheme.colorScheme.error, fontSize = 12.sp)
-                                        }
-                                    }
-                                }
-                            }
-                        } else {
+                            Spacer(modifier = Modifier.height(2.dp))
                             Text(
-                                text = "Caller is not registered as a CRM lead yet. Add this caller to CRM to manage lifecycle stage, priority, and follow-ups.",
+                                text = call.number,
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
-                            FilledTonalButton(
-                                onClick = { showAddContactDialog = true },
-                                shape = CallogShapes.interactive
-                            ) {
-                                Icon(Icons.Default.PersonAdd, contentDescription = null)
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text("Create CRM Lead Record")
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                CallTypeIcon(call.callType)
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = "${call.callType} • ${call.timestamp.toDateTimeString()}",
+                                    style = CallogTypography.denseData,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
                             }
+                            Spacer(modifier = Modifier.height(8.dp))
+                            SyncStatusPill(status = call.syncStatus)
                         }
                     }
                 }
 
-                // ── 4. Post-Call Sales Disposition Wrap-Up Card ─────────────────
-                GlassyCard {
-                    Column(
+                // Interactive Callback Reminder trigger
+                val reminderInteraction = remember { MutableInteractionSource() }
+                val reminderPressed by reminderInteraction.collectIsPressedAsState()
+                val reminderScale by animateFloatAsState(
+                    targetValue = if (reminderPressed) 0.98f else 1f,
+                    animationSpec = CallogMotion.snappySpring(),
+                    label = "reminderScale"
+                )
+
+                Surface(
+                    onClick = { showReminderDialog = true },
+                    interactionSource = reminderInteraction,
+                    shape = CallogShapes.card,
+                    color = MaterialTheme.colorScheme.surfaceContainerLow,
+                    border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .scale(reminderScale)
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween,
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(14.dp)
+                            .padding(16.dp)
                     ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Text(
-                                text = "Sales Call Wrap-up & Outcome",
-                                style = CallogTypography.sectionTitle,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                            AnimatedVisibility(
-                                visible = isSalesDispositionSaved,
-                                enter = fadeIn() + slideInVertically(),
-                                exit = fadeOut()
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Surface(
+                                shape = CallogShapes.avatar,
+                                color = CallogSemanticColors.LeadWarm.copy(alpha = 0.15f),
+                                modifier = Modifier.size(44.dp)
                             ) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                Box(contentAlignment = Alignment.Center) {
                                     Icon(
-                                        imageVector = Icons.Default.CheckCircle,
+                                        imageVector = Icons.Default.NotificationsActive,
                                         contentDescription = null,
-                                        tint = CallogSemanticColors.SyncSuccess,
-                                        modifier = Modifier.size(16.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(4.dp))
-                                    Text(
-                                        text = "Saved to CRM",
-                                        color = CallogSemanticColors.SyncSuccess,
-                                        style = CallogTypography.statusLabel,
-                                        fontWeight = FontWeight.Bold
+                                        tint = CallogSemanticColors.LeadWarm,
+                                        modifier = Modifier.size(22.dp)
                                     )
                                 }
                             }
-                        }
-
-                        // Star Rating for Sales Call Quality
-                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                            Text(
-                                text = "Conversation Rating ($salesRating/5)",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                            Row(
-                                horizontalArrangement = Arrangement.spacedBy(4.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                (1..5).forEach { starIndex ->
-                                    IconButton(
-                                        onClick = {
-                                            salesRating = starIndex
-                                            isSalesDispositionSaved = false
-                                        },
-                                        modifier = Modifier.size(36.dp)
-                                    ) {
-                                        Icon(
-                                            imageVector = if (starIndex <= salesRating) Icons.Default.Star else Icons.Default.StarBorder,
-                                            contentDescription = "Rate $starIndex stars",
-                                            tint = if (starIndex <= salesRating) Amber500 else MaterialTheme.colorScheme.onSurfaceVariant,
-                                            modifier = Modifier.size(28.dp)
-                                        )
-                                    }
-                                }
-                            }
-                        }
-
-                        // Call Outcome Tag Selector
-                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                            Text(
-                                text = "Call Disposition Outcome",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                            val outcomes = listOf(
-                                "CONNECTED",
-                                "INTERESTED",
-                                "QUOTE_SENT",
-                                "FOLLOW_UP",
-                                "CLOSED_WON",
-                                "CLOSED_LOST",
-                                "VOICEMAIL"
-                            )
-                            FlowRow(
-                                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                                verticalArrangement = Arrangement.spacedBy(6.dp),
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                outcomes.forEach { outcome ->
-                                    val isSelected = selectedOutcome.equals(outcome, ignoreCase = true)
-                                    FilterChip(
-                                        selected = isSelected,
-                                        onClick = {
-                                            selectedOutcome = outcome
-                                            isSalesDispositionSaved = false
-                                        },
-                                        label = { Text(outcome) },
-                                        shape = CallogShapes.pill
-                                    )
-                                }
-                            }
-                        }
-
-                        // Sales Feedback & Discussion Notes
-                        OutlinedTextField(
-                            value = salesFeedback,
-                            onValueChange = {
-                                salesFeedback = it
-                                isSalesDispositionSaved = false
-                            },
-                            label = { Text("Sales Feedback & Client Objections") },
-                            placeholder = { Text("e.g. Client requested 10% discount on enterprise tier, send quote by Friday...") },
-                            minLines = 3,
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = CallogShapes.card
-                        )
-
-                        Button(
-                            onClick = {
-                                viewModel.saveSalesCallDisposition(
-                                    callId = currentCall.id,
-                                    personId = person?.id,
-                                    buyerNumber = currentCall.number,
-                                    buyerName = person?.displayName ?: currentCall.name,
-                                    rating = salesRating,
-                                    feedback = salesFeedback,
-                                    outcome = selectedOutcome
+                            Spacer(modifier = Modifier.width(14.dp))
+                            Column {
+                                Text(
+                                    text = "Callback Reminder",
+                                    style = CallogTypography.sectionTitle,
+                                    color = MaterialTheme.colorScheme.onSurface
                                 )
-                                isSalesDispositionSaved = true
-                            },
-                            shape = CallogShapes.interactive,
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Icon(imageVector = Icons.Default.Save, contentDescription = null)
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text("Save Sales Disposition & Sync", fontWeight = FontWeight.Bold)
+                                Text(
+                                    text = "Schedule a reminder notification for this caller",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
                         }
+                        Icon(
+                            imageVector = Icons.Default.ChevronRight,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     }
                 }
 
-                // ── 5. Call Recording Player (Waveform & Cloud Vault) ───────────
-                if (currentCall.recordingPath != null) {
+                // Call Recording Player (Waveforms)
+                if (call.recordingPath != null) {
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text(
-                            text = "Call Recording Vault",
+                            text = "Call Recording",
                             style = CallogTypography.sectionTitle,
                             color = MaterialTheme.colorScheme.onSurface
                         )
@@ -868,7 +354,7 @@ fun CallDetailsScreen(
                                         modifier = Modifier.size(20.dp)
                                     )
                                     Text(
-                                        text = currentCall.recordingPath.substringAfterLast("/"),
+                                        text = call.recordingPath?.substringAfterLast("/") ?: "recording",
                                         style = MaterialTheme.typography.bodyMedium,
                                         color = MaterialTheme.colorScheme.onSurface,
                                         fontWeight = FontWeight.SemiBold
@@ -876,19 +362,19 @@ fun CallDetailsScreen(
                                 }
                                 Spacer(modifier = Modifier.height(6.dp))
 
-                                val uploadStatusText = when (currentCall.recordingUploadStatus) {
+                                val uploadStatusText = when (call.recordingUploadStatus) {
                                     "SUCCESS" -> "Cloud Storage Uploaded"
                                     "UPLOADING" -> "Cloud Storage Uploading..."
                                     "FAILED" -> "Cloud Storage Upload Failed"
                                     else -> "Local File (Pending Cloud Upload)"
                                 }
-                                val uploadStatusColor = when (currentCall.recordingUploadStatus) {
+                                val uploadStatusColor = when (call.recordingUploadStatus) {
                                     "SUCCESS" -> CallogSemanticColors.SyncSuccess
                                     "UPLOADING" -> CallogSemanticColors.SyncInProgress
                                     "FAILED" -> CallogSemanticColors.SyncFailed
                                     else -> MaterialTheme.colorScheme.onSurfaceVariant
                                 }
-                                val uploadStatusIcon = when (currentCall.recordingUploadStatus) {
+                                val uploadStatusIcon = when (call.recordingUploadStatus) {
                                     "SUCCESS" -> Icons.Default.CloudDone
                                     "UPLOADING" -> Icons.Default.Sync
                                     "FAILED" -> Icons.Default.Warning
@@ -953,6 +439,7 @@ fun CallDetailsScreen(
 
                                 Spacer(modifier = Modifier.height(12.dp))
 
+                                // Player Slider
                                 Slider(
                                     value = playProgress,
                                     onValueChange = { progress ->
@@ -988,11 +475,13 @@ fun CallDetailsScreen(
 
                                 Spacer(modifier = Modifier.height(12.dp))
 
+                                // Play and Upload controls
                                 Row(
                                     horizontalArrangement = Arrangement.spacedBy(24.dp, Alignment.CenterHorizontally),
                                     verticalAlignment = Alignment.CenterVertically,
                                     modifier = Modifier.fillMaxWidth()
                                 ) {
+                                    // Play/Pause Button
                                     val playInteraction = remember { MutableInteractionSource() }
                                     val playPressed by playInteraction.collectIsPressedAsState()
                                     val playScale by animateFloatAsState(
@@ -1019,15 +508,16 @@ fun CallDetailsScreen(
                                         )
                                     }
 
+                                    // Cloud Upload/Delete Action Button
                                     var isActionInProgress by remember { mutableStateOf(false) }
-                                    val status = currentCall.recordingUploadStatus
+                                    val status = call.recordingUploadStatus
 
                                     when (status) {
                                         "SUCCESS" -> {
                                             OutlinedIconButton(
                                                 onClick = {
                                                     isActionInProgress = true
-                                                    viewModel.deleteRecording(currentCall.id) {
+                                                    viewModel.deleteRecording(call.id) {
                                                         isActionInProgress = false
                                                     }
                                                 },
@@ -1036,7 +526,7 @@ fun CallDetailsScreen(
                                                 colors = IconButtonDefaults.outlinedIconButtonColors(
                                                     contentColor = MaterialTheme.colorScheme.error
                                                 ),
-                                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.error)
+                                                border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.error)
                                             ) {
                                                 if (isActionInProgress) {
                                                     CircularProgressIndicator(
@@ -1067,11 +557,11 @@ fun CallDetailsScreen(
                                                 )
                                             }
                                         }
-                                        else -> {
+                                        else -> { // PENDING or FAILED
                                             FilledTonalIconButton(
                                                 onClick = {
                                                     isActionInProgress = true
-                                                    viewModel.uploadRecording(currentCall.id) { _ ->
+                                                    viewModel.uploadRecording(call.id) { _ ->
                                                         isActionInProgress = false
                                                     }
                                                 },
@@ -1152,7 +642,7 @@ fun CallDetailsScreen(
                     }
                 }
 
-                // ── 6. Personal Notes Input ─────────────────────────────────────
+                // Notes input field
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -1160,7 +650,7 @@ fun CallDetailsScreen(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            text = "Personal Call Notes",
+                            text = "Call Notes",
                             style = CallogTypography.sectionTitle,
                             color = MaterialTheme.colorScheme.onSurface
                         )
@@ -1208,7 +698,7 @@ fun CallDetailsScreen(
 
                     FilledTonalButton(
                         onClick = {
-                            viewModel.updateNotes(currentCall.id, notesText)
+                            viewModel.updateNotes(call.id, notesText)
                             isNotesSaved = true
                         },
                         shape = CallogShapes.interactive,
@@ -1218,7 +708,7 @@ fun CallDetailsScreen(
                     }
                 }
 
-                // ── 7. Call Tags Manager ────────────────────────────────────────
+                // Tags Manager
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(
                         text = "Call Tags",
@@ -1226,6 +716,7 @@ fun CallDetailsScreen(
                         color = MaterialTheme.colorScheme.onSurface
                     )
 
+                    // Current tags layout
                     FlowRow(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -1237,7 +728,7 @@ fun CallDetailsScreen(
                                 isRemovable = true,
                                 onRemove = {
                                     currentTags.remove(tag)
-                                    viewModel.updateTags(currentCall.id, currentTags.toList())
+                                    viewModel.updateTags(call.id, currentTags.toList())
                                 }
                             )
                         }
@@ -1245,6 +736,7 @@ fun CallDetailsScreen(
 
                     Spacer(modifier = Modifier.height(4.dp))
 
+                    // Preset quick selection tags
                     Text(
                         text = "Pre-set Categories",
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -1265,7 +757,7 @@ fun CallDetailsScreen(
                                     } else {
                                         currentTags.add(tag)
                                     }
-                                    viewModel.updateTags(currentCall.id, currentTags.toList())
+                                    viewModel.updateTags(call.id, currentTags.toList())
                                 },
                                 label = { Text(tag, style = CallogTypography.statusLabel) },
                                 shape = CallogShapes.pill
@@ -1275,6 +767,7 @@ fun CallDetailsScreen(
 
                     Spacer(modifier = Modifier.height(4.dp))
 
+                    // Add Custom Tag text field
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier.fillMaxWidth()
@@ -1298,7 +791,7 @@ fun CallDetailsScreen(
                                 val newTag = customTagInput.trim()
                                 if (newTag.isNotEmpty() && !currentTags.contains(newTag)) {
                                     currentTags.add(newTag)
-                                    viewModel.updateTags(currentCall.id, currentTags.toList())
+                                    viewModel.updateTags(call.id, currentTags.toList())
                                     customTagInput = ""
                                 }
                             },
@@ -1315,7 +808,7 @@ fun CallDetailsScreen(
             }
         }
 
-        // ── Dialog: Schedule Callback Reminder ───────────────────────────────
+        // Dialog for scheduling callback reminders
         if (showReminderDialog) {
             AlertDialog(
                 onDismissRequest = { showReminderDialog = false },
@@ -1330,7 +823,7 @@ fun CallDetailsScreen(
                 text = {
                     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
                         Text(
-                            text = "Set a callback alert for ${person?.displayName ?: currentCall.displayName}. When the timer fires, you will receive a local notification.",
+                            text = "Set a callback alert for ${call.displayName}. When the timer fires, you will receive a local notification.",
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -1372,7 +865,7 @@ fun CallDetailsScreen(
                                 FilledTonalButton(
                                     onClick = {
                                         val targetTime = System.currentTimeMillis() + durationMillis
-                                        viewModel.scheduleReminder(currentCall.id, targetTime, reminderNote)
+                                        viewModel.scheduleReminder(call.id, targetTime, reminderNote)
                                         showReminderDialog = false
                                         reminderNote = ""
                                     },
@@ -1400,75 +893,6 @@ fun CallDetailsScreen(
                 shape = CallogShapes.dialog
             )
         }
-
-        // ── Dialog: Add to CRM Contact ───────────────────────────────────────
-        if (showAddContactDialog) {
-            AlertDialog(
-                onDismissRequest = { showAddContactDialog = false },
-                title = {
-                    Text(
-                        text = "Create CRM Contact & Lead",
-                        style = CallogTypography.sectionTitle,
-                        fontWeight = FontWeight.Bold
-                    )
-                },
-                text = {
-                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        Text(
-                            text = "Register this phone number (${currentCall.number}) as a new CRM profile in your global database.",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-
-                        OutlinedTextField(
-                            value = newContactName,
-                            onValueChange = { newContactName = it },
-                            label = { Text("Contact Full Name") },
-                            singleLine = true,
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = CallogShapes.card
-                        )
-
-                        OutlinedTextField(
-                            value = newContactCompany,
-                            onValueChange = { newContactCompany = it },
-                            label = { Text("Company / Organization (Optional)") },
-                            singleLine = true,
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = CallogShapes.card
-                        )
-                    }
-                },
-                confirmButton = {
-                    Button(
-                        onClick = {
-                            if (newContactName.isNotBlank()) {
-                                viewModel.createAndLinkContact(
-                                    callId = currentCall.id,
-                                    name = newContactName.trim(),
-                                    number = currentCall.number,
-                                    company = newContactCompany.trim().ifBlank { null }
-                                ) { createdPerson ->
-                                    showAddContactDialog = false
-                                }
-                            }
-                        },
-                        enabled = newContactName.isNotBlank(),
-                        shape = CallogShapes.interactive
-                    ) {
-                        Text("Save & Link")
-                    }
-                },
-                dismissButton = {
-                    TextButton(
-                        onClick = { showAddContactDialog = false },
-                        shape = CallogShapes.interactive
-                    ) {
-                        Text("Cancel")
-                    }
-                },
-                shape = CallogShapes.dialog
-            )
-        }
     }
 }
+
