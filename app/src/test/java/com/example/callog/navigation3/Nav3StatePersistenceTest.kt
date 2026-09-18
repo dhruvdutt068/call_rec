@@ -175,8 +175,7 @@ class Nav3StatePersistenceTest {
             CrmBottomTab.DIALER to Nav3Key.CrmTab.Dialer,
             CrmBottomTab.CALL_LOGS to Nav3Key.CrmTab.CallLogs,
             CrmBottomTab.CONTACTS to Nav3Key.Contacts.ContactList,
-            CrmBottomTab.RECORDINGS to Nav3Key.CrmTab.Recordings,
-            CrmBottomTab.CRM_HUB to Nav3Key.CrmTab.Dashboard
+            CrmBottomTab.RECORDINGS to Nav3Key.CrmTab.Recordings
         )
 
         val multiStack = Nav3MultiBackStackState(

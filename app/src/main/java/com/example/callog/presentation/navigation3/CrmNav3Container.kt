@@ -33,7 +33,6 @@ import com.example.callog.presentation.components.GlassyCard
 import com.example.callog.presentation.screens.analytics.AnalyticsScreen
 import com.example.callog.presentation.screens.contacts.ContactDetailsScreen
 import com.example.callog.presentation.screens.contacts.ContactsScreen
-import com.example.callog.presentation.screens.crm.CrmHubScreen
 import com.example.callog.presentation.screens.developer.CallSimulatorScreen
 import com.example.callog.presentation.screens.developer.SyncLogsScreen
 import com.example.callog.presentation.screens.dialer.DialerScreen
@@ -60,8 +59,7 @@ enum class CrmBottomTab(
     DIALER("Dialer", Icons.Default.Dialpad),
     CALL_LOGS("Call Logs", Icons.Default.History),
     CONTACTS("Contacts", Icons.Default.People),
-    RECORDINGS("Recordings", Icons.Default.GraphicEq),
-    CRM_HUB("CRM Hub", Icons.Default.Dashboard)
+    RECORDINGS("Recordings", Icons.Default.GraphicEq)
 }
 
 /**
@@ -70,7 +68,6 @@ enum class CrmBottomTab(
  * 2. Call Logs (Filterable call logs, audio & sync badges)
  * 3. Contacts (Global CRM & local phonebook)
  * 4. Recordings (Audio vault with inline player)
- * 5. CRM Hub (Pipeline, Tasks, Meetings, Analytics)
  */
 @Composable
 fun CrmNav3Container(
@@ -116,8 +113,7 @@ fun CrmNav3Container(
             CrmBottomTab.DIALER to Nav3Key.CrmTab.Dialer,
             CrmBottomTab.CALL_LOGS to Nav3Key.CrmTab.CallLogs,
             CrmBottomTab.CONTACTS to Nav3Key.Contacts.ContactList,
-            CrmBottomTab.RECORDINGS to Nav3Key.CrmTab.Recordings,
-            CrmBottomTab.CRM_HUB to Nav3Key.CrmTab.Dashboard
+            CrmBottomTab.RECORDINGS to Nav3Key.CrmTab.Recordings
         )
     }
 
@@ -389,23 +385,6 @@ fun CrmNav3Container(
                             fontWeight = FontWeight.SemiBold
                         )
 
-                        NavigationDrawerItem(
-                            icon = { Icon(Icons.Default.Dashboard, contentDescription = null) },
-                            label = { Text("Sales Pipeline Hub") },
-                            selected = multiStack.selectedTab == CrmBottomTab.CRM_HUB,
-                            onClick = {
-                                multiStack.selectTab(CrmBottomTab.CRM_HUB, popToRootIfSelected = true)
-                                closeDrawer()
-                            },
-                            colors = NavigationDrawerItemDefaults.colors(
-                                selectedContainerColor = AllSetBlue.copy(alpha = 0.2f),
-                                selectedIconColor = AllSetLavender,
-                                selectedTextColor = Slate50,
-                                unselectedIconColor = Slate400,
-                                unselectedTextColor = Slate300
-                            ),
-                            shape = RoundedCornerShape(12.dp)
-                        )
 
                         NavigationDrawerItem(
                             icon = { Icon(Icons.Default.Analytics, contentDescription = null) },
@@ -786,34 +765,6 @@ fun CrmNav3Container(
                         )
                     }
 
-                    // --- 5. Whole CRM UI (Pipeline, Overview, Tasks, Meetings, Analytics) ---
-                    is Nav3Key.CrmTab.Dashboard -> {
-                        CrmHubScreen(
-                            callViewModel = callViewModel,
-                            analyticsViewModel = analyticsViewModel,
-                            onViewAllLogsClick = {
-                                multiStack.selectTab(CrmBottomTab.CALL_LOGS)
-                            },
-                            onCallClick = onCallClick,
-                            onCreateTaskClick = {
-                                multiStack.navigate(Nav3Key.Task.CreateTask())
-                            },
-                            onTaskClick = { taskId ->
-                                multiStack.navigate(Nav3Key.Task.TaskDetails(taskId = taskId))
-                            },
-                            onScheduleMeetingClick = {
-                                multiStack.navigate(Nav3Key.Meeting.ScheduleMeeting())
-                            },
-                            onMeetingClick = { meetingId ->
-                                multiStack.navigate(Nav3Key.Meeting.MeetingDetails(meetingId = meetingId))
-                            },
-                            onContactClick = { contactId ->
-                                multiStack.selectTab(CrmBottomTab.CONTACTS)
-                                multiStack.navigate(Nav3Key.Contacts.ContactDetails(contactId = contactId))
-                            },
-                            onMenuClick = openDrawer
-                        )
-                    }
 
                     // --- 6. Analytics Standalone Screen ---
                     is Nav3Key.CrmTab.Analytics -> {
