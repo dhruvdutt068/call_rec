@@ -758,4 +758,109 @@ fun RecordingChildItemPreview() {
     }
 }
 
+@Preview(name = "Recording Manager Screen Empty", showBackground = true)
+@Preview(name = "Recording Manager Screen Empty Dark", uiMode = Configuration.UI_MODE_NIGHT_YES, showBackground = true)
+@Composable
+fun RecordingManagerEmptyPreview() {
+    CallogTheme {
+        RecordingManagerContent(
+            recordings = emptyList(),
+            callLogs = emptyList(),
+            onRescan = {},
+            onReUpload = {}
+        )
+    }
+}
+
+@Preview(name = "Recording Child Item Unmatched", showBackground = true)
+@Composable
+fun RecordingChildItemUnmatchedPreview() {
+    CallogTheme {
+        Box(modifier = Modifier.padding(16.dp)) {
+            RecordingChildItem(
+                recording = RecordingEntity(
+                    id = 1L,
+                    fileName = "Unknown_Number.m4a",
+                    filePath = "/storage/emulated/0/Recordings/unknown.m4a",
+                    fileSize = 512000L,
+                    duration = 45000L,
+                    lastModified = System.currentTimeMillis(),
+                    phoneExtracted = "+1 555 999 0000",
+                    contactExtracted = null,
+                    timestampExtracted = System.currentTimeMillis(),
+                    matchStatus = MatchStatus.UNMATCHED,
+                    matchedCallId = null,
+                    uploadStatus = UploadStatus.PENDING
+                ),
+                matchedCall = null,
+                onCardClick = {}
+            )
+        }
+    }
+}
+
+@Preview(name = "Recording Detail Dialog (Matched)", showBackground = true)
+@Composable
+fun RecordingDetailDialogMatchedPreview() {
+    CallogTheme {
+        RecordingDetailDialog(
+            recording = RecordingEntity(
+                id = 1L,
+                fileName = "Call_Recording_Jane_Doe_2026.m4a",
+                filePath = "/storage/emulated/0/Recordings/Call_Jane_Doe.m4a",
+                fileSize = 1024000L,
+                duration = 145000L,
+                lastModified = System.currentTimeMillis(),
+                phoneExtracted = "+1 (555) 345-6789",
+                contactExtracted = "Jane Doe",
+                timestampExtracted = System.currentTimeMillis(),
+                matchStatus = MatchStatus.MATCHED,
+                matchedCallId = 101L,
+                uploadStatus = UploadStatus.UPLOADED
+            ),
+            matchedCall = CallLogEntry(
+                id = 101L,
+                name = "Jane Doe",
+                number = "+1 (555) 345-6789",
+                duration = 145,
+                timestamp = System.currentTimeMillis(),
+                callType = "INCOMING",
+                recordingPath = "/storage/emulated/0/Recordings/Call_Jane_Doe.m4a",
+                isFavorite = true,
+                notes = null,
+                tags = listOf("work"),
+                contactPhotoUri = null
+            ),
+            onDismiss = {},
+            onReUploadClick = {}
+        )
+    }
+}
+
+@Preview(name = "Recording Detail Dialog (Missing File)", showBackground = true)
+@Composable
+fun RecordingDetailDialogMissingFilePreview() {
+    CallogTheme {
+        RecordingDetailDialog(
+            recording = RecordingEntity(
+                id = 2L,
+                fileName = "Deleted_Recording.m4a",
+                filePath = "/storage/emulated/0/Recordings/Deleted.m4a",
+                fileSize = 512000L,
+                duration = 45000L,
+                lastModified = System.currentTimeMillis(),
+                phoneExtracted = "+1 555 999 0000",
+                contactExtracted = null,
+                timestampExtracted = System.currentTimeMillis(),
+                matchStatus = MatchStatus.UNMATCHED,
+                matchedCallId = null,
+                uploadStatus = UploadStatus.PENDING
+            ),
+            matchedCall = null,
+            onDismiss = {},
+            onReUploadClick = {}
+        )
+    }
+}
+
 

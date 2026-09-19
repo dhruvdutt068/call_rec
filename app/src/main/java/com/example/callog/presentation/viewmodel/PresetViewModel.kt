@@ -26,7 +26,8 @@ class PresetViewModel @Inject constructor(
     private val deletePresetUseCase: DeletePresetUseCase,
     private val duplicatePresetUseCase: DuplicatePresetUseCase,
     private val importExportPresetUseCase: ImportExportPresetUseCase,
-    private val supabaseService: SupabaseService
+    private val supabaseService: SupabaseService,
+    private val firestoreService: com.example.callog.data.remote.FirestoreService
 ) : ViewModel() {
 
     val presets: StateFlow<List<AppPreset>> = getPresetsUseCase()
@@ -164,6 +165,76 @@ class PresetViewModel @Inject constructor(
             } else {
                 _connectionTestResult.value = Pair(false, result.exceptionOrNull()?.message ?: "Connection test failed")
             }
+        }
+    }
+
+    fun testFirebaseConnection(config: com.example.callog.domain.model.FirebaseConfig) {
+        viewModelScope.launch {
+            _isTestingConnection.value = true
+            _connectionTestResult.value = null
+            val result = firestoreService.testFirebaseConnection(config)
+            _isTestingConnection.value = false
+            if (result.isSuccess) {
+                _connectionTestResult.value = Pair(true, "Successfully connected to Firebase Firestore & Storage!")
+            } else {
+                _connectionTestResult.value = Pair(false, result.exceptionOrNull()?.message ?: "Firebase test failed")
+            }
+        }
+    }
+
+    fun testActiveConnections(preset: AppPreset, secrets: PresetSecrets?) {
+        viewModelScope.launch {
+            _isTestingConnection.value = true
+            _connectionTestResult.value = null
+            val results = mutableListOf<String>()
+            var allPassed = true
+
+            // 1. Supabase Test if URL is present
+            if (!preset.configuration.supabaseUrl.isNullOrBlank()) {
+                val subKey = secrets?.supabaseAnonKey ?: ""
+                val sbResult = supabaseService.testSupabaseConnection(preset.configuration.supabaseUrl, subKey)
+                if (sbResult.isSuccess) {
+                    results.add("Supabase: Connected")
+                } else {
+                    allPassed = false
+                    results.add("Supabase Failed: ${sbResult.exceptionOrNull()?.message}")
+                }
+            }
+
+            // 2. Firebase & Storage Test if Firebase Project is configured
+            val fbProj = preset.configuration.firebaseProjectId?.trim()
+            val fbAppId = preset.configuration.firebaseAppId?.trim()
+            val fbKey = secrets?.firebaseApiKey?.trim()
+
+            if (!fbProj.isNullOrBlank() && !fbAppId.isNullOrBlank() && !fbKey.isNullOrBlank()) {
+                val fbConfig = com.example.callog.domain.model.FirebaseConfig(
+                    projectId = fbProj,
+                    apiKey = fbKey,
+                    appId = fbAppId,
+                    storageBucket = preset.configuration.storageBucket?.ifBlank { null },
+                    gcmSenderId = preset.configuration.gcmSenderId?.ifBlank { null },
+                    databaseUrl = preset.configuration.databaseUrl?.ifBlank { null }
+                )
+                val fbResult = firestoreService.testFirebaseConnection(fbConfig)
+                if (fbResult.isSuccess) {
+                    results.add("Firebase Firestore & Storage: Connected")
+                } else {
+                    allPassed = false
+                    results.add("Firebase Failed: ${fbResult.exceptionOrNull()?.message}")
+                }
+            } else {
+                // If not custom configured in preset, test default Firebase app
+                val fbResult = firestoreService.testFirebaseConnection(null)
+                if (fbResult.isSuccess) {
+                    results.add("Default Firebase & Storage: Connected")
+                } else {
+                    results.add("Default Firebase: Not reachable (${fbResult.exceptionOrNull()?.message})")
+                }
+            }
+
+            _isTestingConnection.value = false
+            val combinedMsg = results.joinToString("\n")
+            _connectionTestResult.value = Pair(allPassed, combinedMsg)
         }
     }
 

@@ -43,40 +43,7 @@ class UploadServiceImpl @Inject constructor(
     private val activeTasks = ConcurrentHashMap<Long, UploadTask>()
 
     private fun getStorage(): FirebaseStorage? {
-        return try {
-            val savedConfig = firestoreService.getSavedConfig()
-            if (savedConfig != null) {
-                val customApp = try {
-                    FirebaseApp.getInstance("customApp")
-                } catch (e: Exception) {
-                    val options = FirebaseOptions.Builder()
-                        .setProjectId(savedConfig.projectId)
-                        .setApiKey(savedConfig.apiKey)
-                        .setApplicationId(savedConfig.appId)
-                        .apply {
-                            savedConfig.storageBucket?.takeIf { it.isNotBlank() }?.let { setStorageBucket(it) }
-                            savedConfig.gcmSenderId?.takeIf { it.isNotBlank() }?.let { setGcmSenderId(it) }
-                            savedConfig.databaseUrl?.takeIf { it.isNotBlank() }?.let { setDatabaseUrl(it) }
-                        }
-                        .build()
-                    FirebaseApp.initializeApp(context, options, "customApp")
-                }
-                if (!savedConfig.storageBucket.isNullOrBlank()) {
-                    val bucketUrl = if (savedConfig.storageBucket.startsWith("gs://")) savedConfig.storageBucket else "gs://${savedConfig.storageBucket}"
-                    FirebaseStorage.getInstance(customApp, bucketUrl)
-                } else {
-                    FirebaseStorage.getInstance(customApp)
-                }
-            } else {
-                if (FirebaseApp.getApps(context).isEmpty()) {
-                    FirebaseApp.initializeApp(context)
-                }
-                FirebaseStorage.getInstance()
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to initialize Firebase Storage", e)
-            null
-        }
+        return firestoreService.getStorageInstance()
     }
 
     override fun uploadRecording(call: CallEntity): Flow<UploadProgressState> = callbackFlow {

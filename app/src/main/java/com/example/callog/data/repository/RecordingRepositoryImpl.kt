@@ -43,30 +43,7 @@ class RecordingRepositoryImpl @Inject constructor(
     private val TAG = "RecordingRepository"
 
     private fun getStorage(): FirebaseStorage? {
-        return try {
-            val savedConfig = firestoreService.getSavedConfig()
-            if (savedConfig != null) {
-                val customApp = try {
-                    FirebaseApp.getInstance("customApp")
-                } catch (e: Exception) {
-                    val options = FirebaseOptions.Builder()
-                        .setProjectId(savedConfig.projectId)
-                        .setApiKey(savedConfig.apiKey)
-                        .setApplicationId(savedConfig.appId)
-                        .build()
-                    FirebaseApp.initializeApp(context, options, "customApp")
-                }
-                FirebaseStorage.getInstance(customApp)
-            } else {
-                if (FirebaseApp.getApps(context).isEmpty()) {
-                    FirebaseApp.initializeApp(context)
-                }
-                FirebaseStorage.getInstance()
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to initialize Firebase Storage", e)
-            null
-        }
+        return firestoreService.getStorageInstance()
     }
 
     private fun normalizePhoneNumber(num: String): String {

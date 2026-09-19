@@ -147,8 +147,10 @@ fun EnvironmentPresetScreen(
                     secrets = activeSecrets,
                     isTesting = isTestingConnection,
                     testResult = connectionTestResult,
-                    onTestConnection = { url, key ->
-                        viewModel.testSupabaseConnection(url, key)
+                    onTestConnection = {
+                        activePreset?.let { active ->
+                            viewModel.testActiveConnections(active, activeSecrets)
+                        }
                     },
                     onEditActive = {
                         activePreset?.let { active ->
@@ -363,7 +365,7 @@ private fun ActiveEnvironmentShowcaseCard(
     secrets: PresetSecrets?,
     isTesting: Boolean,
     testResult: Pair<Boolean, String>?,
-    onTestConnection: (String, String) -> Unit,
+    onTestConnection: () -> Unit,
     onEditActive: () -> Unit
 ) {
     val env = preset?.environment ?: PresetEnvironment.DEVELOPMENT
@@ -510,12 +512,8 @@ private fun ActiveEnvironmentShowcaseCard(
 
             // Test Connection Button
             Button(
-                onClick = {
-                    val url = preset?.configuration?.supabaseUrl ?: ""
-                    val key = secrets?.supabaseAnonKey ?: ""
-                    onTestConnection(url, key)
-                },
-                enabled = !isTesting && preset?.configuration?.supabaseUrl?.isNotBlank() == true,
+                onClick = { onTestConnection() },
+                enabled = !isTesting && preset != null,
                 modifier = Modifier.fillMaxWidth(),
                 colors = ButtonDefaults.buttonColors(
                     containerColor = Slate800,
