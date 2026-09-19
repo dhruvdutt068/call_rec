@@ -132,16 +132,25 @@ fun ContactsContent(
         }
     }
 
+    val searchPlaceholder = if (state.source == ContactSource.CLOUD) {
+        "Search cloud CRM, aliases..."
+    } else {
+        "Search phone contacts & numbers..."
+    }
+
     Scaffold(
+        modifier = modifier,
         topBar = {
-            TopAppBar(
-                title = { Text("Contacts Directory", style = CallogTypography.sectionTitle) },
+            CallogAppBarWithSearch(
+                query = state.query,
+                onQueryChange = { onEvent(ContactsEvent.SearchChanged(it)) },
+                placeholder = searchPlaceholder,
                 navigationIcon = {
                     if (onMenuClick != null) {
                         IconButton(onClick = onMenuClick) {
                             Icon(
                                 imageVector = Icons.Default.Menu,
-                                contentDescription = "Open Menu"
+                                contentDescription = "Open Navigation Menu"
                             )
                         }
                     }
@@ -165,12 +174,7 @@ fun ContactsContent(
                             )
                         }
                     }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceVariant,
-                    titleContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                    actionIconContentColor = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                }
             )
         },
         floatingActionButton = {
@@ -191,7 +195,7 @@ fun ContactsContent(
         containerColor = MaterialTheme.colorScheme.background
     ) { innerPadding ->
         Column(
-            modifier = modifier
+            modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
         ) {
@@ -204,24 +208,9 @@ fun ContactsContent(
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(horizontal = 16.dp),
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                // Search Bar
-                val searchPlaceholder = if (state.source == ContactSource.CLOUD) {
-                    "Search cloud CRM, company, aliases..."
-                } else {
-                    "Search phone contacts & numbers..."
-                }
-
-                SearchBarField(
-                    query = state.query,
-                    onQueryChange = { onEvent(ContactsEvent.SearchChanged(it)) },
-                    placeholder = searchPlaceholder,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 12.dp)
-                )
 
                 // Sync status banner for Cloud Tab
                 AnimatedVisibility(
