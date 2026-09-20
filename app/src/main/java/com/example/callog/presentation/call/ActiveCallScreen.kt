@@ -38,10 +38,15 @@ fun ActiveCallScreen(
     otherSessions: List<CallSessionState> = emptyList(),
     onAction: (CallAction) -> Unit,
     onOpenPersonDetails: (String) -> Unit,
+    onMinimize: (() -> Unit)? = null,
+    onEnterPip: (() -> Unit)? = null,
+    liveNotes: String = "",
+    onLiveNotesChange: (String) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     var showKeypadSheet by remember { mutableStateOf(false) }
     var showAudioRouteSheet by remember { mutableStateOf(false) }
+    var showLiveNotesSheet by remember { mutableStateOf(false) }
 
     val formattedDuration = remember(session.durationSeconds) {
         val minutes = session.durationSeconds / 60
@@ -69,16 +74,120 @@ fun ActiveCallScreen(
                     )
                 )
             )
-            .padding(horizontal = 24.dp, vertical = 36.dp)
+            .padding(horizontal = 20.dp, vertical = 24.dp)
     ) {
+        // Top Action Bar (Minimize, PiP, Live Notes, SIM)
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .statusBarsPadding()
+                .align(Alignment.TopCenter),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                if (onMinimize != null) {
+                    Surface(
+                        shape = RoundedCornerShape(20.dp),
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f),
+                        modifier = Modifier.clickable { onMinimize() }
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.KeyboardArrowDown,
+                                contentDescription = "Minimize to App",
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Text(
+                                text = "CRM App",
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    }
+                }
+
+                if (onEnterPip != null) {
+                    Surface(
+                        shape = RoundedCornerShape(20.dp),
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f),
+                        modifier = Modifier.clickable { onEnterPip() }
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.PictureInPicture,
+                                contentDescription = "Picture in Picture",
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Text(
+                                text = "PiP",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    }
+                }
+            }
+
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                // Live Notes toggle button
+                Surface(
+                    shape = RoundedCornerShape(20.dp),
+                    color = if (liveNotes.isNotBlank()) AllSetAmber.copy(alpha = 0.2f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f),
+                    modifier = Modifier.clickable { showLiveNotesSheet = true }
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.EditNote,
+                            contentDescription = "Live Call Notes",
+                            tint = if (liveNotes.isNotBlank()) AllSetAmber else MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Text(
+                            text = if (liveNotes.isNotBlank()) "Notes •" else "Notes",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = if (liveNotes.isNotBlank()) AllSetAmber else MaterialTheme.colorScheme.primary
+                        )
+                    }
+                }
+
+                // SIM Info badge
+                session.simInfo?.let { sim ->
+                    SimBadge(sim = sim)
+                }
+            }
+        }
+
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
             modifier = Modifier
                 .fillMaxWidth()
                 .align(Alignment.TopCenter)
+                .padding(top = 56.dp)
         ) {
-            Spacer(modifier = Modifier.height(24.dp))
-
             // State / Duration display
             Text(
                 text = stateLabel,
@@ -88,17 +197,17 @@ fun ActiveCallScreen(
                 letterSpacing = 1.sp
             )
 
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(16.dp))
 
             // Caller Avatar
             ContactAvatar(
                 name = session.callerDisplayName,
                 initials = session.initials,
                 photoUri = session.avatarUrl,
-                modifier = Modifier.size(96.dp)
+                modifier = Modifier.size(88.dp)
             )
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(12.dp))
 
             val displayName = session.callerDisplayName.ifBlank {
                 session.phoneNumber.ifBlank { "Active Call" }
@@ -117,10 +226,10 @@ fun ActiveCallScreen(
 
             // Company Name
             if (!session.companyName.isNullOrBlank()) {
-                Spacer(modifier = Modifier.height(4.dp))
+                Spacer(modifier = Modifier.height(2.dp))
                 Text(
                     text = session.companyName,
-                    style = MaterialTheme.typography.bodyLarge,
+                    style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.primary,
                     fontWeight = FontWeight.Medium
                 )
@@ -128,15 +237,15 @@ fun ActiveCallScreen(
 
             // Phone Number (if different from displayName)
             if (session.phoneNumber.isNotBlank() && session.phoneNumber != displayName) {
-                Spacer(modifier = Modifier.height(4.dp))
+                Spacer(modifier = Modifier.height(2.dp))
                 Text(
                     text = session.phoneNumber,
-                    style = MaterialTheme.typography.bodyMedium,
+                    style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
 
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(10.dp))
 
             // Badges Row
             Row(
@@ -149,17 +258,78 @@ fun ActiveCallScreen(
                 if (session.priority == LeadPriority.URGENT || session.priority == LeadPriority.HIGH) {
                     CrmPriorityChip(priority = session.priority)
                 }
-                session.simInfo?.let { sim ->
-                    SimBadge(sim = sim)
+            }
+
+            // CRM Context Summary (if available)
+            if (session.recentInteractionSummary != null || session.pendingFollowUp != null) {
+                Spacer(modifier = Modifier.height(12.dp))
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 8.dp)
+                ) {
+                    Column(
+                        modifier = Modifier.padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Text(
+                            text = "CRM Context",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        if (session.recentInteractionSummary != null) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.History,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.size(14.dp)
+                                )
+                                Text(
+                                    text = session.recentInteractionSummary,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 2,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                        }
+                        if (session.pendingFollowUp != null) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.EventNote,
+                                    contentDescription = null,
+                                    tint = AllSetAmber,
+                                    modifier = Modifier.size(14.dp)
+                                )
+                                Text(
+                                    text = session.pendingFollowUp,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 2,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                        }
+                    }
                 }
             }
 
-            // "Open in CRM" button if canonical person exists
+            // "View CRM Profile" button if canonical person exists
             if (session.personId != null) {
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(12.dp))
                 FilledTonalButton(
                     onClick = { onOpenPersonDetails(session.personId) },
-                    shape = RoundedCornerShape(8.dp),
+                    shape = RoundedCornerShape(10.dp),
                     colors = ButtonDefaults.filledTonalButtonColors(
                         containerColor = MaterialTheme.colorScheme.surfaceVariant,
                         contentColor = MaterialTheme.colorScheme.primary
@@ -291,6 +461,201 @@ fun ActiveCallScreen(
                 },
                 onDismiss = { showAudioRouteSheet = false }
             )
+        }
+
+        // Live Scratchpad Notes Bottom Sheet
+        if (showLiveNotesSheet) {
+            LiveNotesBottomSheet(
+                notes = liveNotes,
+                onNotesChange = onLiveNotesChange,
+                onDismiss = { showLiveNotesSheet = false }
+            )
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun LiveNotesBottomSheet(
+    notes: String,
+    onNotesChange: (String) -> Unit,
+    onDismiss: () -> Unit
+) {
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        containerColor = MaterialTheme.colorScheme.surface,
+        shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp, vertical = 8.dp)
+                .navigationBarsPadding()
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.EditNote,
+                        contentDescription = null,
+                        tint = AllSetAmber
+                    )
+                    Text(
+                        text = "In-Call Scratchpad",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                }
+                TextButton(onClick = onDismiss) {
+                    Text(
+                        text = "Done",
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Text(
+                text = "Notes written here will be automatically carried forward to this call's summary and CRM contact record.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            OutlinedTextField(
+                value = notes,
+                onValueChange = onNotesChange,
+                placeholder = { Text("Jot down discussion points, pricing quotes, client questions...") },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(160.dp),
+                shape = RoundedCornerShape(12.dp),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = MaterialTheme.colorScheme.primary,
+                    unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant
+                )
+            )
+
+            Spacer(modifier = Modifier.height(20.dp))
+        }
+    }
+}
+
+/**
+ * Ultra-compact Call Screen for Android Picture-in-Picture (PiP) mode.
+ */
+@Composable
+fun PipCallScreen(
+    session: CallSessionState,
+    onAction: (CallAction) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val formattedDuration = remember(session.durationSeconds) {
+        val minutes = session.durationSeconds / 60
+        val seconds = session.durationSeconds % 60
+        String.format("%02d:%02d", minutes, seconds)
+    }
+
+    val displayName = session.callerDisplayName.ifBlank {
+        session.phoneNumber.ifBlank { "In Call" }
+    }
+
+    Surface(
+        modifier = modifier.fillMaxSize(),
+        color = MaterialTheme.colorScheme.surface
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(8.dp),
+            verticalArrangement = Arrangement.SpaceBetween,
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            // Header Info
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(
+                    text = displayName,
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    text = if (session.isOnHold) "On Hold" else formattedDuration,
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = if (session.isOnHold) AllSetAmber else MaterialTheme.colorScheme.primary
+                )
+            }
+
+            // Compact Controls
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceEvenly,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // Mute
+                IconButton(
+                    onClick = { onAction(CallAction.ToggleMute(session.callId)) },
+                    modifier = Modifier
+                        .size(36.dp)
+                        .clip(CircleShape)
+                        .background(if (session.isMuted) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant)
+                ) {
+                    Icon(
+                        imageVector = if (session.isMuted) Icons.Default.MicOff else Icons.Default.Mic,
+                        contentDescription = "Mute",
+                        tint = if (session.isMuted) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+
+                // Speaker
+                IconButton(
+                    onClick = { onAction(CallAction.ToggleSpeaker(session.callId)) },
+                    modifier = Modifier
+                        .size(36.dp)
+                        .clip(CircleShape)
+                        .background(if (session.isSpeakerOn) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant)
+                ) {
+                    Icon(
+                        imageVector = if (session.isSpeakerOn) Icons.AutoMirrored.Filled.VolumeUp else Icons.AutoMirrored.Filled.VolumeDown,
+                        contentDescription = "Speaker",
+                        tint = if (session.isSpeakerOn) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+
+                // End Call
+                IconButton(
+                    onClick = { onAction(CallAction.Disconnect(session.callId)) },
+                    modifier = Modifier
+                        .size(36.dp)
+                        .clip(CircleShape)
+                        .background(Red500)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.CallEnd,
+                        contentDescription = "End Call",
+                        tint = Color.White,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+            }
         }
     }
 }

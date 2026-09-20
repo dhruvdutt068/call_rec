@@ -14,4 +14,17 @@ object PhoneNumberNormalizer {
             digitsOnly
         }
     }
+
+    /**
+     * Masks phone numbers for secure diagnostic logging (e.g. ******4531).
+     */
+    fun mask(phone: String?): String {
+        if (phone.isNullOrBlank()) return "<blank>"
+        val normalized = normalize(phone)
+        return if (normalized.length <= 4) {
+            "****"
+        } else {
+            "*".repeat(normalized.length - 4) + normalized.takeLast(4)
+        }
+    }
 }

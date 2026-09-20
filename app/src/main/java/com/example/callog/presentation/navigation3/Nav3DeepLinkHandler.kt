@@ -9,12 +9,28 @@ object Nav3DeepLinkHandler {
 
     fun parseUri(uri: Uri): Nav3Key? {
         val scheme = uri.scheme?.lowercase()
-        if (scheme != "callog" && scheme != "https") return null
+        if (scheme != "callog" && scheme != "allset" && scheme != "https") return null
 
         val host = uri.host?.lowercase() ?: return null
         val pathSegments = uri.pathSegments
 
         return when (host) {
+            "contact" -> {
+                val contactIdStr = pathSegments.getOrNull(0) ?: uri.getQueryParameter("id")
+                if (contactIdStr != null) {
+                    Nav3Key.Contacts.ContactDetails(contactId = contactIdStr)
+                } else {
+                    Nav3Key.Contacts.ContactList
+                }
+            }
+            "contacts" -> {
+                val contactIdStr = pathSegments.getOrNull(0) ?: uri.getQueryParameter("id")
+                if (contactIdStr != null && contactIdStr != "search") {
+                    Nav3Key.Contacts.ContactDetails(contactId = contactIdStr)
+                } else {
+                    Nav3Key.Contacts.ContactList
+                }
+            }
             "auth" -> {
                 when (pathSegments.getOrNull(0)) {
                     "login" -> Nav3Key.Auth.Login

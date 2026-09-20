@@ -42,4 +42,21 @@ data class CallLogEntry(
                 cleanName.take(1).uppercase()
             }
         }
+
+    val unifiedSyncStatus: String
+        get() {
+            val isMetaUploading = syncStatus.equals("UPLOADING", ignoreCase = true)
+            val isRecUploading = recordingPath != null && recordingUploadStatus.equals("UPLOADING", ignoreCase = true)
+            if (isMetaUploading || isRecUploading) return "UPLOADING"
+
+            val isMetaFailed = syncStatus.equals("FAILED", ignoreCase = true) || syncStatus.startsWith("ERROR", ignoreCase = true)
+            val isRecFailed = recordingPath != null && recordingUploadStatus.equals("FAILED", ignoreCase = true)
+            if (isMetaFailed || isRecFailed) return "FAILED"
+
+            val isMetaSynced = syncStatus.equals("SYNCED", ignoreCase = true) || syncStatus.equals("SUCCESS", ignoreCase = true)
+            val isRecSynced = recordingPath == null || recordingUploadStatus.equals("SUCCESS", ignoreCase = true) || recordingUploadStatus.equals("UPLOADED", ignoreCase = true)
+            if (isMetaSynced && isRecSynced) return "SYNCED"
+
+            return "PENDING"
+        }
 }

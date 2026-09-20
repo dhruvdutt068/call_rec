@@ -163,12 +163,13 @@ class PersonRepositoryImpl @Inject constructor(
             contact.phoneNumbers.forEachIndexed { index, rawPhone ->
                 val norm = PhoneNumberNormalizer.normalize(rawPhone)
                 if (norm.isNotEmpty()) {
+                    val existingPhone = personDao.findPhoneNumberByNormalized(norm)
                     val phoneEntity = PhoneNumberEntity(
-                        id = if (index == 0 && res.phoneNumberId != null) res.phoneNumberId else UUID.randomUUID().toString(),
+                        id = if (index == 0 && res.phoneNumberId != null) res.phoneNumberId else (existingPhone?.id ?: UUID.randomUUID().toString()),
                         personId = res.personId,
                         phoneNumber = rawPhone,
                         normalizedNumber = norm,
-                        phoneType = if (index == 0) "PRIMARY" else "OTHER",
+                        phoneType = if (index == 0) "PRIMARY" else (existingPhone?.phoneType ?: "OTHER"),
                         isPrimary = index == 0,
                         syncStatus = "SYNCED"
                     )
@@ -177,8 +178,9 @@ class PersonRepositoryImpl @Inject constructor(
             }
 
             // 3. Attach alias
+            val existingAlias = personDao.findAlias(res.personId, deviceId, normalizedNumber)
             val aliasEntity = ContactAliasEntity(
-                id = res.aliasId ?: UUID.randomUUID().toString(),
+                id = res.aliasId ?: (existingAlias?.id ?: UUID.randomUUID().toString()),
                 personId = res.personId,
                 deviceId = deviceId,
                 androidContactId = contact.contactId,

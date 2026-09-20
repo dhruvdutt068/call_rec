@@ -153,6 +153,51 @@ CREATE INDEX IF NOT EXISTS idx_contact_aliases_device_id ON public.contact_alias
 CREATE INDEX IF NOT EXISTS idx_contact_aliases_normalized ON public.contact_aliases (normalized_number);
 CREATE INDEX IF NOT EXISTS idx_contact_aliases_alias_name ON public.contact_aliases (alias_name);
 
+-- 5b. CANONICAL NORMALIZATION FUNCTION & TRIGGERS
+CREATE OR REPLACE FUNCTION public.normalize_phone_number(raw TEXT)
+RETURNS TEXT
+LANGUAGE plpgsql
+IMMUTABLE
+AS $$
+DECLARE
+    digits TEXT;
+BEGIN
+    IF raw IS NULL OR TRIM(raw) = '' THEN
+        RETURN '';
+    END IF;
+    digits := REGEXP_REPLACE(raw, '\D', '', 'g');
+    IF LENGTH(digits) >= 10 THEN
+        RETURN RIGHT(digits, 10);
+    ELSE
+        RETURN digits;
+    END IF;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.trg_normalize_phone_number()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    IF NEW.normalized_number IS NULL OR TRIM(NEW.normalized_number) = '' THEN
+        NEW.normalized_number := public.normalize_phone_number(NEW.phone_number);
+    ELSE
+        NEW.normalized_number := public.normalize_phone_number(NEW.normalized_number);
+    END IF;
+    RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS trg_phone_numbers_normalize ON public.phone_numbers;
+CREATE TRIGGER trg_phone_numbers_normalize
+BEFORE INSERT OR UPDATE ON public.phone_numbers
+FOR EACH ROW EXECUTE FUNCTION public.trg_normalize_phone_number();
+
+DROP TRIGGER IF EXISTS trg_contact_aliases_normalize ON public.contact_aliases;
+CREATE TRIGGER trg_contact_aliases_normalize
+BEFORE INSERT OR UPDATE ON public.contact_aliases
+FOR EACH ROW EXECUTE FUNCTION public.trg_normalize_phone_number();
+
 -- ====================================================================
 -- 6. ATOMIC RPC: resolve_and_attach_contact
 -- ====================================================================
@@ -178,10 +223,13 @@ DECLARE
     v_now BIGINT := (EXTRACT(EPOCH FROM clock_timestamp()) * 1000)::BIGINT;
     v_clean_alias TEXT;
     v_clean_norm TEXT;
+    v_raw_phone TEXT;
 BEGIN
-    -- Input sanitization
-    v_clean_norm := trim(p_normalized_number);
-    v_clean_alias := trim(COALESCE(p_alias_name, ''));
+    -- Input sanitization & canonical normalization
+    v_raw_phone := TRIM(COALESCE(p_phone_number, ''));
+    v_clean_norm := public.normalize_phone_number(COALESCE(NULLIF(TRIM(p_normalized_number), ''), v_raw_phone));
+    v_clean_alias := TRIM(COALESCE(p_alias_name, ''));
+    
     IF v_clean_alias = '' THEN
         v_clean_alias := 'Unknown Contact';
     END IF;
@@ -190,14 +238,18 @@ BEGIN
         RAISE EXCEPTION 'Normalized phone number cannot be blank';
     END IF;
 
+    IF v_raw_phone = '' THEN
+        v_raw_phone := v_clean_norm;
+    END IF;
+
     -- 1. Ensure Device is registered (upsert)
-    IF p_device_id IS NOT NULL AND p_device_id <> '' THEN
+    IF p_device_id IS NOT NULL AND TRIM(p_device_id) <> '' THEN
         INSERT INTO public.devices (id, device_name, device_phone, device_identifier, created_at, updated_at, last_sync_at)
         VALUES (
-            p_device_id,
-            COALESCE(NULLIF(p_device_name, ''), 'Android Device'),
-            COALESCE(p_device_phone, ''),
-            COALESCE(NULLIF(p_device_identifier, ''), p_device_id),
+            TRIM(p_device_id),
+            COALESCE(NULLIF(TRIM(p_device_name), ''), 'Android Device'),
+            COALESCE(TRIM(p_device_phone), ''),
+            COALESCE(NULLIF(TRIM(p_device_identifier), ''), TRIM(p_device_id)),
             v_now,
             v_now,
             v_now
@@ -224,31 +276,40 @@ BEGIN
         -- Insert Phone Number with ON CONFLICT resolution for concurrent inserts
         v_phone_id := gen_random_uuid()::text;
         INSERT INTO public.phone_numbers (id, person_id, phone_number, normalized_number, phone_type, is_primary, created_at)
-        VALUES (v_phone_id, v_person_id, p_phone_number, v_clean_norm, 'PRIMARY', true, v_now)
+        VALUES (v_phone_id, v_person_id, v_raw_phone, v_clean_norm, 'PRIMARY', true, v_now)
         ON CONFLICT (normalized_number) DO UPDATE
         SET phone_number = EXCLUDED.phone_number
         RETURNING person_id, id INTO v_person_id, v_phone_id;
+
+        -- Clean up orphaned person record if another concurrent transaction inserted the phone first
+        DELETE FROM public.people
+        WHERE id <> v_person_id
+          AND NOT EXISTS (SELECT 1 FROM public.phone_numbers pn WHERE pn.person_id = people.id)
+          AND NOT EXISTS (SELECT 1 FROM public.contact_aliases ca WHERE ca.person_id = people.id)
+          AND NOT EXISTS (SELECT 1 FROM public.sales_calls sc WHERE sc.person_id = people.id);
     END IF;
 
     -- 4. Idempotently attach/update Contact Alias for this Device
-    v_alias_id := gen_random_uuid()::text;
-    INSERT INTO public.contact_aliases (id, person_id, device_id, android_contact_id, alias_name, phone_number, normalized_number, created_at)
-    VALUES (
-        v_alias_id,
-        v_person_id,
-        p_device_id,
-        COALESCE(p_android_contact_id, ''),
-        v_clean_alias,
-        p_phone_number,
-        v_clean_norm,
-        v_now
-    )
-    ON CONFLICT (device_id, normalized_number) DO UPDATE
-    SET alias_name = EXCLUDED.alias_name,
-        android_contact_id = EXCLUDED.android_contact_id,
-        phone_number = EXCLUDED.phone_number,
-        person_id = v_person_id
-    RETURNING id INTO v_alias_id;
+    IF p_device_id IS NOT NULL AND TRIM(p_device_id) <> '' THEN
+        v_alias_id := gen_random_uuid()::text;
+        INSERT INTO public.contact_aliases (id, person_id, device_id, android_contact_id, alias_name, phone_number, normalized_number, created_at)
+        VALUES (
+            v_alias_id,
+            v_person_id,
+            TRIM(p_device_id),
+            COALESCE(TRIM(p_android_contact_id), ''),
+            v_clean_alias,
+            v_raw_phone,
+            v_clean_norm,
+            v_now
+        )
+        ON CONFLICT (device_id, normalized_number) DO UPDATE
+        SET alias_name = EXCLUDED.alias_name,
+            android_contact_id = EXCLUDED.android_contact_id,
+            phone_number = EXCLUDED.phone_number,
+            person_id = v_person_id
+        RETURNING id INTO v_alias_id;
+    END IF;
 
     RETURN jsonb_build_object(
         'person_id', v_person_id,
@@ -290,6 +351,7 @@ GRANT ALL ON TABLE public.people TO anon, authenticated, service_role;
 GRANT ALL ON TABLE public.phone_numbers TO anon, authenticated, service_role;
 GRANT ALL ON TABLE public.contact_aliases TO anon, authenticated, service_role;
 GRANT EXECUTE ON FUNCTION public.resolve_and_attach_contact TO anon, authenticated, service_role;
+GRANT EXECUTE ON FUNCTION public.normalize_phone_number TO anon, authenticated, service_role;
 
 -- 8. RELOAD POSTGREST SCHEMA CACHE
 NOTIFY pgrst, 'reload schema';

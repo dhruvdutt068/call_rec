@@ -38,6 +38,7 @@ fun CallLogsScreen(
     onMenuClick: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
+    val context = androidx.compose.ui.platform.LocalContext.current
     val callLogs by viewModel.callLogs.collectAsState()
     val searchQuery by viewModel.searchQuery.collectAsState()
     val activeFilter by viewModel.callTypeFilter.collectAsState()
@@ -56,6 +57,7 @@ fun CallLogsScreen(
         onSyncClick = { viewModel.syncLogs() },
         onFavoriteToggle = { viewModel.toggleFavorite(it) },
         onCallClick = onCallClick,
+        onDirectCallClick = { phone -> viewModel.initiateCall(context, phone) },
         onBackClick = onBackClick,
         onMenuClick = onMenuClick,
         modifier = modifier
@@ -77,6 +79,7 @@ fun CallLogsContent(
     onFavoriteToggle: (Long) -> Unit,
     onCallClick: (Long) -> Unit,
     modifier: Modifier = Modifier,
+    onDirectCallClick: ((String) -> Unit)? = null,
     onBackClick: (() -> Unit)? = null,
     onMenuClick: (() -> Unit)? = null
 ) {
@@ -285,7 +288,8 @@ fun CallLogsContent(
                         CallCard(
                             call = call,
                             onClick = { onCallClick(call.id) },
-                            onFavoriteToggle = { onFavoriteToggle(call.id) }
+                            onFavoriteToggle = { onFavoriteToggle(call.id) },
+                            onCallClick = onDirectCallClick?.let { action -> { action(call.number) } }
                         )
                     }
                 }

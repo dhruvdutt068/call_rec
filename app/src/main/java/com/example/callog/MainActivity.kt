@@ -37,6 +37,9 @@ import com.example.callog.domain.service.SyncManager
 import com.example.callog.presentation.navigation.NavGraph
 import com.example.callog.presentation.theme.*
 import dagger.hilt.android.AndroidEntryPoint
+import androidx.activity.viewModels
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.example.callog.presentation.components.OngoingCallBanner
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -49,9 +52,14 @@ class MainActivity : ComponentActivity() {
     @Inject
     lateinit var connectivityService: ConnectivityService
 
+    private val callViewModel: com.example.callog.presentation.viewmodel.CallViewModel by viewModels()
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         
+        // Handle deep links from InCallActivity or external intents
+        callViewModel.handleDeepLink(intent?.data)
+
         // Schedule periodic background sync to run every 15 minutes in the background
         syncManager.schedulePeriodicSync(15)
 
@@ -115,13 +123,15 @@ class MainActivity : ComponentActivity() {
                 isDefaultDialer = TelecomRoleHelper.isDefaultDialer(context)
             }
 
+            val activeCall by callViewModel.activeCallSession.collectAsStateWithLifecycle()
+            val allCalls by callViewModel.callSessions.collectAsStateWithLifecycle()
+
             CallogTheme(darkTheme = darkTheme) {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
                     val navController = rememberNavController()
-                    val callViewModel = hiltViewModel<com.example.callog.presentation.viewmodel.CallViewModel>()
                     val analyticsViewModel = hiltViewModel<com.example.callog.presentation.viewmodel.AnalyticsViewModel>()
 
                     Column(modifier = Modifier.fillMaxSize()) {
@@ -187,6 +197,14 @@ class MainActivity : ComponentActivity() {
                             }
                         }
 
+                        // Ongoing / Active Call Banner for 1-tap return to InCallActivity with multi-call swap
+                        OngoingCallBanner(
+                            session = activeCall,
+                            otherSessions = allCalls,
+                            onSwapCalls = { callViewModel.swapCalls() },
+                            onDisconnect = { callViewModel.disconnectActiveCall(it) }
+                        )
+
                         // Main Navigation Container
                         Box(modifier = Modifier.weight(1f)) {
                             NavGraph(
@@ -204,5 +222,11 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        callViewModel.handleDeepLink(intent.data)
     }
 }

@@ -42,11 +42,5 @@ fun Int.toDurationString(): String {
 }
 
 fun String.normalizePhoneNumber(): String {
-    // Remove formatting symbols: spaces, hyphens, parenthesis, and leading + country code if necessary
-    val digits = this.replace(Regex("[^0-9+]"), "")
-    return if (digits.startsWith("+") && digits.length > 10) {
-        digits.substring(digits.length - 10) // match last 10 digits for standard comparison
-    } else {
-        digits
-    }
+    return com.example.callog.core.utils.PhoneNumberNormalizer.normalize(this)
 }

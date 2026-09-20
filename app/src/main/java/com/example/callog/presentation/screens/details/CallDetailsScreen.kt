@@ -1,5 +1,7 @@
 package com.example.callog.presentation.screens.details
 
+import android.content.Intent
+import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
@@ -12,6 +14,7 @@ import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -261,8 +264,83 @@ fun CallDetailsScreen(
                                 )
                             }
                             Spacer(modifier = Modifier.height(8.dp))
-                            SyncStatusPill(status = call.syncStatus)
+                            SyncStatusPill(status = call.unifiedSyncStatus)
                         }
+                    }
+                }
+
+                // Quick Action Bar: Call, Message, View CRM Profile
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    // Call Button
+                    Button(
+                        onClick = { viewModel.initiateCall(context, call.number) },
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = CallogSemanticColors.CallIncoming,
+                            contentColor = Color.White
+                        )
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Call,
+                            contentDescription = "Call",
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Call", fontWeight = FontWeight.SemiBold)
+                    }
+
+                    // Message Button
+                    FilledTonalButton(
+                        onClick = {
+                            try {
+                                val intent = Intent(Intent.ACTION_SENDTO, Uri.parse("smsto:${call.number}")).apply {
+                                    flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                                }
+                                context.startActivity(intent)
+                            } catch (e: Exception) {
+                                android.util.Log.e("CallDetailsScreen", "Failed to launch SMS", e)
+                            }
+                        },
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Message,
+                            contentDescription = "Message",
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Message", fontWeight = FontWeight.SemiBold)
+                    }
+
+                    // CRM Profile Button
+                    FilledTonalButton(
+                        onClick = {
+                            try {
+                                val uri = Uri.parse("allset://contact/${call.number}")
+                                val intent = Intent(Intent.ACTION_VIEW, uri).apply {
+                                    setPackage(context.packageName)
+                                    flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                                }
+                                context.startActivity(intent)
+                            } catch (e: Exception) {
+                                android.util.Log.e("CallDetailsScreen", "Failed to launch CRM Contact", e)
+                            }
+                        },
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Person,
+                            contentDescription = "CRM Profile",
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("CRM", fontWeight = FontWeight.SemiBold)
                     }
                 }
 
@@ -360,52 +438,8 @@ fun CallDetailsScreen(
                                         fontWeight = FontWeight.SemiBold
                                     )
                                 }
-                                Spacer(modifier = Modifier.height(6.dp))
 
-                                val uploadStatusText = when (call.recordingUploadStatus) {
-                                    "SUCCESS" -> "Cloud Storage Uploaded"
-                                    "UPLOADING" -> "Cloud Storage Uploading..."
-                                    "FAILED" -> "Cloud Storage Upload Failed"
-                                    else -> "Local File (Pending Cloud Upload)"
-                                }
-                                val uploadStatusColor = when (call.recordingUploadStatus) {
-                                    "SUCCESS" -> CallogSemanticColors.SyncSuccess
-                                    "UPLOADING" -> CallogSemanticColors.SyncInProgress
-                                    "FAILED" -> CallogSemanticColors.SyncFailed
-                                    else -> MaterialTheme.colorScheme.onSurfaceVariant
-                                }
-                                val uploadStatusIcon = when (call.recordingUploadStatus) {
-                                    "SUCCESS" -> Icons.Default.CloudDone
-                                    "UPLOADING" -> Icons.Default.Sync
-                                    "FAILED" -> Icons.Default.Warning
-                                    else -> Icons.Default.CloudUpload
-                                }
-
-                                Surface(
-                                    color = uploadStatusColor.copy(alpha = 0.12f),
-                                    shape = CallogShapes.pill
-                                ) {
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
-                                    ) {
-                                        Icon(
-                                            imageVector = uploadStatusIcon,
-                                            contentDescription = null,
-                                            tint = uploadStatusColor,
-                                            modifier = Modifier.size(14.dp)
-                                        )
-                                        Text(
-                                            text = uploadStatusText,
-                                            style = CallogTypography.statusLabel,
-                                            color = uploadStatusColor,
-                                            fontWeight = FontWeight.Medium
-                                        )
-                                    }
-                                }
-
-                                Spacer(modifier = Modifier.height(18.dp))
+                                Spacer(modifier = Modifier.height(14.dp))
 
                                 // Bouncing animated waveform
                                 Row(

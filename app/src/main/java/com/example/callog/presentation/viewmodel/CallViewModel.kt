@@ -76,6 +76,45 @@ class CallViewModel @Inject constructor(
         return environmentConfigManager.getFirebaseConfig(env)
     }
 
+    val activeCallSession: StateFlow<com.example.callog.domain.call.CallSessionState?> = callSessionManager.activeCallSession
+    val callSessions: StateFlow<List<com.example.callog.domain.call.CallSessionState>> = callSessionManager.callSessions
+
+    private val _pendingNavigationKey = kotlinx.coroutines.flow.MutableStateFlow<com.example.callog.presentation.navigation3.Nav3Key?>(null)
+    val pendingNavigationKey: StateFlow<com.example.callog.presentation.navigation3.Nav3Key?> = _pendingNavigationKey.asStateFlow()
+
+    fun handleDeepLink(uri: android.net.Uri?) {
+        if (uri == null) return
+        val navKey = com.example.callog.presentation.navigation3.Nav3DeepLinkHandler.parseUri(uri)
+        if (navKey != null) {
+            _pendingNavigationKey.value = navKey
+        }
+    }
+
+    fun setPendingNavigationKey(key: com.example.callog.presentation.navigation3.Nav3Key?) {
+        _pendingNavigationKey.value = key
+    }
+
+    fun consumePendingNavigationKey(): com.example.callog.presentation.navigation3.Nav3Key? {
+        val key = _pendingNavigationKey.value
+        _pendingNavigationKey.value = null
+        return key
+    }
+
+    fun disconnectActiveCall(callId: String? = null) {
+        val targetId = callId ?: activeCallSession.value?.callId
+        if (targetId != null) {
+            callSessionManager.executeAction(com.example.callog.domain.call.CallAction.Disconnect(targetId))
+        }
+    }
+
+    fun swapCalls() {
+        callSessionManager.executeAction(com.example.callog.domain.call.CallAction.SwapCalls)
+    }
+
+    fun mergeCalls(callId1: String, callId2: String) {
+        callSessionManager.executeAction(com.example.callog.domain.call.CallAction.MergeCalls(callId1, callId2))
+    }
+
     fun startOutgoingCall(number: String, simSlot: Int = 0) {
         callSessionManager.startOutgoingCall(number, simSlot)
     }

@@ -37,6 +37,9 @@ import kotlinx.coroutines.delay
 @AndroidEntryPoint
 class InCallActivity : ComponentActivity() {
 
+    private val isInPipModeState = mutableStateOf(false)
+    private var callSessionViewModel: CallSessionViewModel? = null
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
@@ -65,7 +68,10 @@ class InCallActivity : ComponentActivity() {
                     color = MaterialTheme.colorScheme.background
                 ) {
                     val viewModel: CallSessionViewModel = hiltViewModel()
+                    callSessionViewModel = viewModel
                     val state by viewModel.uiState.collectAsStateWithLifecycle()
+                    val liveNotes by viewModel.liveNotes.collectAsStateWithLifecycle()
+                    val isPipMode by remember { isInPipModeState }
 
                     // If there is genuinely no session, finish activity promptly
                     if (state is CallUiState.NoSession) {
@@ -75,72 +81,101 @@ class InCallActivity : ComponentActivity() {
                         }
                     }
 
-                    AnimatedContent(
-                        targetState = state,
-                        contentKey = { targetState ->
-                            when (targetState) {
-                                is CallUiState.NoSession -> "no_session"
-                                is CallUiState.Incoming -> "incoming"
-                                is CallUiState.Connecting, is CallUiState.Active -> "active_call"
-                                is CallUiState.Ended -> "ended"
-                            }
-                        },
-                        label = "call_state_transition"
-                    ) { targetState ->
-                        when (targetState) {
-                            is CallUiState.NoSession -> {
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxSize()
-                                        .background(MaterialTheme.colorScheme.background)
-                                )
-                            }
-                            is CallUiState.Incoming -> {
-                                IncomingCallScreen(
-                                    session = targetState.session,
+                    if (isPipMode) {
+                        when (state) {
+                            is CallUiState.Active -> {
+                                PipCallScreen(
+                                    session = (state as CallUiState.Active).session,
                                     onAction = viewModel::onAction
                                 )
                             }
                             is CallUiState.Connecting -> {
-                                ActiveCallScreen(
-                                    session = targetState.session,
-                                    otherSessions = targetState.otherSessions,
-                                    onAction = viewModel::onAction,
-                                    onOpenPersonDetails = { personId ->
-                                        openCanonicalPersonDetails(personId)
-                                    }
+                                PipCallScreen(
+                                    session = (state as CallUiState.Connecting).session,
+                                    onAction = viewModel::onAction
                                 )
                             }
-                            is CallUiState.Active -> {
-                                ActiveCallScreen(
-                                    session = targetState.session,
-                                    otherSessions = targetState.otherSessions,
-                                    onAction = viewModel::onAction,
-                                    onOpenPersonDetails = { personId ->
-                                        openCanonicalPersonDetails(personId)
-                                    }
-                                )
+                            else -> {
+                                Box(modifier = Modifier.fillMaxSize())
                             }
-                            is CallUiState.Ended -> {
-                                PostCallSummaryScreen(
-                                    session = targetState.session,
-                                    onSaveWrapUp = { outcome, notes, isFavorite, scheduleDays ->
-                                        viewModel.saveCallWrapUp(
-                                            session = targetState.session,
-                                            outcome = outcome,
-                                            notes = notes,
-                                            isFavorite = isFavorite,
-                                            scheduleFollowUpDays = scheduleDays
-                                        )
-                                        finishAndRemoveTask()
-                                    },
-                                    onOpenPersonDetails = { personId ->
-                                        openCanonicalPersonDetails(personId)
-                                    },
-                                    onDismiss = {
-                                        finishAndRemoveTask()
-                                    }
-                                )
+                        }
+                    } else {
+                        AnimatedContent(
+                            targetState = state,
+                            contentKey = { targetState ->
+                                when (targetState) {
+                                    is CallUiState.NoSession -> "no_session"
+                                    is CallUiState.Incoming -> "incoming"
+                                    is CallUiState.Connecting, is CallUiState.Active -> "active_call"
+                                    is CallUiState.Ended -> "ended"
+                                }
+                            },
+                            label = "call_state_transition"
+                        ) { targetState ->
+                            when (targetState) {
+                                is CallUiState.NoSession -> {
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxSize()
+                                            .background(MaterialTheme.colorScheme.background)
+                                    )
+                                }
+                                is CallUiState.Incoming -> {
+                                    IncomingCallScreen(
+                                        session = targetState.session,
+                                        onAction = viewModel::onAction
+                                    )
+                                }
+                                is CallUiState.Connecting -> {
+                                    ActiveCallScreen(
+                                        session = targetState.session,
+                                        otherSessions = targetState.otherSessions,
+                                        onAction = viewModel::onAction,
+                                        onOpenPersonDetails = { personId ->
+                                            openCanonicalPersonDetails(personId, finishCurrent = false)
+                                        },
+                                        onMinimize = { minimizeToApp() },
+                                        onEnterPip = { enterPipMode() },
+                                        liveNotes = liveNotes,
+                                        onLiveNotesChange = viewModel::setLiveNotes
+                                    )
+                                }
+                                is CallUiState.Active -> {
+                                    ActiveCallScreen(
+                                        session = targetState.session,
+                                        otherSessions = targetState.otherSessions,
+                                        onAction = viewModel::onAction,
+                                        onOpenPersonDetails = { personId ->
+                                            openCanonicalPersonDetails(personId, finishCurrent = false)
+                                        },
+                                        onMinimize = { minimizeToApp() },
+                                        onEnterPip = { enterPipMode() },
+                                        liveNotes = liveNotes,
+                                        onLiveNotesChange = viewModel::setLiveNotes
+                                    )
+                                }
+                                is CallUiState.Ended -> {
+                                    PostCallSummaryScreen(
+                                        session = targetState.session,
+                                        initialNotes = liveNotes,
+                                        onSaveWrapUp = { outcome, notes, isFavorite, scheduleDays ->
+                                            viewModel.saveCallWrapUp(
+                                                session = targetState.session,
+                                                outcome = outcome,
+                                                notes = notes,
+                                                isFavorite = isFavorite,
+                                                scheduleFollowUpDays = scheduleDays
+                                            )
+                                            finishAndRemoveTask()
+                                        },
+                                        onOpenPersonDetails = { personId ->
+                                            openCanonicalPersonDetails(personId, finishCurrent = true)
+                                        },
+                                        onDismiss = {
+                                            finishAndRemoveTask()
+                                        }
+                                    )
+                                }
                             }
                         }
                     }
@@ -149,7 +184,34 @@ class InCallActivity : ComponentActivity() {
         }
     }
 
+    override fun onUserLeaveHint() {
+        super.onUserLeaveHint()
+        val currentUiState = callSessionViewModel?.uiState?.value
+        if (currentUiState is CallUiState.Active || currentUiState is CallUiState.Connecting) {
+            enterPipMode()
+        }
+    }
 
+    override fun onPictureInPictureModeChanged(
+        isInPictureInPictureMode: Boolean,
+        newConfig: android.content.res.Configuration
+    ) {
+        super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig)
+        isInPipModeState.value = isInPictureInPictureMode
+    }
+
+    private fun enterPipMode() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            try {
+                val rational = android.util.Rational(3, 4)
+                val pipBuilder = android.app.PictureInPictureParams.Builder()
+                    .setAspectRatio(rational)
+                enterPictureInPictureMode(pipBuilder.build())
+            } catch (e: Exception) {
+                DeveloperLogger.error("INCALL_ACTIVITY", "Failed to enter PiP mode: ${e.message}", e)
+            }
+        }
+    }
 
     @Deprecated("Deprecated in Java")
     override fun onBackPressed() {
@@ -157,7 +219,18 @@ class InCallActivity : ComponentActivity() {
         moveTaskToBack(true)
     }
 
-    private fun openCanonicalPersonDetails(personId: String) {
+    private fun minimizeToApp() {
+        try {
+            val intent = Intent(this, com.example.callog.MainActivity::class.java).apply {
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
+            }
+            startActivity(intent)
+        } catch (e: Exception) {
+            moveTaskToBack(true)
+        }
+    }
+
+    private fun openCanonicalPersonDetails(personId: String, finishCurrent: Boolean = false) {
         try {
             val uri = Uri.parse("allset://contact/$personId")
             val intent = Intent(Intent.ACTION_VIEW, uri).apply {
@@ -168,7 +241,9 @@ class InCallActivity : ComponentActivity() {
         } catch (e: Exception) {
             android.util.Log.e("InCallActivity", "Failed to navigate to contact $personId", e)
         }
-        finishAndRemoveTask()
+        if (finishCurrent) {
+            finishAndRemoveTask()
+        }
     }
 }
 

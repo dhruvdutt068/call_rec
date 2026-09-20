@@ -122,6 +122,27 @@ fun CrmNav3Container(
         tabRoots = tabRoots
     )
 
+    // Deep link auto-routing from InCallActivity or external Intents
+    val pendingNavKey by callViewModel.pendingNavigationKey.collectAsState()
+    LaunchedEffect(pendingNavKey) {
+        pendingNavKey?.let { key ->
+            when (key) {
+                is Nav3Key.Contacts.ContactDetails, is Nav3Key.Contacts.DeviceContactDetails -> {
+                    multiStack.selectTab(CrmBottomTab.CONTACTS)
+                }
+                is Nav3Key.Task.TaskList, is Nav3Key.Task.CreateTask, is Nav3Key.Task.TaskDetails -> {
+                    // Task sub-routes
+                }
+                is Nav3Key.Meeting.MeetingList, is Nav3Key.Meeting.ScheduleMeeting, is Nav3Key.Meeting.MeetingDetails -> {
+                    // Meeting sub-routes
+                }
+                else -> {}
+            }
+            multiStack.navigate(key)
+            callViewModel.consumePendingNavigationKey()
+        }
+    }
+
     val openDrawer: () -> Unit = {
         if (isDeveloperModeActive) {
             callViewModel.recordDeveloperActivity()

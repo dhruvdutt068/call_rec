@@ -303,6 +303,7 @@ fun CallCard(
     call: CallLogEntry,
     onClick: () -> Unit,
     onFavoriteToggle: () -> Unit,
+    onCallClick: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val timeString = call.timestamp.toRelativeTimeSpan()
@@ -397,8 +398,8 @@ fun CallCard(
                 }
             }
 
-            val (syncIcon, syncColor, syncDesc) = when (call.syncStatus.uppercase()) {
-                "SYNCED" -> Triple(Icons.Default.CloudDone, CallogSemanticColors.SyncSuccess, "Synced to Cloud")
+            val (syncIcon, syncColor, syncDesc) = when (call.unifiedSyncStatus.uppercase()) {
+                "SYNCED", "SUCCESS" -> Triple(Icons.Default.CloudDone, CallogSemanticColors.SyncSuccess, "Synced to Cloud")
                 "UPLOADING" -> Triple(Icons.Default.CloudUpload, CallogSemanticColors.SyncInProgress, "Syncing...")
                 "FAILED" -> Triple(Icons.Default.CloudOff, CallogSemanticColors.SyncFailed, "Sync failed")
                 else -> Triple(Icons.Default.Cloud, CallogSemanticColors.SyncPending, "Pending sync")
@@ -413,9 +414,23 @@ fun CallCard(
                     .padding(end = 4.dp)
             )
 
+            if (onCallClick != null) {
+                IconButton(
+                    onClick = onCallClick,
+                    modifier = Modifier.size(36.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Call,
+                        contentDescription = "Quick Call",
+                        tint = CallogSemanticColors.CallIncoming,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+            }
+
             IconButton(
                 onClick = onFavoriteToggle,
-                modifier = Modifier.size(44.dp)
+                modifier = Modifier.size(36.dp)
             ) {
                 Icon(
                     imageVector = if (call.isFavorite) Icons.Default.Star else Icons.Default.StarBorder,

@@ -53,6 +53,7 @@ private fun formatDuration(seconds: Int): String {
 @Composable
 fun PostCallSummaryScreen(
     session: CallSessionState,
+    initialNotes: String = "",
     onSaveWrapUp: (outcome: CallOutcome, notes: String, isFavorite: Boolean, scheduleFollowUpDays: Int?) -> Unit,
     onOpenPersonDetails: (String) -> Unit,
     onDismiss: () -> Unit
@@ -62,7 +63,7 @@ fun PostCallSummaryScreen(
             if (session.durationSeconds > 0) CallOutcome.CONNECTED else CallOutcome.NO_ANSWER
         )
     }
-    var notesText by remember { mutableStateOf("") }
+    var notesText by remember { mutableStateOf(initialNotes) }
     var isFavorite by remember { mutableStateOf(false) }
     var scheduleFollowUpDays by remember { mutableStateOf<Int?>(null) }
 

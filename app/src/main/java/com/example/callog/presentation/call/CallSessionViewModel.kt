@@ -77,6 +77,13 @@ class CallSessionViewModel @Inject constructor(
         )
     )
 
+    private val _liveNotes = MutableStateFlow("")
+    val liveNotes: StateFlow<String> = _liveNotes.asStateFlow()
+
+    fun setLiveNotes(notes: String) {
+        _liveNotes.value = notes
+    }
+
     fun onAction(action: CallAction) {
         callSessionManager.executeAction(action)
     }

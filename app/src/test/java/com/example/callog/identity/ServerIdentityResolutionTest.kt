@@ -173,7 +173,8 @@ class ServerIdentityResolutionTest {
                 throw RuntimeException("Network timeout or connection refused")
             }
 
-            val norm = request.normalizedNumber.trim()
+            val raw = request.phoneNumber.trim()
+            val norm = PhoneNumberNormalizer.normalize(request.normalizedNumber.ifBlank { raw })
             var personId = serverPhones[norm]
 
             if (personId == null) {

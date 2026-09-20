@@ -187,19 +187,24 @@ class SupabaseService @Inject constructor(
 
     suspend fun syncPhoneNumbers(numbers: List<com.example.callog.data.local.entity.PhoneNumberEntity>): Result<Unit> = withContext(Dispatchers.IO) {
         return@withContext try {
-            val supabaseNumbers = numbers.distinctBy { it.normalizedNumber }.map {
-                com.example.callog.data.remote.model.SupabasePhoneNumber(
+            val supabaseNumbers = numbers.mapNotNull {
+                val norm = com.example.callog.core.utils.PhoneNumberNormalizer.normalize(it.normalizedNumber.ifBlank { it.phoneNumber })
+                if (norm.isBlank()) null
+                else com.example.callog.data.remote.model.SupabasePhoneNumber(
                     id = it.id,
                     personId = it.personId,
                     phoneNumber = it.phoneNumber,
-                    normalizedNumber = it.normalizedNumber,
+                    normalizedNumber = norm,
                     phoneType = it.phoneType,
                     isPrimary = it.isPrimary,
                     createdAt = formatTimestamp(it.createdAt)
                 )
-            }
-            getClient().from(SupabaseDefaults.TABLE_PHONE_NUMBERS).upsert(supabaseNumbers) {
-                onConflict = "normalized_number"
+            }.distinctBy { it.normalizedNumber }
+
+            if (supabaseNumbers.isNotEmpty()) {
+                getClient().from(SupabaseDefaults.TABLE_PHONE_NUMBERS).upsert(supabaseNumbers) {
+                    onConflict = "normalized_number"
+                }
             }
             Result.success(Unit)
         } catch (e: Exception) {
@@ -210,20 +215,25 @@ class SupabaseService @Inject constructor(
 
     suspend fun syncContactAliases(aliases: List<com.example.callog.data.local.entity.ContactAliasEntity>): Result<Unit> = withContext(Dispatchers.IO) {
         return@withContext try {
-            val supabaseAliases = aliases.distinctBy { "${it.deviceId}_${it.normalizedNumber}" }.map {
-                com.example.callog.data.remote.model.SupabaseContactAlias(
+            val supabaseAliases = aliases.mapNotNull {
+                val norm = com.example.callog.core.utils.PhoneNumberNormalizer.normalize(it.normalizedNumber.ifBlank { it.phoneNumber })
+                if (norm.isBlank()) null
+                else com.example.callog.data.remote.model.SupabaseContactAlias(
                     id = it.id,
                     personId = it.personId,
                     deviceId = it.deviceId,
                     androidContactId = it.androidContactId,
                     aliasName = it.aliasName,
                     phoneNumber = it.phoneNumber,
-                    normalizedNumber = it.normalizedNumber,
+                    normalizedNumber = norm,
                     createdAt = formatTimestamp(it.createdAt)
                 )
-            }
-            getClient().from(SupabaseDefaults.TABLE_CONTACT_ALIASES).upsert(supabaseAliases) {
-                onConflict = "device_id,normalized_number"
+            }.distinctBy { "${it.deviceId}_${it.normalizedNumber}" }
+
+            if (supabaseAliases.isNotEmpty()) {
+                getClient().from(SupabaseDefaults.TABLE_CONTACT_ALIASES).upsert(supabaseAliases) {
+                    onConflict = "device_id,normalized_number"
+                }
             }
             Result.success(Unit)
         } catch (e: Exception) {
@@ -341,33 +351,75 @@ class SupabaseService @Inject constructor(
         notes: String? = null
     ): Result<com.example.callog.data.remote.model.SupabasePerson> = withContext(Dispatchers.IO) {
         return@withContext try {
+            val norm = com.example.callog.core.utils.PhoneNumberNormalizer.normalize(if (normalizedPhone.isNotBlank()) normalizedPhone else phone)
+            val client = getClient()
             val now = formatTimestamp(System.currentTimeMillis())
+
+            if (norm.isNotBlank()) {
+                // 1. Check if canonical phone already exists in Supabase
+                val existingPhones = client.from(SupabaseDefaults.TABLE_PHONE_NUMBERS)
+                    .select {
+                        filter {
+                            eq("normalized_number", norm)
+                        }
+                        limit(1)
+                    }
+                    .decodeList<com.example.callog.data.remote.model.SupabasePhoneNumber>()
+
+                if (existingPhones.isNotEmpty()) {
+                    val existingPersonId = existingPhones.first().personId
+                    val existingPeople = client.from(SupabaseDefaults.TABLE_PEOPLE)
+                        .select {
+                            filter {
+                                eq("id", existingPersonId)
+                            }
+                            limit(1)
+                        }
+                        .decodeList<com.example.callog.data.remote.model.SupabasePerson>()
+
+                    if (existingPeople.isNotEmpty()) {
+                        val existing = existingPeople.first()
+                        val updated = existing.copy(
+                            displayName = if (existing.displayName.isBlank() || existing.displayName == "Unknown Contact") name.trim() else existing.displayName,
+                            companyName = company?.trim()?.ifBlank { null } ?: existing.companyName,
+                            notes = notes?.trim()?.ifBlank { null } ?: existing.notes,
+                            updatedAt = now
+                        )
+                        client.from(SupabaseDefaults.TABLE_PEOPLE).upsert(updated) { onConflict = "id" }
+                        Log.i(TAG, "Reused existing canonical person ${existing.id} for phone ${com.example.callog.core.utils.PhoneNumberNormalizer.mask(phone)}")
+                        return@withContext Result.success(updated)
+                    }
+                }
+            }
+
+            // 2. If number is not in Supabase, create canonical Person and Phone record
             val personId = "P" + java.util.UUID.randomUUID().toString().replace("-", "").take(8).uppercase()
             val person = com.example.callog.data.remote.model.SupabasePerson(
                 id = personId,
-                displayName = name.trim(),
+                displayName = name.trim().ifBlank { "New Contact" },
                 companyName = company?.trim()?.ifBlank { null },
                 notes = notes?.trim()?.ifBlank { null },
                 createdAt = now,
                 updatedAt = now
             )
-            getClient().from(SupabaseDefaults.TABLE_PEOPLE).insert(person)
+            client.from(SupabaseDefaults.TABLE_PEOPLE).insert(person)
 
-            if (normalizedPhone.isNotBlank()) {
+            if (norm.isNotBlank()) {
                 val phoneRecord = com.example.callog.data.remote.model.SupabasePhoneNumber(
                     id = java.util.UUID.randomUUID().toString(),
                     personId = personId,
                     phoneNumber = phone.trim(),
-                    normalizedNumber = normalizedPhone,
+                    normalizedNumber = norm,
                     phoneType = "PRIMARY",
                     isPrimary = true,
                     createdAt = now
                 )
-                getClient().from(SupabaseDefaults.TABLE_PHONE_NUMBERS).upsert(phoneRecord) {
+                client.from(SupabaseDefaults.TABLE_PHONE_NUMBERS).upsert(phoneRecord) {
                     onConflict = "normalized_number"
                 }
             }
 
+            Log.i(TAG, "Created new canonical person $personId for phone ${com.example.callog.core.utils.PhoneNumberNormalizer.mask(phone)}")
             Result.success(person)
         } catch (e: Exception) {
             Log.e(TAG, "Error creating global person in Supabase", e)
@@ -380,14 +432,17 @@ class SupabaseService @Inject constructor(
     ): Result<com.example.callog.data.remote.model.PersonResolutionResponse> = withContext(Dispatchers.IO) {
         return@withContext try {
             val client = getClient()
-            val response = client.from("resolve_and_attach_contact")
-            // In postgrest-kt, rpc can be invoked via postgrest.rpc(...)
+            val sanitizedRequest = request.copy(
+                normalizedNumber = com.example.callog.core.utils.PhoneNumberNormalizer.normalize(
+                    request.normalizedNumber.ifBlank { request.phoneNumber }
+                )
+            )
             val rpcResult = client.postgrest.rpc(
                 function = "resolve_and_attach_contact",
-                parameters = request
+                parameters = sanitizedRequest
             ).decodeAs<com.example.callog.data.remote.model.PersonResolutionResponse>()
 
-            Log.i(TAG, "Server resolved identity for contact: person_id=${rpcResult.personId}")
+            Log.i(TAG, "Server resolved identity: person_id=${rpcResult.personId} for phone ${com.example.callog.core.utils.PhoneNumberNormalizer.mask(request.phoneNumber)}")
             Result.success(rpcResult)
         } catch (e: Exception) {
             Log.e(TAG, "Error executing resolve_and_attach_contact RPC on Supabase", e)
