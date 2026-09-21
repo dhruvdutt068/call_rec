@@ -24,7 +24,7 @@ import com.example.callog.data.local.entity.*
         ConversationMessageEntity::class,
         PresetEntity::class
     ],
-    version = 21,
+    version = 22,
     exportSchema = false
 )
 @TypeConverters(Converters::class)

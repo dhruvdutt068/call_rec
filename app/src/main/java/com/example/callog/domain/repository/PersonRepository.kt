@@ -23,5 +23,6 @@ interface PersonRepository {
     suspend fun syncContactsFromDevice(): List<Person>
     suspend fun syncGlobalContactsFromSupabase(): Result<List<Person>>
     suspend fun createGlobalContact(name: String, phone: String, company: String?, notes: String?): Result<Person>
+    suspend fun promoteDeviceContactToCrm(contact: com.example.callog.domain.model.DeviceContact): Result<Person> = Result.failure(NotImplementedError())
     suspend fun resolveAndAttachContact(deviceId: String, contact: com.example.callog.data.provider.ContactDto): com.example.callog.domain.model.PersonResolutionResult
 }

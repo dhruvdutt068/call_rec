@@ -16,12 +16,15 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
+import android.content.Context
+import dagger.hilt.android.qualifiers.ApplicationContext
 import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
 
 @Singleton
 class PersonRepositoryImpl @Inject constructor(
+    @ApplicationContext private val context: Context,
     private val personDao: PersonDao,
     private val contactsProvider: ContactsProvider,
     private val firestoreService: FirestoreService,
@@ -97,25 +100,95 @@ class PersonRepositoryImpl @Inject constructor(
     }
 
     override suspend fun getOrCreateCurrentDevice(): Device = withContext(Dispatchers.IO) {
-        val phone = firestoreService.getDevicePhoneNumber().ifBlank { "Unknown Phone" }
-        val ownerName = firestoreService.getDeviceOwnerName().ifBlank { Build.MODEL ?: "Unknown Device" }
-        val identifier = "${Build.MANUFACTURER}_${Build.MODEL}_${PhoneNumberNormalizer.normalize(phone)}".ifBlank { "device_${Build.FINGERPRINT.hashCode()}" }
+        val androidId = try {
+            android.provider.Settings.Secure.getString(context.contentResolver, android.provider.Settings.Secure.ANDROID_ID)
+        } catch (e: Exception) {
+            null
+        }?.takeIf { it.isNotBlank() } ?: "device_${Build.FINGERPRINT.hashCode()}"
 
-        val existing = personDao.getDeviceByIdentifier(identifier)
-        if (existing != null) {
-            return@withContext existing.toDomain()
+        val phone = firestoreService.getDevicePhoneNumber().ifBlank { "Unknown Phone" }
+        val ownerName = firestoreService.getDeviceOwnerName().ifBlank { "${Build.MANUFACTURER} ${Build.MODEL}".trim() }
+
+        // 1. Check local Room first
+        val existingLocal = personDao.getDeviceByIdentifier(androidId)
+        if (existingLocal != null) {
+            return@withContext existingLocal.toDomain()
         }
 
+        // 2. Reinstall / Fresh Room: Check Supabase for existing device with this ANDROID_ID
+        try {
+            val remoteDeviceResult = supabaseService.fetchDeviceByIdentifier(androidId)
+            val remoteDevice = remoteDeviceResult.getOrNull()
+            if (remoteDevice != null) {
+                val restoredDevice = DeviceEntity(
+                    id = remoteDevice.id,
+                    deviceName = remoteDevice.deviceName.ifBlank { ownerName },
+                    devicePhone = remoteDevice.devicePhone.ifBlank { phone },
+                    deviceIdentifier = remoteDevice.deviceIdentifier,
+                    createdAt = parseTimestamp(remoteDevice.createdAt),
+                    updatedAt = System.currentTimeMillis()
+                )
+                personDao.insertDevice(restoredDevice)
+                DeveloperLogger.info("DEVICE_RESTORED", "Restored existing device ${remoteDevice.id} for ANDROID_ID $androidId from Supabase.")
+                return@withContext restoredDevice.toDomain()
+            }
+        } catch (e: Exception) {
+            DeveloperLogger.warning("DEVICE_LOOKUP_FAILED", "Failed checking Supabase for ANDROID_ID $androidId: ${e.message}")
+        }
+
+        // 3. New device: Generate new persistent device record and sync to both Supabase and Room
+        val newId = "DEV_" + UUID.randomUUID().toString().replace("-", "").take(8).uppercase()
         val newDevice = DeviceEntity(
-            id = "DEV_" + UUID.randomUUID().toString().replace("-", "").take(8).uppercase(),
+            id = newId,
             deviceName = ownerName,
             devicePhone = phone,
-            deviceIdentifier = identifier,
+            deviceIdentifier = androidId,
             createdAt = System.currentTimeMillis(),
             updatedAt = System.currentTimeMillis()
         )
         personDao.insertDevice(newDevice)
+
+        try {
+            val supabaseDev = com.example.callog.data.remote.model.SupabaseDevice(
+                id = newId,
+                deviceName = ownerName,
+                devicePhone = phone,
+                deviceIdentifier = androidId,
+                createdAt = formatTimestamp(newDevice.createdAt),
+                updatedAt = formatTimestamp(newDevice.updatedAt)
+            )
+            supabaseService.insertDevice(supabaseDev)
+            DeveloperLogger.info("DEVICE_CREATED", "Registered new persistent device $newId for ANDROID_ID $androidId in Supabase & Room.")
+        } catch (e: Exception) {
+            DeveloperLogger.warning("DEVICE_SYNC_PENDING", "Failed to sync device $newId to Supabase immediately: ${e.message}")
+        }
+
         newDevice.toDomain()
+    }
+
+    override suspend fun promoteDeviceContactToCrm(contact: com.example.callog.domain.model.DeviceContact): Result<Person> = withContext(Dispatchers.IO) {
+        try {
+            val device = getOrCreateCurrentDevice()
+            val contactDto = com.example.callog.data.provider.ContactDto(
+                contactId = contact.androidContactId,
+                name = contact.displayName,
+                phoneNumbers = contact.phoneNumbers.map { it.number },
+                emails = contact.emails,
+                photoUri = contact.photoUri,
+                isFavorite = contact.isFavorite
+            )
+            val resolution = resolveAndAttachContact(device.id, contactDto)
+            val fullPerson = personDao.getPersonWithDetailsById(resolution.personId)?.toDomain()
+            if (fullPerson != null) {
+                DeveloperLogger.success("CONTACT_PROMOTED", "Promoted device contact '${contact.displayName}' to CRM Person ${fullPerson.id}")
+                Result.success(fullPerson)
+            } else {
+                Result.failure(Exception("Failed to find resolved person ${resolution.personId} in local database"))
+            }
+        } catch (e: Exception) {
+            DeveloperLogger.error("CONTACT_PROMOTE_FAILED", "Failed to promote device contact: ${e.message}", exception = e)
+            Result.failure(e)
+        }
     }
 
     override suspend fun resolveAndAttachContact(
@@ -132,6 +205,9 @@ class PersonRepositoryImpl @Inject constructor(
                 isFromRemote = false
             )
         }
+
+        // Check local compound alias identity: (deviceId, androidContactId, normalizedNumber)
+        val existingAlias = personDao.findAliasByDeviceContactAndPhone(deviceId, contact.contactId, normalizedNumber)
 
         val device = getOrCreateCurrentDevice()
         val request = PersonResolutionRequest(
@@ -177,10 +253,10 @@ class PersonRepositoryImpl @Inject constructor(
                 }
             }
 
-            // 3. Attach alias
-            val existingAlias = personDao.findAlias(res.personId, deviceId, normalizedNumber)
+            // 3. Attach alias (idempotent with compound key deviceId + androidContactId + normalizedNumber)
+            val aliasId = res.aliasId ?: existingAlias?.id ?: ("ALIAS_" + UUID.randomUUID().toString().replace("-", "").take(8).uppercase())
             val aliasEntity = ContactAliasEntity(
-                id = res.aliasId ?: (existingAlias?.id ?: UUID.randomUUID().toString()),
+                id = aliasId,
                 personId = res.personId,
                 deviceId = deviceId,
                 androidContactId = contact.contactId,
@@ -194,7 +270,7 @@ class PersonRepositoryImpl @Inject constructor(
             PersonResolutionResult(
                 personId = res.personId,
                 phoneNumberId = res.phoneNumberId,
-                aliasId = res.aliasId,
+                aliasId = aliasId,
                 isFromRemote = true
             )
         } else {
@@ -416,6 +492,12 @@ class PersonRepositoryImpl @Inject constructor(
                 isoString.toLongOrNull() ?: System.currentTimeMillis()
             }
         }
+    }
+
+    private fun formatTimestamp(epochMillis: Long): String {
+        val sdf = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", java.util.Locale.US)
+        sdf.timeZone = java.util.TimeZone.getTimeZone("UTC")
+        return sdf.format(java.util.Date(epochMillis))
     }
 }
 

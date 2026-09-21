@@ -346,6 +346,8 @@ class LeadLifecycleTest {
         override suspend fun getAliasesForDevice(deviceId: String): List<ContactAliasEntity> = aliases.filter { it.deviceId == deviceId }
         override suspend fun findAlias(personId: String, deviceId: String, normalizedNumber: String): ContactAliasEntity? =
             aliases.find { it.personId == personId && it.deviceId == deviceId && it.normalizedNumber == normalizedNumber }
+        override suspend fun findAliasByDeviceContactAndPhone(deviceId: String, androidContactId: String, normalizedNumber: String): ContactAliasEntity? =
+            aliases.find { it.deviceId == deviceId && it.androidContactId == androidContactId && it.normalizedNumber == normalizedNumber }
         override suspend fun getPendingAliases(): List<ContactAliasEntity> = aliases.filter { it.syncStatus == "PENDING" }
         override suspend fun updateAliasSyncStatus(id: String, status: String) {
             val idx = aliases.indexOfFirst { it.id == id }

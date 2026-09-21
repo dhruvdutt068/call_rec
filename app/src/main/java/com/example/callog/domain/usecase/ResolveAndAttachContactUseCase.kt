@@ -86,7 +86,8 @@ class ResolveAndAttachContactUseCase @Inject constructor(
         // 7. Create or update the contact alias for the current device
         val primaryPhone = contact.phoneNumbers.firstOrNull() ?: ""
         val primaryNormalized = PhoneNumberNormalizer.normalize(primaryPhone)
-        val existingAlias = personDao.findAlias(person.id, deviceId, primaryNormalized)
+        val existingAlias = personDao.findAliasByDeviceContactAndPhone(deviceId, contact.contactId, primaryNormalized)
+            ?: personDao.findAlias(person.id, deviceId, primaryNormalized)
         if (existingAlias == null) {
             val alias = ContactAliasEntity(
                 id = UUID.randomUUID().toString(),

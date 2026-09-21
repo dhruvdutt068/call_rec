@@ -412,15 +412,20 @@ fun DeviceContactDetailsScreen(
                     onClick = {
                         isSaving = true
                         coroutineScope.launch {
-                            val res = personRepository.createGlobalContact(
-                                name = name,
-                                phone = phone,
-                                company = company.ifBlank { null },
-                                notes = notes.ifBlank { null }
-                            )
+                            val res = personRepository.promoteDeviceContactToCrm(contact!!)
                             isSaving = false
                             if (res.isSuccess) {
-                                linkedPerson = res.getOrNull()
+                                val person = res.getOrNull()
+                                if (person != null && (company.isNotBlank() || notes.isNotBlank())) {
+                                    val updatedPerson = person.copy(
+                                        companyName = company.ifBlank { person.companyName },
+                                        notes = notes.ifBlank { person.notes }
+                                    )
+                                    personRepository.insertOrUpdatePerson(updatedPerson)
+                                    linkedPerson = updatedPerson
+                                } else {
+                                    linkedPerson = person
+                                }
                                 showCreateDialog = false
                             }
                         }

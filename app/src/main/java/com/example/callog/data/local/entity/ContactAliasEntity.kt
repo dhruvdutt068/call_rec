@@ -22,6 +22,7 @@ import androidx.room.PrimaryKey
         )
     ],
     indices = [
+        Index(value = ["deviceId", "androidContactId", "normalizedNumber"], unique = true),
         Index(value = ["personId"]),
         Index(value = ["deviceId"]),
         Index(value = ["aliasName"]),

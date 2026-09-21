@@ -409,6 +409,26 @@ object DatabaseModule {
         }
     }
 
+    private val MIGRATION_21_22 = object : Migration(21, 22) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            try {
+                // Deduplicate any existing duplicate aliases before creating the unique index
+                db.execSQL("""
+                    DELETE FROM contact_aliases 
+                    WHERE id NOT IN (
+                        SELECT MIN(id) 
+                        FROM contact_aliases 
+                        GROUP BY deviceId, androidContactId, normalizedNumber
+                    )
+                """.trimIndent())
+                
+                db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS `index_contact_aliases_deviceId_androidContactId_normalizedNumber` ON `contact_aliases` (`deviceId`, `androidContactId`, `normalizedNumber`)")
+            } catch (e: Exception) {
+                android.util.Log.e("DatabaseModule", "Failed to migrate database to v22", e)
+            }
+        }
+    }
+
     @Provides
     @Singleton
     fun provideDatabase(
@@ -418,7 +438,7 @@ object DatabaseModule {
             context,
             CallVaultDatabase::class.java,
             Constants.DATABASE_NAME
-        ).addMigrations(MIGRATION_5_6, MIGRATION_13_14, MIGRATION_14_15, MIGRATION_15_16, MIGRATION_16_17, MIGRATION_17_18, MIGRATION_18_19, MIGRATION_19_20, MIGRATION_20_21)
+        ).addMigrations(MIGRATION_5_6, MIGRATION_13_14, MIGRATION_14_15, MIGRATION_15_16, MIGRATION_16_17, MIGRATION_17_18, MIGRATION_18_19, MIGRATION_19_20, MIGRATION_20_21, MIGRATION_21_22)
          .fallbackToDestructiveMigration()
          .build()
      }

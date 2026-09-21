@@ -311,6 +311,12 @@ class FakePersonRepository : PersonRepository {
     override suspend fun resolveAndAttachContact(deviceId: String, contact: com.example.callog.data.provider.ContactDto): com.example.callog.domain.model.PersonResolutionResult {
         return com.example.callog.domain.model.PersonResolutionResult(personId = "P001")
     }
+
+    override suspend fun promoteDeviceContactToCrm(contact: DeviceContact): Result<Person> {
+        val p = Person(id = "P_${System.currentTimeMillis()}", displayName = contact.displayName)
+        peopleList.add(p)
+        return Result.success(p)
+    }
 }
 
 class FakeDeviceContactsRepository : DeviceContactsRepository {

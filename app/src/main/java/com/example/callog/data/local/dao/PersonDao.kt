@@ -83,6 +83,9 @@ interface PersonDao {
     @Query("SELECT * FROM contact_aliases WHERE personId = :personId AND deviceId = :deviceId AND normalizedNumber = :normalizedNumber LIMIT 1")
     suspend fun findAlias(personId: String, deviceId: String, normalizedNumber: String): ContactAliasEntity?
 
+    @Query("SELECT * FROM contact_aliases WHERE deviceId = :deviceId AND androidContactId = :androidContactId AND normalizedNumber = :normalizedNumber LIMIT 1")
+    suspend fun findAliasByDeviceContactAndPhone(deviceId: String, androidContactId: String, normalizedNumber: String): ContactAliasEntity?
+
     @Query("SELECT * FROM contact_aliases WHERE syncStatus != 'SYNCED'")
     suspend fun getPendingAliases(): List<ContactAliasEntity>
 

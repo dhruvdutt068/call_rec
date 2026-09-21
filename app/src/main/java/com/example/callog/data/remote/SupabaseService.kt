@@ -343,6 +343,34 @@ class SupabaseService @Inject constructor(
         }
     }
 
+    suspend fun fetchDeviceByIdentifier(identifier: String): Result<com.example.callog.data.remote.model.SupabaseDevice?> = withContext(Dispatchers.IO) {
+        return@withContext try {
+            val devices = getClient().from(SupabaseDefaults.TABLE_DEVICES)
+                .select {
+                    filter {
+                        eq("device_identifier", identifier)
+                    }
+                    limit(1)
+                }
+                .decodeList<com.example.callog.data.remote.model.SupabaseDevice>()
+            Result.success(devices.firstOrNull())
+        } catch (e: Exception) {
+            Log.e(TAG, "Error fetching device by identifier from Supabase", e)
+            Result.failure(e)
+        }
+    }
+
+    suspend fun insertDevice(device: com.example.callog.data.remote.model.SupabaseDevice): Result<Unit> = withContext(Dispatchers.IO) {
+        return@withContext try {
+            getClient().from(SupabaseDefaults.TABLE_DEVICES)
+                .upsert(device)
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Log.e(TAG, "Error upserting device to Supabase", e)
+            Result.failure(e)
+        }
+    }
+
     suspend fun createGlobalPerson(
         name: String,
         phone: String,
