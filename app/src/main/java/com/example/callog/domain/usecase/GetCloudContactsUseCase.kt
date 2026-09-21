@@ -9,12 +9,13 @@ import javax.inject.Inject
 /**
  * Use case to observe only Cloud / Supabase canonical CRM contacts from local Room cache.
  * Invariant: Never falls back to or mixes with Android ContactsContract.
+ * Invariant: Returns only contacts synced with Supabase (syncStatus == "SYNCED").
  */
 class GetCloudContactsUseCase @Inject constructor(
     private val personRepository: PersonRepository
 ) {
     operator fun invoke(): Flow<List<ContactDirectoryItem.Cloud>> {
-        return personRepository.getAllPeopleFlow().map { people ->
+        return personRepository.getSyncedPeopleFlow().map { people ->
             people.map { person ->
                 val primaryPhone = person.phoneNumbers.firstOrNull { it.isPrimary }?.phoneNumber
                     ?: person.phoneNumbers.firstOrNull()?.phoneNumber

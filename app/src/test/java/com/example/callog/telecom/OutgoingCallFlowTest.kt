@@ -347,6 +347,8 @@ class OutgoingCallFlowTest {
         override fun getPersonByIdFlow(id: String): Flow<Person?> = flowOf(peopleById[id])
         override fun getAllPeopleFlow(): Flow<List<Person>> = flowOf(peopleById.values.toList())
         override suspend fun getAllPeople(): List<Person> = peopleById.values.toList()
+        override fun getSyncedPeopleFlow(): Flow<List<Person>> = flowOf(peopleById.values.filter { it.syncStatus == "SYNCED" })
+        override suspend fun getSyncedPeople(): List<Person> = peopleById.values.filter { it.syncStatus == "SYNCED" }
         override fun searchPeopleFlow(query: String): Flow<List<Person>> = flowOf(emptyList())
         override suspend fun searchPeople(query: String): List<Person> = emptyList()
         override suspend fun insertOrUpdatePerson(person: Person) { peopleById[person.id] = person }

@@ -39,6 +39,14 @@ interface PersonDao {
     @Query("SELECT * FROM people ORDER BY displayName ASC")
     suspend fun getAllPeopleWithDetails(): List<PersonWithDetails>
 
+    @Transaction
+    @Query("SELECT * FROM people WHERE syncStatus = 'SYNCED' ORDER BY displayName ASC")
+    fun getSyncedPeopleWithDetailsFlow(): Flow<List<PersonWithDetails>>
+
+    @Transaction
+    @Query("SELECT * FROM people WHERE syncStatus = 'SYNCED' ORDER BY displayName ASC")
+    suspend fun getSyncedPeopleWithDetails(): List<PersonWithDetails>
+
     @Query("SELECT * FROM people WHERE syncStatus != 'SYNCED'")
     suspend fun getPendingPeople(): List<PersonEntity>
 

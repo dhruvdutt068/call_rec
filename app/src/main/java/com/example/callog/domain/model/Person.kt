@@ -8,7 +8,8 @@ data class Person(
     val phoneNumbers: List<PhoneNumber> = emptyList(),
     val aliases: List<ContactAlias> = emptyList(),
     val createdAt: Long = System.currentTimeMillis(),
-    val updatedAt: Long = System.currentTimeMillis()
+    val updatedAt: Long = System.currentTimeMillis(),
+    val syncStatus: String = "SYNCED"
 )
 
 data class PhoneNumber(

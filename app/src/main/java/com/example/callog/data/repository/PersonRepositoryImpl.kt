@@ -48,6 +48,14 @@ class PersonRepositoryImpl @Inject constructor(
         personDao.getAllPeopleWithDetails().map { it.toDomain() }
     }
 
+    override fun getSyncedPeopleFlow(): Flow<List<Person>> {
+        return personDao.getSyncedPeopleWithDetailsFlow().map { list -> list.map { it.toDomain() } }
+    }
+
+    override suspend fun getSyncedPeople(): List<Person> = withContext(Dispatchers.IO) {
+        personDao.getSyncedPeopleWithDetails().map { it.toDomain() }
+    }
+
     override fun searchPeopleFlow(query: String): Flow<List<Person>> {
         return personDao.searchPeopleWithDetailsFlow(query).map { list -> list.map { it.toDomain() } }
     }
@@ -100,24 +108,19 @@ class PersonRepositoryImpl @Inject constructor(
     }
 
     override suspend fun getOrCreateCurrentDevice(): Device = withContext(Dispatchers.IO) {
-        val androidId = try {
-            android.provider.Settings.Secure.getString(context.contentResolver, android.provider.Settings.Secure.ANDROID_ID)
-        } catch (e: Exception) {
-            null
-        }?.takeIf { it.isNotBlank() } ?: "device_${Build.FINGERPRINT.hashCode()}"
-
+        val deviceModel = (Build.MODEL ?: "Unknown Device").trim().ifBlank { "Unknown Device" }
         val phone = firestoreService.getDevicePhoneNumber().ifBlank { "Unknown Phone" }
-        val ownerName = firestoreService.getDeviceOwnerName().ifBlank { "${Build.MANUFACTURER} ${Build.MODEL}".trim() }
+        val ownerName = firestoreService.getDeviceOwnerName().ifBlank { deviceModel }
 
-        // 1. Check local Room first
-        val existingLocal = personDao.getDeviceByIdentifier(androidId)
+        // 1. Check local Room first by deviceModel / identifier
+        val existingLocal = personDao.getDeviceById(deviceModel) ?: personDao.getDeviceByIdentifier(deviceModel)
         if (existingLocal != null) {
             return@withContext existingLocal.toDomain()
         }
 
-        // 2. Reinstall / Fresh Room: Check Supabase for existing device with this ANDROID_ID
+        // 2. Reinstall / Fresh Room: Check Supabase for existing device with this model number
         try {
-            val remoteDeviceResult = supabaseService.fetchDeviceByIdentifier(androidId)
+            val remoteDeviceResult = supabaseService.fetchDeviceByIdentifier(deviceModel)
             val remoteDevice = remoteDeviceResult.getOrNull()
             if (remoteDevice != null) {
                 val restoredDevice = DeviceEntity(
@@ -129,20 +132,19 @@ class PersonRepositoryImpl @Inject constructor(
                     updatedAt = System.currentTimeMillis()
                 )
                 personDao.insertDevice(restoredDevice)
-                DeveloperLogger.info("DEVICE_RESTORED", "Restored existing device ${remoteDevice.id} for ANDROID_ID $androidId from Supabase.")
+                DeveloperLogger.info("DEVICE_RESTORED", "Restored existing device ${remoteDevice.id} for model $deviceModel from Supabase.")
                 return@withContext restoredDevice.toDomain()
             }
         } catch (e: Exception) {
-            DeveloperLogger.warning("DEVICE_LOOKUP_FAILED", "Failed checking Supabase for ANDROID_ID $androidId: ${e.message}")
+            DeveloperLogger.warning("DEVICE_LOOKUP_FAILED", "Failed checking Supabase for model $deviceModel: ${e.message}")
         }
 
-        // 3. New device: Generate new persistent device record and sync to both Supabase and Room
-        val newId = "DEV_" + UUID.randomUUID().toString().replace("-", "").take(8).uppercase()
+        // 3. New device: Use device model as unique ID and sync to both Supabase and Room
         val newDevice = DeviceEntity(
-            id = newId,
+            id = deviceModel,
             deviceName = ownerName,
             devicePhone = phone,
-            deviceIdentifier = androidId,
+            deviceIdentifier = deviceModel,
             createdAt = System.currentTimeMillis(),
             updatedAt = System.currentTimeMillis()
         )
@@ -150,17 +152,17 @@ class PersonRepositoryImpl @Inject constructor(
 
         try {
             val supabaseDev = com.example.callog.data.remote.model.SupabaseDevice(
-                id = newId,
+                id = deviceModel,
                 deviceName = ownerName,
                 devicePhone = phone,
-                deviceIdentifier = androidId,
+                deviceIdentifier = deviceModel,
                 createdAt = formatTimestamp(newDevice.createdAt),
                 updatedAt = formatTimestamp(newDevice.updatedAt)
             )
             supabaseService.insertDevice(supabaseDev)
-            DeveloperLogger.info("DEVICE_CREATED", "Registered new persistent device $newId for ANDROID_ID $androidId in Supabase & Room.")
+            DeveloperLogger.info("DEVICE_CREATED", "Registered new persistent device $deviceModel in Supabase & Room.")
         } catch (e: Exception) {
-            DeveloperLogger.warning("DEVICE_SYNC_PENDING", "Failed to sync device $newId to Supabase immediately: ${e.message}")
+            DeveloperLogger.warning("DEVICE_SYNC_PENDING", "Failed to sync device $deviceModel to Supabase immediately: ${e.message}")
         }
 
         newDevice.toDomain()
@@ -510,7 +512,8 @@ private fun PersonWithDetails.toDomain(): Person {
         phoneNumbers = phoneNumbers.map { it.toDomain() },
         aliases = aliases.map { it.toDomain() },
         createdAt = person.createdAt,
-        updatedAt = person.updatedAt
+        updatedAt = person.updatedAt,
+        syncStatus = person.syncStatus
     )
 }
 

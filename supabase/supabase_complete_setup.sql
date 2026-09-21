@@ -220,7 +220,7 @@ DECLARE
     v_person_id TEXT;
     v_phone_id TEXT;
     v_alias_id TEXT;
-    v_now BIGINT := (EXTRACT(EPOCH FROM clock_timestamp()) * 1000)::BIGINT;
+    v_now TIMESTAMPTZ := clock_timestamp();
     v_clean_alias TEXT;
     v_clean_norm TEXT;
     v_raw_phone TEXT;

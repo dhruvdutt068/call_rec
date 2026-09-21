@@ -577,7 +577,7 @@ fun ContactDetailsScreen(
                                                 color = MaterialTheme.colorScheme.onSurface
                                             )
                                             Text(
-                                                text = "Device: ${alias.deviceId.take(8)}",
+                                                text = "Device: ${alias.deviceId}",
                                                 style = CallogTypography.denseData,
                                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                                             )

@@ -232,6 +232,10 @@ class CentralPersonIdentityTest {
 
         override suspend fun getAllPeopleWithDetails(): List<PersonWithDetails> = buildAllPeopleWithDetails()
 
+        override fun getSyncedPeopleWithDetailsFlow(): Flow<List<PersonWithDetails>> = flowOf(buildAllPeopleWithDetails().filter { it.person.syncStatus == "SYNCED" })
+
+        override suspend fun getSyncedPeopleWithDetails(): List<PersonWithDetails> = buildAllPeopleWithDetails().filter { it.person.syncStatus == "SYNCED" }
+
         override suspend fun getPendingPeople(): List<PersonEntity> = people.filter { it.syncStatus == "PENDING" }
 
         override suspend fun updatePersonSyncStatus(id: String, status: String, updatedAt: Long) {

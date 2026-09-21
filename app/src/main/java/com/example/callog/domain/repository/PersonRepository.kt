@@ -11,6 +11,8 @@ interface PersonRepository {
     suspend fun getPersonById(id: String): Person?
     fun getAllPeopleFlow(): Flow<List<Person>>
     suspend fun getAllPeople(): List<Person>
+    fun getSyncedPeopleFlow(): Flow<List<Person>>
+    suspend fun getSyncedPeople(): List<Person>
     fun searchPeopleFlow(query: String): Flow<List<Person>>
     suspend fun searchPeople(query: String): List<Person>
 

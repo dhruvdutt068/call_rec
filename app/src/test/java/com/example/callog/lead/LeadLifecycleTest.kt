@@ -309,6 +309,18 @@ class LeadLifecycleTest {
             }
         }
 
+        override fun getSyncedPeopleWithDetailsFlow(): Flow<List<PersonWithDetails>> {
+            return flowOf(people.filter { it.syncStatus == "SYNCED" }.map { p ->
+                PersonWithDetails(p, phoneNumbers.filter { it.personId == p.id }, aliases.filter { it.personId == p.id })
+            })
+        }
+
+        override suspend fun getSyncedPeopleWithDetails(): List<PersonWithDetails> {
+            return people.filter { it.syncStatus == "SYNCED" }.map { p ->
+                PersonWithDetails(p, phoneNumbers.filter { it.personId == p.id }, aliases.filter { it.personId == p.id })
+            }
+        }
+
         override suspend fun getPendingPeople(): List<PersonEntity> = people.filter { it.syncStatus == "PENDING" }
         override suspend fun updatePersonSyncStatus(id: String, status: String, updatedAt: Long) {
             val idx = people.indexOfFirst { it.id == id }

@@ -256,6 +256,27 @@ class ContactsTwoTabDirectoryTest {
         assertEquals("dev_contact_101", deviceKey.androidContactId)
         assertNotEquals(cloudKey, deviceKey)
     }
+
+    @Test
+    fun testCloudTabShowsOnlySyncedSupabaseContacts() = runTest(testDispatcher) {
+        // Add a local un-synced contact (syncStatus = PENDING)
+        fakePersonRepo.peopleList.add(
+            Person(
+                id = "P_LOCAL_ONLY",
+                displayName = "Local Only Person",
+                syncStatus = "PENDING",
+                phoneNumbers = listOf(
+                    PhoneNumber(id = "PN_LOCAL", personId = "P_LOCAL_ONLY", phoneNumber = "9999988888", normalizedNumber = "9999988888")
+                )
+            )
+        )
+
+        val cloudItems = getCloudContactsUseCase().first()
+        assertEquals(2, cloudItems.size)
+        assertTrue(cloudItems.any { it.person.id == "P001" })
+        assertTrue(cloudItems.any { it.person.id == "P002" })
+        assertFalse("Pending/unsynced local contact must NOT appear in Cloud screen", cloudItems.any { it.person.id == "P_LOCAL_ONLY" })
+    }
 }
 
 // ==========================================
@@ -268,6 +289,10 @@ class FakePersonRepository : PersonRepository {
     override fun getAllPeopleFlow(): Flow<List<Person>> = flowOf(peopleList)
 
     override suspend fun getAllPeople(): List<Person> = peopleList
+
+    override fun getSyncedPeopleFlow(): Flow<List<Person>> = flowOf(peopleList.filter { it.syncStatus == "SYNCED" })
+
+    override suspend fun getSyncedPeople(): List<Person> = peopleList.filter { it.syncStatus == "SYNCED" }
 
     override fun getPersonByIdFlow(id: String): Flow<Person?> = flowOf(peopleList.find { it.id == id })
 
