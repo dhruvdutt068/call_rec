@@ -121,7 +121,9 @@ class SyncWorker(
                                 callId           = call.id,
                                 duration         = call.duration,
                                 personId         = call.personId,
-                                createdAt        = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.getDefault()).format(java.util.Date(call.timestamp))
+                                createdAt        = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", java.util.Locale.US).apply {
+                                    timeZone = java.util.TimeZone.getTimeZone("UTC")
+                                }.format(java.util.Date(call.timestamp))
                             )
                         )
                         createdCount++

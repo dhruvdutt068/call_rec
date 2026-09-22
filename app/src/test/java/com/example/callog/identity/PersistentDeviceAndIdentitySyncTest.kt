@@ -245,6 +245,8 @@ class PersistentDeviceAndIdentitySyncTest {
         val fakePersonRepo = object : PersonRepository {
             override fun getAllPeopleFlow(): Flow<List<Person>> = flowOf(emptyList())
             override suspend fun getAllPeople(): List<Person> = emptyList()
+            override fun getSyncedPeopleFlow(): Flow<List<Person>> = flowOf(emptyList())
+            override suspend fun getSyncedPeople(): List<Person> = emptyList()
             override fun getPersonByIdFlow(id: String): Flow<Person?> = flowOf(null)
             override suspend fun getPersonById(id: String): Person? = null
             override fun searchPeopleFlow(query: String): Flow<List<Person>> = flowOf(emptyList())

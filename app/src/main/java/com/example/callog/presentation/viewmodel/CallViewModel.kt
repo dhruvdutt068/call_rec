@@ -466,7 +466,10 @@ class CallViewModel @Inject constructor(
                             callType         = call.callType,
                             callId           = call.id,
                             duration         = call.duration,
-                            createdAt        = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.getDefault()).format(java.util.Date(call.timestamp))
+                            personId         = call.personId,
+                            createdAt        = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", java.util.Locale.US).apply {
+                                timeZone = java.util.TimeZone.getTimeZone("UTC")
+                            }.format(java.util.Date(call.timestamp))
                         )
                     )
                 }

@@ -131,7 +131,7 @@ class SupabaseService @Inject constructor(
                     callType = entity.callType,
                     callId = entity.callId,
                     duration = entity.duration,
-                    createdAt = entity.createdAt,
+                    createdAt = toUtcIsoString(entity.createdAt),
                     personId = entity.personId
                 )
             }
@@ -154,6 +154,25 @@ class SupabaseService @Inject constructor(
             Log.e("SUPABASE", "Error syncing sales calls to Supabase", e)
             DeveloperLogger.error("SUPABASE_UPLOAD_FAILED", "Failed syncing sales calls to Supabase", e)
             Result.failure(e)
+        }
+    }
+
+    private fun toUtcIsoString(raw: String): String {
+        return try {
+            if (raw.endsWith("Z")) return raw
+            val epoch = raw.toLongOrNull()
+            if (epoch != null) {
+                return formatTimestamp(epoch)
+            }
+            val legacySdf = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.getDefault())
+            val parsed = legacySdf.parse(raw)
+            if (parsed != null) {
+                formatTimestamp(parsed.time)
+            } else {
+                raw
+            }
+        } catch (e: Exception) {
+            raw
         }
     }
 

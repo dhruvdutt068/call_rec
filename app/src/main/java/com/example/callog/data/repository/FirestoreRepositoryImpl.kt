@@ -185,8 +185,11 @@ class FirestoreRepositoryImpl @Inject constructor(
     }
 
     private fun buildMetadataMap(call: CallEntity, contactName: String): Map<String, Any> {
-        val nowIso = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSSXXX", Locale.US).format(Date())
-        val callTimeIso = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSSXXX", Locale.US).format(Date(call.timestamp))
+        val utcFormat = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US).apply {
+            timeZone = java.util.TimeZone.getTimeZone("UTC")
+        }
+        val nowIso = utcFormat.format(Date())
+        val callTimeIso = utcFormat.format(Date(call.timestamp))
         
         val salespersonPhoneRaw = firestoreService.getDevicePhoneNumber()
         val salespersonPhone = normalizePhoneNumber(salespersonPhoneRaw)

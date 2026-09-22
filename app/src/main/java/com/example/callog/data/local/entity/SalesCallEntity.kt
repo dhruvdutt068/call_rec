@@ -48,7 +48,9 @@ data class SalesCallEntity(
     val personId: String? = null,
 
     // ── Timestamps ──────────────────────────────────────────────────────────
-    val createdAt: String = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date()),
+    val createdAt: String = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US).apply {
+        timeZone = java.util.TimeZone.getTimeZone("UTC")
+    }.format(Date()),
 
     // ── Sync tracking ───────────────────────────────────────────────────────
     val syncStatus: String = "PENDING", // PENDING | SYNCED | FAILED
