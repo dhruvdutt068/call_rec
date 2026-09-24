@@ -41,6 +41,12 @@ abstract class AppModule {
     abstract fun bindDeviceContactsRepository(
         deviceContactsRepositoryImpl: com.example.callog.data.repository.DeviceContactsRepositoryImpl
     ): com.example.callog.domain.repository.DeviceContactsRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindCrmRepository(
+        clientCrmRepositoryImpl: com.example.callog.data.crm.repository.ClientCrmRepositoryImpl
+    ): com.example.callog.domain.crm.repository.CrmRepository
 }
 
 @dagger.hilt.EntryPoint

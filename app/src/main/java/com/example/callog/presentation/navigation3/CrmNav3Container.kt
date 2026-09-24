@@ -29,6 +29,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.callog.core.telecom.TelecomRoleHelper
 import com.example.callog.di.TelecomEntryPoint
+import com.example.callog.presentation.components.CallogBottomNavigation
 import com.example.callog.presentation.components.GlassyCard
 import com.example.callog.presentation.screens.analytics.AnalyticsScreen
 import com.example.callog.presentation.screens.contacts.ContactDetailsScreen
@@ -64,10 +65,9 @@ enum class CrmBottomTab(
 
 /**
  * Top-level Client Navigation container with multi-backstack state and slide-out Menu Drawer:
- * 1. Dialer (T9 keypad, speed dial, SIM router)
- * 2. Call Logs (Filterable call logs, audio & sync badges)
- * 3. Contacts (Global CRM & local phonebook)
- * 4. Recordings (Audio vault with inline player)
+ * 1. Contacts (Global CRM & local phonebook)
+ * 2. Recordings (Audio vault with inline player)
+ * + Center Action FAB with Quick Actions menu (Add Contact, Create Task, Schedule Meeting, Log Call)
  */
 @Composable
 fun CrmNav3Container(
@@ -118,7 +118,7 @@ fun CrmNav3Container(
     }
 
     val multiStack = rememberNav3MultiBackStack(
-        initialTab = CrmBottomTab.CALL_LOGS,
+        initialTab = CrmBottomTab.CONTACTS,
         tabRoots = tabRoots
     )
 
@@ -130,12 +130,15 @@ fun CrmNav3Container(
                 is Nav3Key.Contacts.ContactDetails, is Nav3Key.Contacts.DeviceContactDetails -> {
                     multiStack.selectTab(CrmBottomTab.CONTACTS)
                 }
+
                 is Nav3Key.Task.TaskList, is Nav3Key.Task.CreateTask, is Nav3Key.Task.TaskDetails -> {
                     // Task sub-routes
                 }
+
                 is Nav3Key.Meeting.MeetingList, is Nav3Key.Meeting.ScheduleMeeting, is Nav3Key.Meeting.MeetingDetails -> {
                     // Meeting sub-routes
                 }
+
                 else -> {}
             }
             multiStack.navigate(key)
@@ -171,13 +174,13 @@ fun CrmNav3Container(
         }
     }
 
-    // BackHandler: If drawer is open, close it; otherwise pop active tab stack; fallback to CALL_LOGS.
+    // BackHandler: If drawer is open, close it; otherwise pop active tab stack; fallback to CONTACTS.
     BackHandler(enabled = true) {
         if (drawerState.isOpen) {
             closeDrawer()
         } else if (!multiStack.pop()) {
-            if (multiStack.selectedTab != CrmBottomTab.CALL_LOGS) {
-                multiStack.selectTab(CrmBottomTab.CALL_LOGS)
+            if (multiStack.selectedTab != CrmBottomTab.CONTACTS) {
+                multiStack.selectTab(CrmBottomTab.CONTACTS)
             }
         }
     }
@@ -309,7 +312,11 @@ fun CrmNav3Container(
                                             contentColor = Slate950
                                         )
                                     ) {
-                                        Text("Enable", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
+                                        Text(
+                                            "Enable",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            fontWeight = FontWeight.Bold
+                                        )
                                     }
                                 }
                             }
@@ -489,7 +496,11 @@ fun CrmNav3Container(
                                 TextButton(
                                     onClick = {
                                         callViewModel.setDeveloperModeActive(false)
-                                        android.widget.Toast.makeText(context, "Preferences & Tools locked", android.widget.Toast.LENGTH_SHORT).show()
+                                        android.widget.Toast.makeText(
+                                            context,
+                                            "Preferences & Tools locked",
+                                            android.widget.Toast.LENGTH_SHORT
+                                        ).show()
                                     },
                                     contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp)
                                 ) {
@@ -681,29 +692,24 @@ fun CrmNav3Container(
     ) {
         Scaffold(
             bottomBar = {
-                NavigationBar(
-                    containerColor = MaterialTheme.colorScheme.surfaceVariant,
-                    contentColor = MaterialTheme.colorScheme.onSurfaceVariant
-                ) {
-                    CrmBottomTab.values().forEach { tab ->
-                        val isSelected = multiStack.selectedTab == tab
-                        NavigationBarItem(
-                            selected = isSelected,
-                            onClick = {
-                                multiStack.selectTab(tab, popToRootIfSelected = true)
-                            },
-                            icon = { Icon(tab.icon, contentDescription = tab.title) },
-                            label = { Text(tab.title) },
-                            colors = NavigationBarItemDefaults.colors(
-                                selectedIconColor = MaterialTheme.colorScheme.primary,
-                                selectedTextColor = MaterialTheme.colorScheme.primary,
-                                unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-                                unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-                                indicatorColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
-                            )
-                        )
+                CallogBottomNavigation(
+                    selectedTab = multiStack.selectedTab,
+                    onTabSelected = { tab ->
+                        multiStack.selectTab(tab, popToRootIfSelected = true)
+                    },
+                    onAddContact = {
+                        multiStack.selectTab(CrmBottomTab.CONTACTS, popToRootIfSelected = true)
+                    },
+                    onCreateTask = {
+                        multiStack.navigate(Nav3Key.Task.CreateTask())
+                    },
+                    onScheduleMeeting = {
+                        multiStack.navigate(Nav3Key.Meeting.ScheduleMeeting())
+                    },
+                    onLogCall = {
+                        multiStack.navigate(Nav3Key.CrmTab.Dialer)
                     }
-                }
+                )
             },
             containerColor = MaterialTheme.colorScheme.background
         ) { innerPadding ->
@@ -753,6 +759,7 @@ fun CrmNav3Container(
                             onMenuClick = openDrawer
                         )
                     }
+
                     is Nav3Key.Contacts.ContactDetails -> {
                         ContactDetailsScreen(
                             contactId = key.contactId,
@@ -760,6 +767,7 @@ fun CrmNav3Container(
                             onBackClick = { multiStack.pop() }
                         )
                     }
+
                     is Nav3Key.Contacts.DeviceContactDetails -> {
                         val entryPoint = remember(context) {
                             dagger.hilt.android.EntryPointAccessors.fromApplication(
@@ -826,6 +834,7 @@ fun CrmNav3Container(
                             onTaskClick = { taskId -> multiStack.navigate(Nav3Key.Task.TaskDetails(taskId = taskId)) }
                         )
                     }
+
                     is Nav3Key.Task.CreateTask -> {
                         CreateTaskScreen(
                             initialContactId = key.initialContactId,
@@ -834,6 +843,7 @@ fun CrmNav3Container(
                             onTaskCreated = { multiStack.pop() }
                         )
                     }
+
                     is Nav3Key.Task.TaskDetails -> {
                         TaskDetailsScreen(
                             taskId = key.taskId,
@@ -848,6 +858,7 @@ fun CrmNav3Container(
                             onMeetingClick = { meetingId -> multiStack.navigate(Nav3Key.Meeting.MeetingDetails(meetingId = meetingId)) }
                         )
                     }
+
                     is Nav3Key.Meeting.ScheduleMeeting -> {
                         ScheduleMeetingScreen(
                             initialContactId = key.initialContactId,
@@ -856,6 +867,7 @@ fun CrmNav3Container(
                             onMeetingScheduled = { multiStack.pop() }
                         )
                     }
+
                     is Nav3Key.Meeting.MeetingDetails -> {
                         MeetingDetailsScreen(
                             meetingId = key.meetingId,
@@ -953,7 +965,11 @@ fun CrmNav3Container(
                         if (pinInput == "9852") {
                             callViewModel.setDeveloperModeActive(true)
                             showDeveloperPinDialog = false
-                            android.widget.Toast.makeText(context, "Preferences & Tools unlocked! (Auto-locks after ${autoLockTimeoutMinutes}m idle)", android.widget.Toast.LENGTH_SHORT).show()
+                            android.widget.Toast.makeText(
+                                context,
+                                "Preferences & Tools unlocked! (Auto-locks after ${autoLockTimeoutMinutes}m idle)",
+                                android.widget.Toast.LENGTH_SHORT
+                            ).show()
                             closeDrawer()
                             if (isOpeningDeveloperDashboard) {
                                 onNavigateToDeveloperDashboard()

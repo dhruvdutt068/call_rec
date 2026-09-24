@@ -77,7 +77,7 @@ class SupabaseService @Inject constructor(
         saveConfig(null, env)
     }
 
-    private fun getClient(): SupabaseClient {
+    fun getClient(): SupabaseClient {
         return currentClient ?: synchronized(this) {
             currentClient ?: run {
                 val activePreset = runBlocking { activePresetProvider.getActivePreset() }

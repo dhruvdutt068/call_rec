@@ -48,6 +48,7 @@ class SyncWorker(
         fun personRepository(): com.example.callog.domain.repository.PersonRepository
         fun personDao(): com.example.callog.data.local.dao.PersonDao
         fun leadDao(): com.example.callog.data.local.dao.LeadDao
+        fun crmRepository(): com.example.callog.domain.crm.repository.CrmRepository
     }
 
     override suspend fun doWork(): Result {
@@ -71,6 +72,7 @@ class SyncWorker(
         val personRepository = entryPoint.personRepository()
         val personDao = entryPoint.personDao()
         val leadDao = entryPoint.leadDao()
+        val crmRepository = entryPoint.crmRepository()
 
         // Start new logger session
         val syncId = DeveloperLogger.startNewSession()
@@ -272,6 +274,40 @@ class SyncWorker(
                 }
             } catch (e: Exception) {
                 DeveloperLogger.error("LEAD_SYNC_FAILED", "Exception during Lead sync: ${e.message}", exception = e, network = network)
+            }
+
+            // Step 2f: Publish integration events to Client CRM
+            try {
+                val pendingSalesCalls = salesCallDao.getPendingSalesCalls()
+                if (pendingSalesCalls.isNotEmpty()) {
+                    DeveloperLogger.info("CRM_INTEGRATION_STARTED", "Publishing ${pendingSalesCalls.size} call events to Client CRM", network = network)
+                    val crmEvents = pendingSalesCalls.map { sc ->
+                        val epochMs = try {
+                            val sdf = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", java.util.Locale.US).apply {
+                                timeZone = java.util.TimeZone.getTimeZone("UTC")
+                            }
+                            sdf.parse(sc.createdAt)?.time ?: System.currentTimeMillis()
+                        } catch (_: Exception) {
+                            System.currentTimeMillis()
+                        }
+                        com.example.callog.domain.crm.model.CrmCallEvent(
+                            callId = sc.callId,
+                            personId = sc.personId,
+                            rawPhoneNumber = sc.buyerPhone,
+                            contactName = sc.buyerName,
+                            salespersonPhone = sc.salespersonPhone,
+                            salespersonName = sc.salespersonName,
+                            callType = sc.callType,
+                            durationSeconds = sc.duration,
+                            timestampEpochMs = epochMs,
+                            recordingCloudUrl = null,
+                            notes = null
+                        )
+                    }
+                    crmRepository.publishBatchCallEvents(crmEvents)
+                }
+            } catch (e: Exception) {
+                DeveloperLogger.warning("CRM_INTEGRATION_FAILED", "Exception publishing events to Client CRM: ${e.message}", network = network)
             }
 
             // Step 3: Fetch all pending items from local database for Firestore
