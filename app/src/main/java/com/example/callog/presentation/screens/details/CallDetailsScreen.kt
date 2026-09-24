@@ -44,6 +44,7 @@ fun CallDetailsScreen(
     callId: Long,
     viewModel: CallViewModel,
     onBackClick: () -> Unit,
+    onNavigateToContact: ((String) -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val coroutineScope = rememberCoroutineScope()
@@ -320,15 +321,14 @@ fun CallDetailsScreen(
                     // CRM Profile Button
                     FilledTonalButton(
                         onClick = {
-                            try {
-                                val uri = Uri.parse("allset://contact/${call.number}")
-                                val intent = Intent(Intent.ACTION_VIEW, uri).apply {
-                                    setPackage(context.packageName)
-                                    flags = Intent.FLAG_ACTIVITY_NEW_TASK
-                                }
-                                context.startActivity(intent)
-                            } catch (e: Exception) {
-                                android.util.Log.e("CallDetailsScreen", "Failed to launch CRM Contact", e)
+                            val targetId = call.personId ?: call.number
+                            if (onNavigateToContact != null) {
+                                onNavigateToContact(targetId)
+                            } else {
+                                viewModel.setPendingNavigationKey(
+                                    com.example.callog.presentation.navigation3.Nav3Key.Contacts.ContactDetails(contactId = targetId)
+                                )
+                                onBackClick()
                             }
                         },
                         modifier = Modifier.weight(1f),

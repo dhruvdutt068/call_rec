@@ -47,7 +47,9 @@ class CallSessionManager @Inject constructor(
     private val callHapticManager: CallHapticManager,
     private val dtmfTonePlayer: DtmfTonePlayer,
     private val contactsProvider: com.example.callog.data.provider.ContactsProvider,
-    private val dialerRoleManager: DialerRoleManager
+    private val dialerRoleManager: DialerRoleManager,
+    private val callRecordingController: com.example.callog.domain.call.CallRecordingController,
+    private val recordingRepository: com.example.callog.domain.repository.RecordingRepository
 ) {
     companion object {
         private const val TAG = "CallSessionManager"
@@ -55,6 +57,7 @@ class CallSessionManager @Inject constructor(
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var tickerJob: Job? = null
+    val recordingState: StateFlow<com.example.callog.domain.call.CallRecordingState> = callRecordingController.recordingState
 
     private var telecomController: TelecomCallController? = null
 
@@ -67,6 +70,10 @@ class CallSessionManager @Inject constructor(
     // Active primary call session (first ringing or active or connecting call)
     private val _activeCallSession = MutableStateFlow<CallSessionState?>(null)
     val activeCallSession: StateFlow<CallSessionState?> = _activeCallSession.asStateFlow()
+
+    // Audio state
+    private val _audioState = MutableStateFlow(CallAudioModel())
+    val audioState: StateFlow<CallAudioModel> = _audioState.asStateFlow()
 
     private inline fun updateSessionsMap(transform: (Map<String, CallSessionState>) -> Map<String, CallSessionState>) {
         _sessionsMap.update { current ->
@@ -82,9 +89,18 @@ class CallSessionManager @Inject constructor(
         }
     }
 
-    // Audio state
-    private val _audioState = MutableStateFlow(CallAudioModel())
-    val audioState: StateFlow<CallAudioModel> = _audioState.asStateFlow()
+    init {
+        scope.launch {
+            callRecordingController.recordingState.collect { recState ->
+                DeveloperLogger.info(TAG, "Recording state updated: $recState")
+                updateSessionsMap { current ->
+                    current.mapValues { (_, session) ->
+                        session.copy(recordingState = recState)
+                    }
+                }
+            }
+        }
+    }
 
     fun registerTelecomController(controller: TelecomCallController) {
         telecomController = controller
@@ -371,6 +387,12 @@ class CallSessionManager @Inject constructor(
                 proximityController.release()
                 notificationManager.cancelCallNotification()
 
+                // Auto-stop recording if active or starting
+                if (callRecordingController.recordingState.value is com.example.callog.domain.call.CallRecordingState.Recording ||
+                    callRecordingController.recordingState.value is com.example.callog.domain.call.CallRecordingState.Starting) {
+                    stopRecording()
+                }
+
                 // If incoming call was never answered, show missed call notification
                 if (session != null && session.direction == CallDirection.INCOMING && session.connectTimeMillis == 0L) {
                     notificationManager.showMissedCallNotification(session)
@@ -393,6 +415,10 @@ class CallSessionManager @Inject constructor(
      */
     fun onTelecomCallRemoved(callId: String) {
         DeveloperLogger.info("TELECOM_CALL_REMOVED", "Call $callId removed.")
+        if (callRecordingController.recordingState.value is com.example.callog.domain.call.CallRecordingState.Recording ||
+            callRecordingController.recordingState.value is com.example.callog.domain.call.CallRecordingState.Starting) {
+            stopRecording()
+        }
         updateSessionsMap { current -> current - callId }
 
         if (_sessionsMap.value.none { it.value.state == CallState.RINGING }) {
@@ -774,6 +800,18 @@ class CallSessionManager @Inject constructor(
                     }
                 }
             }
+            is CallAction.ToggleRecording -> {
+                val currentRecState = callRecordingController.recordingState.value
+                if (currentRecState is com.example.callog.domain.call.CallRecordingState.Recording ||
+                    currentRecState is com.example.callog.domain.call.CallRecordingState.Starting) {
+                    stopRecording()
+                } else {
+                    startRecording(action.callId)
+                }
+            }
+            is CallAction.StopRecording -> {
+                stopRecording()
+            }
             is CallAction.SetKeypadVisibility -> {
                 updateSessionsMap { current ->
                     val existing = current[action.callId] ?: return@updateSessionsMap current
@@ -787,6 +825,48 @@ class CallSessionManager @Inject constructor(
                     delay(180)
                     controller?.stopDtmfTone(action.callId)
                 }
+            }
+        }
+    }
+
+    fun startRecording(callId: String) {
+        val session = _sessionsMap.value[callId] ?: _activeCallSession.value
+        if (session == null) {
+            DeveloperLogger.warning(TAG, "Cannot start recording: No call session found for callId=$callId")
+            return
+        }
+        if (session.state != CallState.ACTIVE && session.state != CallState.CONNECTING) {
+            DeveloperLogger.warning(TAG, "Cannot start recording: Call is in non-recordable state ${session.state}")
+            return
+        }
+        callHapticManager.vibrateActionToggle()
+        scope.launch {
+            val result = callRecordingController.start(
+                callId = session.callId,
+                phoneNumber = session.phoneNumber,
+                personId = session.personId,
+                simSlot = session.simInfo?.subscriptionId
+            )
+            if (result.isFailure) {
+                DeveloperLogger.error(TAG, "Recording start failed: ${result.exceptionOrNull()?.message}")
+            }
+        }
+    }
+
+    fun stopRecording() {
+        callHapticManager.vibrateActionToggle()
+        scope.launch {
+            val result = callRecordingController.stop()
+            result.onSuccess { session ->
+                DeveloperLogger.info(TAG, "Recording finalized: ${session.filePath}. Registering in Room.")
+                val regResult = recordingRepository.registerCompletedRecording(session)
+                regResult.onSuccess { entity ->
+                    DeveloperLogger.info(TAG, "RecordingEntity persisted with id=${entity.id}, matchedCallId=${entity.matchedCallId}")
+                }.onFailure { err ->
+                    DeveloperLogger.error(TAG, "Failed to persist RecordingEntity: ${err.message}", err)
+                }
+            }.onFailure { err ->
+                DeveloperLogger.warning(TAG, "Recording stop returned failure or no session: ${err.message}")
             }
         }
     }

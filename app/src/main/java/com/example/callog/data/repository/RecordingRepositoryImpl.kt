@@ -93,46 +93,15 @@ class RecordingRepositoryImpl @Inject constructor(
 
                 val durationSec = rec.durationMs / 1000L
 
-                // 1. Check if parser failed
-                if (rec.phoneNumber == null && rec.contactName == null) {
-                    val recordingEntity = RecordingEntity(
-                        id = existingRecording?.id ?: 0,
-                        filePath = rec.filePath,
-                        fileName = fileName,
-                        fileSize = rec.fileSize,
-                        duration = durationSec,
-                        lastModified = rec.lastModified,
-                        phoneExtracted = null,
-                        contactExtracted = null,
-                        timestampExtracted = rec.timestamp,
-                        matchedCallId = null,
-                        matchStatus = MatchStatus.PARSER_FAILED,
-                        uploadStatus = UploadStatus.PENDING,
-                        parser = rec.parserName,
-                        reason = "Unknown filename pattern"
-                    )
-                    recordingDao.insertRecording(recordingEntity)
-                    recordingLogDao.insertLog(
-                        RecordingLogEntity(
-                            scanId = scanId,
-                            fileName = fileName,
-                            path = rec.filePath,
-                            parser = rec.parserName,
-                            phoneExtracted = null,
-                            timestampExtracted = rec.timestamp,
-                            candidateCount = 0,
-                            matchedCallId = null,
-                            status = "PARSER_FAILED",
-                            reason = "Unknown filename pattern"
-                        )
-                    )
-                    return@forEach
-                }
+                // 1. Calculate time candidates for this recording
 
-                // 2. Find call logs within ±60 seconds
+                // 2. Find call logs within window (start time or end time with tolerance)
                 val candidates = dbCalls.filter { call ->
-                    rec.timestamp >= (call.timestamp - 60000L) && 
-                    rec.timestamp <= (call.timestamp + 60000L)
+                    val callStart = call.timestamp
+                    val callEnd = call.timestamp + (call.duration * 1000L)
+                    val toleranceMs = 120_000L
+                    (rec.timestamp >= (callStart - toleranceMs) && rec.timestamp <= (callEnd + toleranceMs)) ||
+                    (rec.lastModified >= (callStart - toleranceMs) && rec.lastModified <= (callEnd + toleranceMs))
                 }
 
                 if (candidates.isEmpty()) {
@@ -680,6 +649,73 @@ class RecordingRepositoryImpl @Inject constructor(
             )
         }
         result
+    }
+
+    override suspend fun registerCompletedRecording(
+        session: com.example.callog.domain.call.RecordingSession
+    ): Result<RecordingEntity> = withContext(Dispatchers.IO) {
+        try {
+            val file = File(session.filePath)
+            if (!file.exists() || file.length() == 0L) {
+                return@withContext Result.failure(IllegalStateException("Recording file missing or empty: ${session.filePath}"))
+            }
+
+            val durationSec = (session.durationMillis / 1000L).coerceAtLeast(1L)
+            val fileName = file.name
+            val now = System.currentTimeMillis()
+
+            val existing = recordingDao.getRecordingByPath(session.filePath)
+            val callIdLong = session.callId.toLongOrNull()
+            var matchedCall = if (callIdLong != null) callDao.getCallById(callIdLong) else null
+
+            if (matchedCall == null && !session.phoneNumber.isNullOrBlank()) {
+                val normNum = normalizePhoneNumber(session.phoneNumber)
+                val recentCalls = callDao.getAllCalls().filter { call ->
+                    val callNorm = normalizePhoneNumber(call.number)
+                    callNorm == normNum && Math.abs(call.timestamp - session.startedAt) <= 180_000L
+                }
+                matchedCall = recentCalls.firstOrNull()
+            }
+
+            val entity = RecordingEntity(
+                id = existing?.id ?: 0L,
+                filePath = session.filePath,
+                fileName = fileName,
+                fileSize = file.length(),
+                duration = durationSec,
+                lastModified = file.lastModified().takeIf { it > 0 } ?: now,
+                phoneExtracted = session.phoneNumber,
+                contactExtracted = null,
+                timestampExtracted = session.startedAt,
+                matchedCallId = matchedCall?.id ?: callIdLong,
+                matchStatus = MatchStatus.MATCHED,
+                uploadStatus = UploadStatus.PENDING,
+                parser = "InCallRecorder",
+                reason = "Recorded during active call (${session.callId})"
+            )
+
+            val insertedId = recordingDao.insertRecording(entity)
+            val finalEntity = entity.copy(id = if (entity.id == 0L) insertedId else entity.id)
+
+            if (matchedCall != null) {
+                callDao.updateCall(
+                    matchedCall.copy(
+                        recordingPath = session.filePath,
+                        recordingLocalPath = session.filePath,
+                        recordingUploadStatus = "PENDING"
+                    )
+                )
+                enqueueUploadWork(matchedCall.id)
+                Log.i(TAG, "Linked live recording ${session.filePath} to call ID ${matchedCall.id} and enqueued upload.")
+            } else {
+                Log.i(TAG, "Registered live recording ${session.filePath} (callId=${session.callId}). Pending CallEntity association.")
+            }
+
+            Result.success(finalEntity)
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to register live recording", e)
+            Result.failure(e)
+        }
     }
 
     private fun enqueueUploadWork(callId: Long) {

@@ -9,19 +9,26 @@ import com.example.callog.core.telecom.DtmfTonePlayer
 import com.example.callog.core.telecom.T9MatchResult
 import com.example.callog.core.telecom.T9SearchEngine
 import com.example.callog.core.telecom.TelecomDialerManager
+import com.example.callog.core.telecom.TelecomRoleHelper
+import com.example.callog.domain.model.CallLogEntry
 import com.example.callog.domain.model.Lead
 import com.example.callog.domain.model.Person
 import com.example.callog.domain.repository.LeadRepository
 import com.example.callog.domain.repository.PersonRepository
+import com.example.callog.domain.service.SyncManager
 import com.example.callog.domain.service.simulator.CallSimulatorManager
+import com.example.callog.domain.usecase.GetCallLogsUseCase
+import com.example.callog.domain.usecase.ToggleCallFavoriteUseCase
 import com.example.callog.sim.SimInfo
 import com.example.callog.sim.SimRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
+@OptIn(ExperimentalCoroutinesApi::class)
 @HiltViewModel
 class DialerViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
@@ -31,11 +38,26 @@ class DialerViewModel @Inject constructor(
     private val t9SearchEngine: T9SearchEngine,
     private val telecomDialerManager: TelecomDialerManager,
     private val dtmfTonePlayer: DtmfTonePlayer,
-    val simulatorManager: CallSimulatorManager
+    val simulatorManager: CallSimulatorManager,
+    private val getCallLogsUseCase: GetCallLogsUseCase,
+    private val toggleCallFavoriteUseCase: ToggleCallFavoriteUseCase,
+    private val syncManager: SyncManager
 ) : ViewModel() {
+
+    private val _mode = MutableStateFlow<DialerMode>(DialerMode.CallLogs)
+    val mode: StateFlow<DialerMode> = _mode.asStateFlow()
 
     private val _inputNumber = MutableStateFlow("")
     val inputNumber: StateFlow<String> = _inputNumber.asStateFlow()
+
+    private val _searchQuery = MutableStateFlow("")
+    val searchQuery: StateFlow<String> = _searchQuery.asStateFlow()
+
+    private val _callTypeFilter = MutableStateFlow<String?>("ALL")
+    val callTypeFilter: StateFlow<String?> = _callTypeFilter.asStateFlow()
+
+    private val _sortBy = MutableStateFlow("NEWEST")
+    val sortBy: StateFlow<String> = _sortBy.asStateFlow()
 
     private val _activeSims = MutableStateFlow<List<SimInfo>>(emptyList())
     val activeSims: StateFlow<List<SimInfo>> = _activeSims.asStateFlow()
@@ -43,11 +65,32 @@ class DialerViewModel @Inject constructor(
     private val _clipboardSuggestion = MutableStateFlow<String?>(null)
     val clipboardSuggestion: StateFlow<String?> = _clipboardSuggestion.asStateFlow()
 
+    private val _errorMessage = MutableStateFlow<String?>(null)
+
+    val isSyncing: StateFlow<Boolean> = syncManager.isSyncing
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
+
     private val allPeople: StateFlow<List<Person>> = personRepository.getAllPeopleFlow()
         .stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
 
     private val allLeads: StateFlow<List<Lead>> = leadRepository.getAllLeadsFlow()
         .stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
+
+    val callLogs: StateFlow<List<CallLogEntry>> = combine(
+        _searchQuery,
+        _callTypeFilter,
+        _sortBy
+    ) { query, type, sort ->
+        val apiType = if (type == "ALL") null else type
+        Triple(query, apiType, sort)
+    }.flatMapLatest { (query, type, sort) ->
+        getCallLogsUseCase(
+            searchQuery = query,
+            callTypeFilter = type,
+            favoriteFilter = false,
+            sortBy = sort
+        )
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     val t9Results: StateFlow<List<T9MatchResult>> = combine(
         _inputNumber,
@@ -62,9 +105,96 @@ class DialerViewModel @Inject constructor(
         }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    val uiState: StateFlow<DialerUiState> = combine(
+        combine(_mode, _inputNumber, _searchQuery, _callTypeFilter, _sortBy) { mode, input, search, filter, sort ->
+            FiveState(mode, input, search, filter, sort)
+        },
+        combine(callLogs, t9Results, _activeSims, _clipboardSuggestion) { logs, t9, sims, clip ->
+            FourState(logs, t9, sims, clip)
+        },
+        isSyncing,
+        _errorMessage
+    ) { five, four, syncing, error ->
+        DialerUiState(
+            mode = five.mode,
+            inputNumber = five.input,
+            callLogs = four.logs,
+            t9Results = four.t9,
+            activeSims = four.sims,
+            clipboardSuggestion = four.clip,
+            searchQuery = five.search,
+            activeFilter = five.filter,
+            activeSort = five.sort,
+            isSyncing = syncing,
+            isDefaultDialer = TelecomRoleHelper.isDefaultDialer(context),
+            error = error
+        )
+    }.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5000),
+        initialValue = DialerUiState()
+    )
+
+    private data class FiveState(
+        val mode: DialerMode,
+        val input: String,
+        val search: String,
+        val filter: String?,
+        val sort: String
+    )
+
+    private data class FourState(
+        val logs: List<CallLogEntry>,
+        val t9: List<T9MatchResult>,
+        val sims: List<SimInfo>,
+        val clip: String?
+    )
+
     init {
         refreshSims()
         checkClipboard()
+    }
+
+    fun onAction(action: DialerUiAction) {
+        when (action) {
+            is DialerUiAction.OpenDialpad -> openDialpad()
+            is DialerUiAction.CloseDialpad -> closeDialpad()
+            is DialerUiAction.ToggleDialpad -> toggleDialpad()
+            is DialerUiAction.InputDigit -> onDigitClick(action.digit)
+            is DialerUiAction.LongPressZero -> onPlusLongClick()
+            is DialerUiAction.SpeedDial -> onSpeedDialLongPress(action.digit)
+            is DialerUiAction.Backspace -> onBackspaceClick()
+            is DialerUiAction.ClearInput -> onClearInput()
+            is DialerUiAction.SetInputNumber -> setInputNumber(action.number)
+            is DialerUiAction.PasteClipboard -> onPasteClipboard()
+            is DialerUiAction.PlaceCall -> placeCall(action.number, action.simInfo)
+            is DialerUiAction.DirectCall -> directCall(action.number)
+            is DialerUiAction.SetSearchQuery -> setSearchQuery(action.query)
+            is DialerUiAction.SetFilter -> setFilter(action.filter)
+            is DialerUiAction.SetSort -> setSort(action.sort)
+            is DialerUiAction.ToggleFavorite -> toggleFavorite(action.callId)
+            is DialerUiAction.SyncLogs -> syncLogs()
+            is DialerUiAction.CheckClipboard -> checkClipboard()
+            is DialerUiAction.RefreshSims -> refreshSims()
+        }
+    }
+
+    fun openDialpad() {
+        _mode.value = DialerMode.Dialpad
+        checkClipboard()
+    }
+
+    fun closeDialpad() {
+        _mode.value = DialerMode.CallLogs
+    }
+
+    fun toggleDialpad() {
+        _mode.update { current ->
+            if (current == DialerMode.Dialpad) DialerMode.CallLogs else {
+                checkClipboard()
+                DialerMode.Dialpad
+            }
+        }
     }
 
     fun refreshSims() {
@@ -121,7 +251,6 @@ class DialerViewModel @Inject constructor(
     }
 
     fun onSpeedDialLongPress(digit: Int) {
-        // Find favorite or top lead for speed dial index
         val people = allPeople.value
         val speedDialContact = people.getOrNull(digit - 1)
         val phone = speedDialContact?.phoneNumbers?.firstOrNull()?.phoneNumber
@@ -136,6 +265,36 @@ class DialerViewModel @Inject constructor(
         if (cleanNumber.isBlank()) return
 
         telecomDialerManager.placeCall(cleanNumber, simInfo)
+    }
+
+    fun directCall(phoneNumber: String) {
+        if (phoneNumber.isBlank()) return
+        val defaultSim = _activeSims.value.firstOrNull()
+        telecomDialerManager.placeCall(phoneNumber.trim(), defaultSim)
+    }
+
+    fun setSearchQuery(query: String) {
+        _searchQuery.value = query
+    }
+
+    fun setFilter(filter: String) {
+        _callTypeFilter.value = filter
+    }
+
+    fun setSort(sort: String) {
+        _sortBy.value = sort
+    }
+
+    fun toggleFavorite(callId: Long) {
+        viewModelScope.launch {
+            toggleCallFavoriteUseCase(callId)
+        }
+    }
+
+    fun syncLogs() {
+        viewModelScope.launch {
+            syncManager.startSync()
+        }
     }
 
     override fun onCleared() {

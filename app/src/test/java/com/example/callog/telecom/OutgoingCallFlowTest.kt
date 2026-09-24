@@ -93,7 +93,9 @@ class OutgoingCallFlowTest {
             callHapticManager = fakeHapticManager,
             dtmfTonePlayer = fakeDtmfTonePlayer,
             contactsProvider = com.example.callog.data.provider.ContactsProvider(fakeContext),
-            dialerRoleManager = com.example.callog.domain.service.DialerRoleManager(fakeContext)
+            dialerRoleManager = com.example.callog.domain.service.DialerRoleManager(fakeContext),
+            callRecordingController = CallSessionManagerTest.FakeCallRecordingController(),
+            recordingRepository = CallSessionManagerTest.FakeRecordingRepository()
         )
 
         callSessionManager.registerTelecomController(fakeTelecomController)

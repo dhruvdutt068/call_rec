@@ -1,121 +1,453 @@
 package com.example.callog.presentation.screens.dialer
 
+import android.content.res.Configuration
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.*
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Backspace
 import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.outlined.PhoneMissed
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.tooling.preview.Preview
-import android.content.res.Configuration
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.example.callog.core.telecom.T9MatchResult
-import com.example.callog.domain.model.LeadPriority
+import com.example.callog.domain.model.CallLogEntry
 import com.example.callog.domain.model.LeadStatus
+import com.example.callog.presentation.components.CallCard
+import com.example.callog.presentation.components.CallogAppBarWithSearch
 import com.example.callog.presentation.components.ContactAvatar
+import com.example.callog.presentation.components.ExpressiveEmptyState
+import com.example.callog.presentation.components.pullrefresh.ElasticPullRefreshLayout
 import com.example.callog.presentation.theme.*
 import com.example.callog.sim.SimInfo
 
+/**
+ * Modern unified Dialer Screen.
+ *
+ * Recent call history serves as the primary workspace by default.
+ * The dialpad is available on-demand via an animated Floating Action Button (FAB).
+ */
 @Composable
 fun DialerScreen(
+    onCallClick: ((Long) -> Unit)? = null,
     onNavigateToContact: ((String) -> Unit)? = null,
     onMenuClick: (() -> Unit)? = null,
     onNavigateToCallSimulator: (() -> Unit)? = null,
     viewModel: DialerViewModel = hiltViewModel(),
     modifier: Modifier = Modifier
 ) {
-    val context = androidx.compose.ui.platform.LocalContext.current
-    val inputNumber by viewModel.inputNumber.collectAsState()
-    val t9Results by viewModel.t9Results.collectAsState()
-    val activeSims by viewModel.activeSims.collectAsState()
-    val clipboardSuggestion by viewModel.clipboardSuggestion.collectAsState()
-    val isDefaultDialer = remember { com.example.callog.core.telecom.TelecomRoleHelper.isDefaultDialer(context) }
+    val uiState by viewModel.uiState.collectAsState()
     var showSimulatorSheet by remember { mutableStateOf(false) }
+    val callLogsListState = rememberLazyListState()
 
-    LaunchedEffect(Unit) {
-        viewModel.refreshSims()
-        viewModel.checkClipboard()
+    // Intercept Back button when dialpad is open
+    BackHandler(enabled = uiState.mode == DialerMode.Dialpad) {
+        viewModel.onAction(DialerUiAction.CloseDialpad)
     }
 
-    DialerContent(
-        inputNumber = inputNumber,
-        t9Results = t9Results,
-        activeSims = activeSims,
-        clipboardSuggestion = clipboardSuggestion,
-        isDefaultDialer = isDefaultDialer,
-        onPasteClipboard = { viewModel.onPasteClipboard() },
-        onDigitClick = { viewModel.onDigitClick(it) },
-        onPlusLongClick = { viewModel.onPlusLongClick() },
-        onSpeedDialLongPress = { viewModel.onSpeedDialLongPress(it) },
-        onBackspaceClick = { viewModel.onBackspaceClick() },
-        onSelectContactNumber = { viewModel.setInputNumber(it) },
-        onCallClick = { number, sim -> viewModel.placeCall(number, sim) },
-        onOpenSimulator = { showSimulatorSheet = true },
-        onNavigateToContact = onNavigateToContact,
-        onMenuClick = onMenuClick,
-        modifier = modifier
-    )
+    LaunchedEffect(Unit) {
+        viewModel.onAction(DialerUiAction.RefreshSims)
+        viewModel.onAction(DialerUiAction.CheckClipboard)
+    }
 
-    if (showSimulatorSheet) {
-        SimulateCallBottomSheet(
-            initialNumber = inputNumber,
-            activeSims = activeSims,
-            simulatorManager = viewModel.simulatorManager,
-            onDismiss = { showSimulatorSheet = false },
-            onNavigateToStudio = {
-                showSimulatorSheet = false
-                onNavigateToCallSimulator?.invoke()
+    Scaffold(
+        modifier = modifier.fillMaxSize(),
+        containerColor = Slate950,
+        floatingActionButton = {
+            DialerFab(
+                isDialpadOpen = uiState.mode == DialerMode.Dialpad,
+                onToggle = { viewModel.onAction(DialerUiAction.ToggleDialpad) }
+            )
+        },
+        floatingActionButtonPosition = FabPosition.End
+    ) { innerPadding ->
+        AnimatedContent(
+            targetState = uiState.mode,
+            transitionSpec = {
+                if (targetState == DialerMode.Dialpad) {
+                    (slideInVertically(animationSpec = tween(280)) { it / 4 } + fadeIn(animationSpec = tween(250)))
+                        .togetherWith(slideOutVertically(animationSpec = tween(200)) { -it / 6 } + fadeOut(animationSpec = tween(180)))
+                } else {
+                    (slideInVertically(animationSpec = tween(280)) { -it / 6 } + fadeIn(animationSpec = tween(250)))
+                        .togetherWith(slideOutVertically(animationSpec = tween(220)) { it / 4 } + fadeOut(animationSpec = tween(180)))
+                }
+            },
+            label = "DialerModeTransition",
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding)
+        ) { mode ->
+            when (mode) {
+                DialerMode.CallLogs -> {
+                    CallLogsModeView(
+                        uiState = uiState,
+                        listState = callLogsListState,
+                        onAction = viewModel::onAction,
+                        onCallClick = onCallClick,
+                        onMenuClick = onMenuClick,
+                        onOpenSimulator = { showSimulatorSheet = true }
+                    )
+                }
+                DialerMode.Dialpad -> {
+                    DialpadModeView(
+                        uiState = uiState,
+                        onAction = viewModel::onAction,
+                        onMenuClick = onMenuClick,
+                        onOpenSimulator = { showSimulatorSheet = true },
+                        onNavigateToContact = onNavigateToContact
+                    )
+                }
             }
-        )
+        }
+
+        if (showSimulatorSheet) {
+            SimulateCallBottomSheet(
+                initialNumber = uiState.inputNumber,
+                activeSims = uiState.activeSims,
+                simulatorManager = viewModel.simulatorManager,
+                onDismiss = { showSimulatorSheet = false },
+                onNavigateToStudio = {
+                    showSimulatorSheet = false
+                    onNavigateToCallSimulator?.invoke()
+                }
+            )
+        }
     }
 }
 
+// ==========================================
+// 1. ANIMATED FAB
+// ==========================================
+
 @Composable
-fun DialerContent(
-    inputNumber: String,
-    t9Results: List<T9MatchResult>,
-    activeSims: List<SimInfo>,
-    clipboardSuggestion: String?,
-    isDefaultDialer: Boolean,
-    onPasteClipboard: () -> Unit,
-    onDigitClick: (Char) -> Unit,
-    onPlusLongClick: () -> Unit,
-    onSpeedDialLongPress: (Int) -> Unit,
-    onBackspaceClick: () -> Unit,
-    onSelectContactNumber: (String) -> Unit,
-    onCallClick: (String, SimInfo?) -> Unit,
+private fun DialerFab(
+    isDialpadOpen: Boolean,
+    onToggle: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    FloatingActionButton(
+        onClick = onToggle,
+        containerColor = if (isDialpadOpen) Slate800 else Teal500,
+        contentColor = if (isDialpadOpen) Slate300 else Color.White,
+        shape = CircleShape,
+        elevation = FloatingActionButtonDefaults.elevation(defaultElevation = 6.dp),
+        modifier = modifier
+            .navigationBarsPadding()
+            .padding(bottom = 12.dp, end = 4.dp)
+            .size(58.dp)
+    ) {
+        AnimatedContent(
+            targetState = isDialpadOpen,
+            transitionSpec = {
+                (fadeIn(animationSpec = tween(180)) + scaleIn(initialScale = 0.8f))
+                    .togetherWith(fadeOut(animationSpec = tween(150)) + scaleOut(targetScale = 0.8f))
+            },
+            label = "FabIconMorph"
+        ) { isOpen ->
+            if (isOpen) {
+                Icon(
+                    imageVector = Icons.Default.Close,
+                    contentDescription = "Close Dialpad",
+                    modifier = Modifier.size(26.dp)
+                )
+            } else {
+                Icon(
+                    imageVector = Icons.Default.Dialpad,
+                    contentDescription = "Open Dialpad",
+                    modifier = Modifier.size(26.dp)
+                )
+            }
+        }
+    }
+}
+
+// ==========================================
+// 2. CALL LOGS MODE VIEW
+// ==========================================
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun CallLogsModeView(
+    uiState: DialerUiState,
+    listState: LazyListState,
+    onAction: (DialerUiAction) -> Unit,
+    onCallClick: ((Long) -> Unit)?,
+    onMenuClick: (() -> Unit)?,
+    onOpenSimulator: () -> Unit
+) {
+    var showSortMenu by remember { mutableStateOf(false) }
+
+    val filterOptions = listOf(
+        "ALL" to "All",
+        "INCOMING" to "Incoming",
+        "OUTGOING" to "Outgoing",
+        "MISSED" to "Missed",
+        "REJECTED" to "Rejected",
+        "RECORDED" to "Recorded"
+    )
+
+    val sortOptions = listOf(
+        "NEWEST" to "Newest First",
+        "OLDEST" to "Oldest First",
+        "LONGEST" to "Longest Duration",
+        "SHORTEST" to "Shortest Duration"
+    )
+
+    ElasticPullRefreshLayout(
+        isRefreshing = uiState.isSyncing,
+        onRefresh = { onAction(DialerUiAction.SyncLogs) },
+        modifier = Modifier.fillMaxSize(),
+        topBar = {
+            CallogAppBarWithSearch(
+                query = uiState.searchQuery,
+                onQueryChange = { onAction(DialerUiAction.SetSearchQuery(it)) },
+                placeholder = "Search name, number, notes...",
+                navigationIcon = {
+                    if (onMenuClick != null) {
+                        IconButton(
+                            onClick = onMenuClick,
+                            modifier = Modifier.sizeIn(minWidth = 48.dp, minHeight = 48.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Menu,
+                                contentDescription = "Open Navigation Menu",
+                                tint = Slate300
+                            )
+                        }
+                    }
+                },
+                actions = {
+                    // Call Simulator Quick Button
+                    IconButton(
+                        onClick = onOpenSimulator,
+                        modifier = Modifier
+                            .size(34.dp)
+                            .clip(CircleShape)
+                            .background(Teal500.copy(alpha = 0.2f))
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.PhoneCallback,
+                            contentDescription = "Simulate Call",
+                            tint = Teal300,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.width(4.dp))
+
+                    // Sync Button
+                    IconButton(
+                        onClick = { onAction(DialerUiAction.SyncLogs) },
+                        enabled = !uiState.isSyncing,
+                        modifier = Modifier.sizeIn(minWidth = 44.dp, minHeight = 44.dp)
+                    ) {
+                        if (uiState.isSyncing) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(20.dp),
+                                strokeWidth = 2.dp,
+                                color = Teal400
+                            )
+                        } else {
+                            Icon(
+                                imageVector = Icons.Default.Refresh,
+                                contentDescription = "Sync Logs",
+                                tint = Teal400
+                            )
+                        }
+                    }
+                }
+            )
+        }
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 16.dp, vertical = 6.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            // Filter chips and Sort button row
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                LazyRow(
+                    modifier = Modifier.weight(1f),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    contentPadding = PaddingValues(end = 8.dp)
+                ) {
+                    items(filterOptions) { (key, label) ->
+                        val isSelected = (uiState.activeFilter ?: "ALL") == key
+                        FilterChip(
+                            selected = isSelected,
+                            onClick = { onAction(DialerUiAction.SetFilter(key)) },
+                            label = { Text(label, style = CallogTypography.statusLabel) },
+                            shape = CallogShapes.pill,
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = Teal500.copy(alpha = 0.25f),
+                                selectedLabelColor = Teal300,
+                                containerColor = Slate900,
+                                labelColor = Slate400
+                            ),
+                            border = FilterChipDefaults.filterChipBorder(
+                                borderColor = if (isSelected) Teal500 else Slate800,
+                                enabled = true,
+                                selected = isSelected
+                            )
+                        )
+                    }
+                }
+
+                // Sort Selector Trigger
+                Box {
+                    Surface(
+                        shape = CallogShapes.interactive,
+                        color = Slate900,
+                        border = androidx.compose.foundation.BorderStroke(1.dp, Slate800),
+                        modifier = Modifier
+                            .clip(CallogShapes.interactive)
+                            .clickable { showSortMenu = true }
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.FilterList,
+                                contentDescription = "Sort order",
+                                tint = Teal400,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = sortOptions.firstOrNull { it.first == uiState.activeSort }?.second?.split(" ")?.first() ?: "Sort",
+                                style = MaterialTheme.typography.bodySmall,
+                                fontWeight = FontWeight.Bold,
+                                color = Slate300
+                            )
+                            Icon(
+                                imageVector = Icons.Default.ArrowDropDown,
+                                contentDescription = null,
+                                tint = Slate400,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
+                    }
+
+                    DropdownMenu(
+                        expanded = showSortMenu,
+                        onDismissRequest = { showSortMenu = false },
+                        shape = CallogShapes.dialog,
+                        modifier = Modifier.background(Slate900)
+                    ) {
+                        sortOptions.forEach { (key, label) ->
+                            DropdownMenuItem(
+                                text = {
+                                    Text(
+                                        text = label,
+                                        color = if (uiState.activeSort == key) Teal300 else Slate300,
+                                        fontWeight = if (uiState.activeSort == key) FontWeight.Bold else FontWeight.Normal
+                                    )
+                                },
+                                onClick = {
+                                    onAction(DialerUiAction.SetSort(key))
+                                    showSortMenu = false
+                                }
+                            )
+                        }
+                    }
+                }
+            }
+
+            // Logs list with preserved scroll state
+            if (uiState.callLogs.isEmpty()) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f),
+                    contentAlignment = Alignment.Center
+                ) {
+                    ExpressiveEmptyState(
+                        title = "No recent calls",
+                        description = "Your recent calls and call logs will appear here. Tap the dialpad button below to make a call.",
+                        icon = Icons.Outlined.PhoneMissed,
+                        actionLabel = if (!uiState.isSyncing) "Sync Logs" else null,
+                        onActionClick = { onAction(DialerUiAction.SyncLogs) }
+                    )
+                }
+            } else {
+                LazyColumn(
+                    state = listState,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                    contentPadding = PaddingValues(bottom = 80.dp) // Room for FAB
+                ) {
+                    items(
+                        items = uiState.callLogs,
+                        key = { it.id }
+                    ) { call ->
+                        CallCard(
+                            call = call,
+                            onClick = { onCallClick?.invoke(call.id) },
+                            onFavoriteToggle = { onAction(DialerUiAction.ToggleFavorite(call.id)) },
+                            onCallClick = { onAction(DialerUiAction.DirectCall(call.number)) }
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+// ==========================================
+// 3. DIALPAD MODE VIEW
+// ==========================================
+
+@Composable
+private fun DialpadModeView(
+    uiState: DialerUiState,
+    onAction: (DialerUiAction) -> Unit,
+    onMenuClick: (() -> Unit)?,
     onOpenSimulator: () -> Unit,
-    modifier: Modifier = Modifier,
-    onNavigateToContact: ((String) -> Unit)? = null,
-    onMenuClick: (() -> Unit)? = null
+    onNavigateToContact: ((String) -> Unit)?
 ) {
     Column(
-        modifier = modifier
+        modifier = Modifier
             .fillMaxSize()
             .background(Slate950)
-            .padding(horizontal = 16.dp, vertical = 8.dp),
+            .padding(horizontal = 16.dp, vertical = 6.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.SpaceBetween
     ) {
@@ -123,13 +455,13 @@ fun DialerContent(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(bottom = 6.dp),
+                .padding(bottom = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 if (onMenuClick != null) {
                     IconButton(onClick = onMenuClick) {
@@ -170,10 +502,10 @@ fun DialerContent(
 
                 Surface(
                     shape = RoundedCornerShape(12.dp),
-                    color = if (isDefaultDialer) Green500.copy(alpha = 0.15f) else Amber500.copy(alpha = 0.15f),
+                    color = if (uiState.isDefaultDialer) Green500.copy(alpha = 0.15f) else Amber500.copy(alpha = 0.15f),
                     border = androidx.compose.foundation.BorderStroke(
                         1.dp,
-                        if (isDefaultDialer) Green500.copy(alpha = 0.4f) else Amber500.copy(alpha = 0.4f)
+                        if (uiState.isDefaultDialer) Green500.copy(alpha = 0.4f) else Amber500.copy(alpha = 0.4f)
                     )
                 ) {
                     Row(
@@ -182,45 +514,45 @@ fun DialerContent(
                         horizontalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
                         Icon(
-                            imageVector = if (isDefaultDialer) Icons.Default.CheckCircle else Icons.Default.PhoneCallback,
+                            imageVector = if (uiState.isDefaultDialer) Icons.Default.CheckCircle else Icons.Default.PhoneCallback,
                             contentDescription = null,
-                            tint = if (isDefaultDialer) Green500 else Amber500,
+                            tint = if (uiState.isDefaultDialer) Green500 else Amber500,
                             modifier = Modifier.size(14.dp)
                         )
                         Text(
-                            text = if (isDefaultDialer) "Default Phone" else "System Dialer",
+                            text = if (uiState.isDefaultDialer) "Default Phone" else "System Dialer",
                             style = MaterialTheme.typography.labelSmall,
                             fontWeight = FontWeight.SemiBold,
-                            color = if (isDefaultDialer) Green500 else Amber500
+                            color = if (uiState.isDefaultDialer) Green500 else Amber500
                         )
                     }
                 }
             }
         }
 
-        // Top Section: T9 Search Results / Suggestions
+        // Top Section: T9 Search Results / Clipboard Suggestions
         Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .weight(1f, fill = false)
         ) {
-            // Clipboard Paste Suggestion Chip
+            // Clipboard Suggestion Chip
             AnimatedVisibility(
-                visible = !clipboardSuggestion.isNullOrBlank() && inputNumber.isBlank(),
+                visible = !uiState.clipboardSuggestion.isNullOrBlank() && uiState.inputNumber.isBlank(),
                 enter = fadeIn() + expandVertically(),
                 exit = fadeOut() + shrinkVertically()
             ) {
                 Surface(
-                    onClick = onPasteClipboard,
+                    onClick = { onAction(DialerUiAction.PasteClipboard) },
                     shape = RoundedCornerShape(12.dp),
                     color = Teal500.copy(alpha = 0.15f),
                     border = androidx.compose.foundation.BorderStroke(1.dp, Teal500.copy(alpha = 0.4f)),
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(bottom = 8.dp)
+                        .padding(bottom = 6.dp)
                 ) {
                     Row(
-                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
@@ -231,7 +563,7 @@ fun DialerContent(
                             modifier = Modifier.size(18.dp)
                         )
                         Text(
-                            text = "Paste from clipboard: ${clipboardSuggestion ?: ""}",
+                            text = "Paste: ${uiState.clipboardSuggestion ?: ""}",
                             style = MaterialTheme.typography.bodySmall,
                             color = Teal300,
                             fontWeight = FontWeight.Medium,
@@ -245,26 +577,26 @@ fun DialerContent(
 
             // T9 Matching Contacts List
             AnimatedVisibility(
-                visible = t9Results.isNotEmpty(),
+                visible = uiState.t9Results.isNotEmpty(),
                 enter = fadeIn() + expandVertically(),
                 exit = fadeOut() + shrinkVertically()
             ) {
                 LazyColumn(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .heightIn(max = 170.dp),
+                        .heightIn(max = 140.dp),
                     verticalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    items(t9Results, key = { it.phoneNumber + (it.personId ?: "") }) { match ->
+                    items(uiState.t9Results, key = { it.phoneNumber + (it.personId ?: "") }) { match ->
                         T9ContactItem(
                             match = match,
                             onItemClick = {
-                                onSelectContactNumber(match.phoneNumber)
+                                onAction(DialerUiAction.SetInputNumber(match.phoneNumber))
                             },
                             onCallClick = { sim ->
-                                onCallClick(match.phoneNumber, sim)
+                                onAction(DialerUiAction.PlaceCall(match.phoneNumber, sim))
                             },
-                            activeSims = activeSims
+                            activeSims = uiState.activeSims
                         )
                     }
                 }
@@ -275,30 +607,30 @@ fun DialerContent(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(vertical = 8.dp),
+                .padding(vertical = 4.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(60.dp)
+                    .height(56.dp)
                     .padding(horizontal = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.Center
             ) {
                 Text(
-                    text = inputNumber.ifEmpty { "Enter phone number" },
-                    style = if (inputNumber.length > 14) MaterialTheme.typography.titleLarge else MaterialTheme.typography.headlineMedium,
+                    text = uiState.inputNumber.ifEmpty { "Enter phone number" },
+                    style = if (uiState.inputNumber.length > 14) MaterialTheme.typography.titleLarge else MaterialTheme.typography.headlineMedium,
                     fontWeight = FontWeight.Bold,
-                    color = if (inputNumber.isNotEmpty()) Slate50 else Slate400,
+                    color = if (uiState.inputNumber.isNotEmpty()) Slate50 else Slate500,
                     maxLines = 1,
                     textAlign = TextAlign.Center,
                     modifier = Modifier.weight(1f)
                 )
 
-                if (inputNumber.isNotEmpty()) {
+                if (uiState.inputNumber.isNotEmpty()) {
                     IconButton(
-                        onClick = onBackspaceClick
+                        onClick = { onAction(DialerUiAction.Backspace) }
                     ) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.Backspace,
@@ -313,28 +645,32 @@ fun DialerContent(
 
         // Keypad Grid
         DialpadGrid(
-            onDigitClick = onDigitClick,
+            onDigitClick = { digit -> onAction(DialerUiAction.InputDigit(digit)) },
             onDigitLongClick = { digit ->
                 if (digit == '0') {
-                    onPlusLongClick()
+                    onAction(DialerUiAction.LongPressZero)
                 } else if (digit in '1'..'9') {
-                    onSpeedDialLongPress(digit.digitToInt())
+                    onAction(DialerUiAction.SpeedDial(digit.digitToInt()))
                 }
             }
         )
 
-        Spacer(modifier = Modifier.height(8.dp))
+        Spacer(modifier = Modifier.height(6.dp))
 
-        // Bottom Section: Dual-SIM Call Buttons
+        // Bottom Section: Dual-SIM / Single-SIM Call Buttons
         DualSimCallButtons(
-            inputNumber = inputNumber,
-            activeSims = activeSims,
+            inputNumber = uiState.inputNumber,
+            activeSims = uiState.activeSims,
             onCallClick = { sim ->
-                onCallClick(inputNumber, sim)
+                onAction(DialerUiAction.PlaceCall(uiState.inputNumber, sim))
             }
         )
     }
 }
+
+// ==========================================
+// 4. HELPER COMPONENTS
+// ==========================================
 
 @Composable
 private fun T9ContactItem(
@@ -350,7 +686,7 @@ private fun T9ContactItem(
             .background(Slate900.copy(alpha = 0.9f))
             .border(1.dp, Slate800, RoundedCornerShape(12.dp))
             .clickable(onClick = onItemClick)
-            .padding(horizontal = 12.dp, vertical = 8.dp),
+            .padding(horizontal = 12.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(10.dp)
     ) {
@@ -358,7 +694,7 @@ private fun T9ContactItem(
             name = match.displayName,
             initials = match.displayName.take(2).uppercase(),
             photoUri = null,
-            modifier = Modifier.size(40.dp)
+            modifier = Modifier.size(36.dp)
         )
 
         Column(modifier = Modifier.weight(1f)) {
@@ -366,7 +702,6 @@ private fun T9ContactItem(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
-                // Name with T9 highlighted range
                 val annotatedName = buildAnnotatedString {
                     val name = match.displayName
                     val range = match.matchedNameRange
@@ -414,7 +749,6 @@ private fun T9ContactItem(
                 }
             }
 
-            // Phone Number & Company
             val subText = buildString {
                 match.companyName?.takeIf { it.isNotBlank() }?.let { append("$it • ") }
                 append(match.phoneNumber)
@@ -428,11 +762,10 @@ private fun T9ContactItem(
             )
         }
 
-        // Quick Call Button
         IconButton(
             onClick = { onCallClick(activeSims.firstOrNull()) },
             modifier = Modifier
-                .size(36.dp)
+                .size(34.dp)
                 .clip(CircleShape)
                 .background(Green500.copy(alpha = 0.15f))
         ) {
@@ -440,7 +773,7 @@ private fun T9ContactItem(
                 imageVector = Icons.Default.Call,
                 contentDescription = "Call",
                 tint = Green500,
-                modifier = Modifier.size(20.dp)
+                modifier = Modifier.size(18.dp)
             )
         }
     }
@@ -460,7 +793,7 @@ private fun DialpadGrid(
 
     Column(
         modifier = Modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(10.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         keypadLayout.forEach { row ->
@@ -491,10 +824,11 @@ private fun DialpadButton(
 ) {
     Box(
         modifier = Modifier
-            .size(72.dp)
+            .size(68.dp)
             .clip(CircleShape)
             .background(Slate900)
             .border(1.dp, Slate800, CircleShape)
+            .semantics { role = Role.Button }
             .combinedClickable(
                 onClick = onClick,
                 onLongClick = onLongClick
@@ -535,11 +869,11 @@ private fun DualSimCallButtons(
     val isEnabled = inputNumber.isNotBlank()
 
     if (activeSims.size >= 2) {
-        // Dual SIM Layout: Side-by-side call buttons with carrier indicators
+        // Dual SIM Layout
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(vertical = 12.dp),
+                .padding(vertical = 8.dp),
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             val sim1 = activeSims[0]
@@ -555,7 +889,7 @@ private fun DualSimCallButtons(
                 ),
                 modifier = Modifier
                     .weight(1f)
-                    .height(58.dp)
+                    .height(54.dp)
             ) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
@@ -596,7 +930,7 @@ private fun DualSimCallButtons(
                 ),
                 modifier = Modifier
                     .weight(1f)
-                    .height(58.dp)
+                    .height(54.dp)
             ) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
@@ -635,20 +969,20 @@ private fun DualSimCallButtons(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(vertical = 12.dp),
+                .padding(vertical = 8.dp),
             horizontalArrangement = Arrangement.Center
         ) {
             Button(
                 onClick = { onCallClick(singleSim) },
                 enabled = isEnabled,
-                shape = RoundedCornerShape(20.dp),
+                shape = RoundedCornerShape(18.dp),
                 colors = ButtonDefaults.buttonColors(
                     containerColor = Green500,
                     disabledContainerColor = Slate800
                 ),
                 modifier = Modifier
-                    .fillMaxWidth(0.7f)
-                    .height(58.dp)
+                    .fillMaxWidth(0.75f)
+                    .height(54.dp)
             ) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
@@ -658,7 +992,7 @@ private fun DualSimCallButtons(
                         imageVector = Icons.Default.Call,
                         contentDescription = "Call",
                         tint = if (isEnabled) Color.White else Slate400,
-                        modifier = Modifier.size(24.dp)
+                        modifier = Modifier.size(22.dp)
                     )
                     Text(
                         text = "Call$carrierLabel",
@@ -676,66 +1010,56 @@ private fun DualSimCallButtons(
 // PREVIEWS
 // ==========================================
 
-@Preview(name = "Dialer Screen - Dual SIM", showBackground = true)
-@Preview(name = "Dialer Screen Dark", uiMode = Configuration.UI_MODE_NIGHT_YES, showBackground = true)
+@Preview(name = "Dialer Screen - Call Logs Mode", showBackground = true)
+@Preview(name = "Dialer Screen - Call Logs Dark", uiMode = Configuration.UI_MODE_NIGHT_YES, showBackground = true)
 @Composable
-fun DialerScreenPreview() {
+fun DialerScreenCallLogsPreview() {
     CallogTheme {
-        DialerContent(
-            inputNumber = "5678",
-            t9Results = listOf(
-                T9MatchResult(
-                    personId = "person_1",
-                    displayName = "John Doe",
-                    phoneNumber = "+1 (555) 5678",
-                    normalizedPhoneNumber = "+15555678",
-                    matchedNameRange = 0..3,
-                    crmStatus = LeadStatus.HOT,
-                    companyName = "Acme Corp"
+        CallLogsModeView(
+            uiState = DialerUiState(
+                callLogs = listOf(
+                    CallLogEntry(
+                        id = 1L,
+                        name = "Rahul Sharma",
+                        number = "+91 98765 43210",
+                        duration = 222,
+                        timestamp = System.currentTimeMillis() - 1000 * 60 * 5,
+                        callType = "INCOMING",
+                        recordingPath = null,
+                        isFavorite = true,
+                        notes = "Lead follow up",
+                        tags = listOf("hot"),
+                        contactPhotoUri = null,
+                        syncStatus = "SYNCED"
+                    )
                 )
             ),
-            activeSims = listOf(
-                SimInfo(
-                    subscriptionId = 1,
-                    slotIndex = 0,
-                    carrierName = "Jio",
-                    displayName = "Business",
-                    phoneNumber = "+91 98765 43210"
-                ),
-                SimInfo(
-                    subscriptionId = 2,
-                    slotIndex = 1,
-                    carrierName = "Airtel",
-                    displayName = "Personal",
-                    phoneNumber = "+91 91234 56789"
-                )
-            ),
-            clipboardSuggestion = "+1 (555) 234-5678",
-            isDefaultDialer = true,
-            onPasteClipboard = {},
-            onDigitClick = {},
-            onPlusLongClick = {},
-            onSpeedDialLongPress = {},
-            onBackspaceClick = {},
-            onSelectContactNumber = {},
-            onCallClick = { _, _ -> },
+            listState = rememberLazyListState(),
+            onAction = {},
+            onCallClick = {},
+            onMenuClick = {},
             onOpenSimulator = {}
         )
     }
 }
 
-@Preview(name = "Dialpad Key", showBackground = true)
+@Preview(name = "Dialer Screen - Keypad Mode", showBackground = true)
 @Composable
-fun DialpadButtonPreview() {
+fun DialerScreenKeypadPreview() {
     CallogTheme {
-        Box(modifier = Modifier.padding(16.dp)) {
-            DialpadButton(
-                digit = '2',
-                letters = "ABC",
-                onClick = {},
-                onLongClick = {}
-            )
-        }
+        DialpadModeView(
+            uiState = DialerUiState(
+                mode = DialerMode.Dialpad,
+                inputNumber = "987654",
+                activeSims = listOf(
+                    SimInfo(1, 0, "Jio 5G", "SIM 1", "+91 98765 43210", true)
+                ),
+                isDefaultDialer = true
+            ),
+            onAction = {},
+            onMenuClick = {},
+            onOpenSimulator = {},
+            onNavigateToContact = {}
+        )
     }
 }
-

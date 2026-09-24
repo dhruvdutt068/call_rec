@@ -154,7 +154,13 @@ fun NavGraph(
             CallDetailsScreen(
                 callId = callId,
                 viewModel = callViewModel,
-                onBackClick = { navController.popBackStack() }
+                onBackClick = { navController.popBackStack() },
+                onNavigateToContact = { contactId ->
+                    callViewModel.setPendingNavigationKey(
+                        com.example.callog.presentation.navigation3.Nav3Key.Contacts.ContactDetails(contactId = contactId)
+                    )
+                    navController.popBackStack(Screen.Main.route, inclusive = false)
+                }
             )
         }
 

@@ -80,12 +80,26 @@ class CallSessionViewModel @Inject constructor(
     private val _liveNotes = MutableStateFlow("")
     val liveNotes: StateFlow<String> = _liveNotes.asStateFlow()
 
+    val recordingState: StateFlow<com.example.callog.domain.call.CallRecordingState> = callSessionManager.recordingState
+
     fun setLiveNotes(notes: String) {
         _liveNotes.value = notes
     }
 
     fun onAction(action: CallAction) {
         callSessionManager.executeAction(action)
+    }
+
+    fun toggleRecording(callId: String? = null) {
+        val targetId = callId ?: callSessionManager.activeCallSession.value?.callId
+        if (targetId != null) {
+            callSessionManager.executeAction(CallAction.ToggleRecording(targetId))
+        }
+    }
+
+    fun stopRecording() {
+        val targetId = callSessionManager.activeCallSession.value?.callId ?: ""
+        callSessionManager.executeAction(CallAction.StopRecording(targetId))
     }
 
     fun endCall(callId: String? = null) {

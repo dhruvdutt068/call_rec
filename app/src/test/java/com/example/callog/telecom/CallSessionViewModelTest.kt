@@ -96,7 +96,9 @@ class CallSessionViewModelTest {
             callHapticManager = fakeHapticManager,
             dtmfTonePlayer = fakeDtmfTonePlayer,
             contactsProvider = com.example.callog.data.provider.ContactsProvider(fakeContext),
-            dialerRoleManager = DialerRoleManager(fakeContext)
+            dialerRoleManager = DialerRoleManager(fakeContext),
+            callRecordingController = CallSessionManagerTest.FakeCallRecordingController(),
+            recordingRepository = CallSessionManagerTest.FakeRecordingRepository()
         )
 
         callSessionManager.registerTelecomController(fakeController)

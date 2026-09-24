@@ -70,7 +70,9 @@ class CallSessionManagerTest {
             callHapticManager = fakeHapticManager,
             dtmfTonePlayer = fakeDtmfTonePlayer,
             contactsProvider = com.example.callog.data.provider.ContactsProvider(fakeContext),
-            dialerRoleManager = com.example.callog.domain.service.DialerRoleManager(fakeContext)
+            dialerRoleManager = com.example.callog.domain.service.DialerRoleManager(fakeContext),
+            callRecordingController = FakeCallRecordingController(),
+            recordingRepository = FakeRecordingRepository()
         )
 
         callSessionManager.registerTelecomController(fakeController)
@@ -702,6 +704,8 @@ class CallSessionManagerTest {
     }
 
     class FakeCallRepository : CallRepository {
+        val toggledFavorites = mutableSetOf<Long>()
+
         override fun getCallLogsFlow(): Flow<List<CallLogEntry>> = flowOf(emptyList())
         override fun getFavoriteLogsFlow(): Flow<List<CallLogEntry>> = flowOf(emptyList())
         override fun getRecordingLogsFlow(): Flow<List<CallLogEntry>> = flowOf(emptyList())
@@ -713,7 +717,13 @@ class CallSessionManagerTest {
         override suspend fun getContacts(): List<ContactDto> = emptyList()
         override suspend fun updateNotes(callId: Long, notes: String?) {}
         override suspend fun updateTags(callId: Long, tags: List<String>) {}
-        override suspend fun toggleFavorite(callId: Long) {}
+        override suspend fun toggleFavorite(callId: Long) {
+            if (toggledFavorites.contains(callId)) {
+                toggledFavorites.remove(callId)
+            } else {
+                toggledFavorites.add(callId)
+            }
+        }
         override suspend fun deleteCall(callId: Long) {}
         override suspend fun clearAllData() {}
         override fun getPendingRemindersFlow(): Flow<List<ReminderWithCall>> = flowOf(emptyList())
@@ -756,5 +766,167 @@ class CallSessionManagerTest {
         override fun cancelCallNotification() {
             isNotificationCancelled = true
         }
+    }
+
+    class FakeCallRecordingController : com.example.callog.domain.call.CallRecordingController {
+        override val recordingState = kotlinx.coroutines.flow.MutableStateFlow<com.example.callog.domain.call.CallRecordingState>(com.example.callog.domain.call.CallRecordingState.Idle)
+        var startCount = 0
+        var stopCount = 0
+        var cancelCount = 0
+
+        override suspend fun canRecord(): Boolean = true
+
+        override suspend fun start(callId: String, phoneNumber: String?, personId: String?, simSlot: Int?, startedAt: Long): Result<com.example.callog.domain.call.RecordingSession> {
+            startCount++
+            val session = com.example.callog.domain.call.RecordingSession(
+                recordingId = "rec_$callId",
+                callId = callId,
+                phoneNumber = phoneNumber,
+                personId = personId,
+                simSlot = simSlot,
+                filePath = "/fake/rec_$callId.m4a",
+                startedAt = startedAt
+            )
+            recordingState.value = com.example.callog.domain.call.CallRecordingState.Recording(0L, session)
+            return Result.success(session)
+        }
+
+        override suspend fun stop(): Result<com.example.callog.domain.call.RecordingSession> {
+            stopCount++
+            val current = recordingState.value
+            val session = if (current is com.example.callog.domain.call.CallRecordingState.Recording) {
+                current.session.copy(endedAt = System.currentTimeMillis(), durationMillis = 5000L)
+            } else {
+                com.example.callog.domain.call.RecordingSession(
+                    recordingId = "rec_def",
+                    callId = "c1",
+                    phoneNumber = null,
+                    filePath = "/fake/rec.m4a",
+                    startedAt = 0L,
+                    endedAt = 5000L,
+                    durationMillis = 5000L
+                )
+            }
+            recordingState.value = com.example.callog.domain.call.CallRecordingState.Saved(session.recordingId, session.filePath, session.durationMillis)
+            return Result.success(session)
+        }
+
+        override suspend fun cancel() {
+            cancelCount++
+            recordingState.value = com.example.callog.domain.call.CallRecordingState.Idle
+        }
+    }
+
+    class FakeRecordingRepository : com.example.callog.domain.repository.RecordingRepository {
+        val registeredSessions = mutableListOf<com.example.callog.domain.call.RecordingSession>()
+
+        override suspend fun scanRecordings() {}
+        override suspend fun uploadRecording(callId: Long): Result<String> = Result.success("url")
+        override suspend fun uploadRecordingDirect(recordingId: Long): Result<String> = Result.success("url")
+        override suspend fun retryFailedUploads() {}
+        override suspend fun updateFirestore(callId: Long, cloudPath: String, downloadUrl: String): Boolean = true
+        override suspend fun deleteRecording(callId: Long): Boolean = true
+        override suspend fun associateRecording(callId: Long, localPath: String) {}
+        override fun getAllRecordingsFlow(): Flow<List<com.example.callog.data.local.entity.RecordingEntity>> = flowOf(emptyList())
+        override suspend fun getAllRecordings(): List<com.example.callog.data.local.entity.RecordingEntity> = emptyList()
+        override suspend fun getRecordingById(id: Long): com.example.callog.data.local.entity.RecordingEntity? = null
+        override suspend fun clearAllRecordings() {}
+        override suspend fun manualMatchRecording(recordingId: Long, callId: Long) {}
+        override suspend fun updateRecordingUploadStatus(callId: Long, status: com.example.callog.data.local.entity.UploadStatus, cloudUrl: String?, reason: String?) {}
+        override suspend fun registerCompletedRecording(session: com.example.callog.domain.call.RecordingSession): Result<com.example.callog.data.local.entity.RecordingEntity> {
+            registeredSessions.add(session)
+            return Result.success(
+                com.example.callog.data.local.entity.RecordingEntity(
+                    id = 1L,
+                    filePath = session.filePath,
+                    fileName = session.recordingId,
+                    fileSize = 1024L,
+                    duration = session.durationMillis / 1000,
+                    lastModified = session.endedAt ?: session.startedAt,
+                    phoneExtracted = session.phoneNumber,
+                    timestampExtracted = session.startedAt,
+                    matchedCallId = session.callId.toLongOrNull() ?: 1L,
+                    matchStatus = com.example.callog.data.local.entity.MatchStatus.MATCHED,
+                    uploadStatus = com.example.callog.data.local.entity.UploadStatus.PENDING
+                )
+            )
+        }
+    }
+
+    class FakeCallDao : com.example.callog.data.local.dao.CallDao {
+        val insertedCalls = mutableListOf<com.example.callog.data.local.entity.CallEntity>()
+
+        override fun getAllCallsFlow(): Flow<List<com.example.callog.data.local.entity.CallEntity>> = flowOf(insertedCalls)
+        override suspend fun getAllCalls(): List<com.example.callog.data.local.entity.CallEntity> = insertedCalls
+        override suspend fun getCallById(id: Long): com.example.callog.data.local.entity.CallEntity? = insertedCalls.find { it.id == id }
+        override fun getCallByIdFlow(id: Long): Flow<com.example.callog.data.local.entity.CallEntity?> = flowOf(insertedCalls.find { it.id == id })
+        override fun getFavoriteCallsFlow(): Flow<List<com.example.callog.data.local.entity.CallEntity>> = flowOf(emptyList())
+        override fun getCallsWithRecordingsFlow(): Flow<List<com.example.callog.data.local.entity.CallEntity>> = flowOf(emptyList())
+
+        override suspend fun insertCall(call: com.example.callog.data.local.entity.CallEntity): Long {
+            val callWithId = if (call.id == 0L) call.copy(id = (insertedCalls.size + 1).toLong()) else call
+            insertedCalls.add(callWithId)
+            return callWithId.id
+        }
+
+        override suspend fun insertCalls(calls: List<com.example.callog.data.local.entity.CallEntity>) {
+            calls.forEach { insertCall(it) }
+        }
+
+        override suspend fun updateCall(call: com.example.callog.data.local.entity.CallEntity) {
+            val idx = insertedCalls.indexOfFirst { it.id == call.id }
+            if (idx >= 0) insertedCalls[idx] = call
+        }
+
+        override suspend fun deleteCall(call: com.example.callog.data.local.entity.CallEntity) {
+            insertedCalls.removeAll { it.id == call.id }
+        }
+
+        override suspend fun deleteAllCalls() {
+            insertedCalls.clear()
+        }
+
+        override suspend fun getPendingCalls(): List<com.example.callog.data.local.entity.CallEntity> = insertedCalls.filter { it.syncStatus != "SYNCED" }
+        override suspend fun updateSyncStatus(callId: Long, syncStatus: String) {}
+        override suspend fun resetAllSyncStatus() {}
+        override fun getCallsForPersonFlow(personId: String): Flow<List<com.example.callog.data.local.entity.CallEntity>> = flowOf(emptyList())
+        override suspend fun getCallsForPerson(personId: String): List<com.example.callog.data.local.entity.CallEntity> = emptyList()
+        override suspend fun getCallCountForPerson(personId: String): Int = 0
+        override suspend fun getLatestCallsForPerson(personId: String, limit: Int): List<com.example.callog.data.local.entity.CallEntity> = emptyList()
+        override suspend fun updatePersonIdForNumber(number: String, personId: String) {}
+    }
+
+    class FakeSalesCallDao : com.example.callog.data.local.dao.SalesCallDao {
+        val insertedSalesCalls = mutableListOf<com.example.callog.data.local.entity.SalesCallEntity>()
+
+        override suspend fun insertSalesCall(salesCall: com.example.callog.data.local.entity.SalesCallEntity) {
+            insertedSalesCalls.add(salesCall)
+        }
+
+        override fun getAllSalesCalls(): Flow<List<com.example.callog.data.local.entity.SalesCallEntity>> = flowOf(insertedSalesCalls)
+
+        override suspend fun getSalesCallByCallId(callId: Long): com.example.callog.data.local.entity.SalesCallEntity? =
+            insertedSalesCalls.find { it.callId == callId }
+
+        override fun getSalesCallsBySalesperson(phone: String): Flow<List<com.example.callog.data.local.entity.SalesCallEntity>> =
+            flowOf(insertedSalesCalls.filter { it.salespersonPhone == phone })
+
+        override fun getSalesCallsByBuyer(phone: String): Flow<List<com.example.callog.data.local.entity.SalesCallEntity>> =
+            flowOf(insertedSalesCalls.filter { it.buyerPhone == phone })
+
+        override suspend fun deleteSalesCall(id: Long) {
+            insertedSalesCalls.removeAll { it.id == id }
+        }
+
+        override suspend fun clearAll() {
+            insertedSalesCalls.clear()
+        }
+
+        override suspend fun getPendingSalesCalls(): List<com.example.callog.data.local.entity.SalesCallEntity> =
+            insertedSalesCalls.filter { it.syncStatus != "SYNCED" }
+
+        override suspend fun updateSyncStatus(id: Long, status: String, error: String?) {}
+
+        override suspend fun resetSyncStatus() {}
     }
 }

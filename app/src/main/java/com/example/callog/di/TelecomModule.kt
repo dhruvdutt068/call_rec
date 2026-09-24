@@ -33,6 +33,12 @@ abstract class TelecomModule {
     abstract fun bindCallOrchestrator(
         impl: DefaultCallOrchestrator
     ): CallOrchestrator
+
+    @Binds
+    @Singleton
+    abstract fun bindCallRecordingController(
+        impl: com.example.callog.data.telecom.AndroidCallRecordingController
+    ): com.example.callog.domain.call.CallRecordingController
 }
 
 @dagger.hilt.EntryPoint
@@ -42,5 +48,6 @@ interface TelecomEntryPoint {
     fun ringtonePolicy(): RingtonePolicy
     fun callOrchestrator(): CallOrchestrator
     fun callSimulatorManager(): com.example.callog.domain.service.simulator.CallSimulatorManager
+    fun callRecordingController(): com.example.callog.domain.call.CallRecordingController
 }
 

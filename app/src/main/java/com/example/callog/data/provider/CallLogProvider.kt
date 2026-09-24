@@ -56,7 +56,7 @@ class CallLogProvider @Inject constructor(
             val phoneAccountComponentIdx = c.getColumnIndex(CallLog.Calls.PHONE_ACCOUNT_COMPONENT_NAME)
 
             var count = 0
-            while (c.moveToNext() && count < 500) {
+            while (c.moveToNext() && count < 10000) {
                 val id = if (idIdx != -1) c.getLong(idIdx) else 0L
                 val number = if (numberIdx != -1) c.getString(numberIdx) ?: "" else ""
                 val cachedName = if (nameIdx != -1) c.getString(nameIdx) else null

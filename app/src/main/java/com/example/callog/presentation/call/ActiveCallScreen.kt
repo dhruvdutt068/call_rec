@@ -1,5 +1,11 @@
 package com.example.callog.presentation.call
 
+import android.Manifest
+import android.content.pm.PackageManager
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.*
+import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -18,12 +24,15 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.content.ContextCompat
 import com.example.callog.domain.call.CallAction
+import com.example.callog.domain.call.CallRecordingState
 import com.example.callog.domain.call.CallSessionState
 import com.example.callog.domain.call.CallState
 import com.example.callog.domain.model.LeadPriority
@@ -47,6 +56,33 @@ fun ActiveCallScreen(
     var showKeypadSheet by remember { mutableStateOf(false) }
     var showAudioRouteSheet by remember { mutableStateOf(false) }
     var showLiveNotesSheet by remember { mutableStateOf(false) }
+
+    val context = LocalContext.current
+    var hasRecordAudioPermission by remember {
+        mutableStateOf(
+            ContextCompat.checkSelfPermission(
+                context,
+                Manifest.permission.RECORD_AUDIO
+            ) == PackageManager.PERMISSION_GRANTED
+        )
+    }
+
+    val permissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        hasRecordAudioPermission = isGranted
+        if (isGranted) {
+            onAction(CallAction.ToggleRecording(session.callId))
+        }
+    }
+
+    val onRecordClick: () -> Unit = {
+        if (!hasRecordAudioPermission) {
+            permissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+        } else {
+            onAction(CallAction.ToggleRecording(session.callId))
+        }
+    }
 
     val formattedDuration = remember(session.durationSeconds) {
         val minutes = session.durationSeconds / 60
@@ -370,7 +406,51 @@ fun ActiveCallScreen(
                 Spacer(modifier = Modifier.height(12.dp))
             }
 
-            // Primary In-Call Controls Row 1
+            // Live Recording Status Badge (Always visible on top of controls)
+            AnimatedVisibility(
+                visible = session.recordingState !is CallRecordingState.Idle,
+                enter = fadeIn() + expandVertically(),
+                exit = fadeOut() + shrinkVertically()
+            ) {
+                RecordingStatusBadge(
+                    recordingState = session.recordingState,
+                    onClick = onRecordClick,
+                    modifier = Modifier.padding(bottom = 12.dp)
+                )
+            }
+
+            // Primary In-Call Controls Row 1 (Speaker, Record, Keypad)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceEvenly,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // Audio Route / Speaker Button
+                CallControlButton(
+                    icon = if (session.isSpeakerOn) Icons.AutoMirrored.Filled.VolumeUp else Icons.AutoMirrored.Filled.VolumeDown,
+                    label = if (session.isSpeakerOn) "Speaker" else "Audio",
+                    isActive = session.isSpeakerOn,
+                    onClick = { showAudioRouteSheet = true }
+                )
+
+                // Record Call Button
+                RecordControlButton(
+                    recordingState = session.recordingState,
+                    onClick = onRecordClick
+                )
+
+                // Keypad Button
+                CallControlButton(
+                    icon = Icons.Default.Dialpad,
+                    label = "Keypad",
+                    isActive = showKeypadSheet,
+                    onClick = { showKeypadSheet = true }
+                )
+            }
+
+            Spacer(modifier = Modifier.height(14.dp))
+
+            // Secondary In-Call Controls Row 2 (Mute, Hold)
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceEvenly,
@@ -384,22 +464,6 @@ fun ActiveCallScreen(
                     onClick = { onAction(CallAction.ToggleMute(session.callId)) }
                 )
 
-                // Keypad Button
-                CallControlButton(
-                    icon = Icons.Default.Dialpad,
-                    label = "Keypad",
-                    isActive = showKeypadSheet,
-                    onClick = { showKeypadSheet = true }
-                )
-
-                // Audio Route / Speaker Button
-                CallControlButton(
-                    icon = if (session.isSpeakerOn) Icons.AutoMirrored.Filled.VolumeUp else Icons.AutoMirrored.Filled.VolumeDown,
-                    label = if (session.isSpeakerOn) "Speaker" else "Audio",
-                    isActive = session.isSpeakerOn,
-                    onClick = { showAudioRouteSheet = true }
-                )
-
                 // Hold Button: ONLY shown if Telecom capability supports hold
                 if (session.capabilities.canHold) {
                     CallControlButton(
@@ -411,7 +475,7 @@ fun ActiveCallScreen(
                 }
             }
 
-            Spacer(modifier = Modifier.height(36.dp))
+            Spacer(modifier = Modifier.height(28.dp))
 
             // End Call Button (Large Red Circle)
             IconButton(
@@ -594,12 +658,25 @@ fun PipCallScreen(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
-                Text(
-                    text = if (session.isOnHold) "On Hold" else formattedDuration,
-                    style = MaterialTheme.typography.labelMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    color = if (session.isOnHold) AllSetAmber else MaterialTheme.colorScheme.primary
-                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Text(
+                        text = if (session.isOnHold) "On Hold" else formattedDuration,
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = if (session.isOnHold) AllSetAmber else MaterialTheme.colorScheme.primary
+                    )
+                    if (session.recordingState is CallRecordingState.Recording) {
+                        Text(
+                            text = "• 🔴 Rec",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = Red500
+                        )
+                    }
+                }
             }
 
             // Compact Controls
@@ -697,6 +774,277 @@ fun CallControlButton(
         )
     }
 }
+
+@Composable
+fun RecordControlButton(
+    recordingState: CallRecordingState,
+    onClick: () -> Unit
+) {
+    val isRecording = recordingState is CallRecordingState.Recording
+    val isStarting = recordingState is CallRecordingState.Starting
+    val isStopping = recordingState is CallRecordingState.Stopping
+    val isSaved = recordingState is CallRecordingState.Saved
+
+    val infiniteTransition = rememberInfiniteTransition(label = "recordButtonPulse")
+    val recordingPulse by infiniteTransition.animateFloat(
+        initialValue = 0.75f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(700, easing = LinearEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "recordingPulse"
+    )
+
+    val (bgColor, iconColor, labelText, accessibilityDesc) = when (recordingState) {
+        is CallRecordingState.Recording -> {
+            val totalSeconds = (recordingState.elapsedMillis / 1000L).coerceAtLeast(0L)
+            val mins = totalSeconds / 60
+            val secs = totalSeconds % 60
+            val formattedTime = String.format("%02d:%02d", mins, secs)
+            Quadruple(
+                Red500,
+                Color.White,
+                formattedTime,
+                "Stop call recording. Recording for $totalSeconds seconds"
+            )
+        }
+        is CallRecordingState.Starting -> {
+            Quadruple(
+                MaterialTheme.colorScheme.surfaceVariant,
+                MaterialTheme.colorScheme.primary,
+                "Starting…",
+                "Starting call recording"
+            )
+        }
+        is CallRecordingState.Stopping -> {
+            Quadruple(
+                MaterialTheme.colorScheme.surfaceVariant,
+                MaterialTheme.colorScheme.onSurfaceVariant,
+                "Saving…",
+                "Saving call recording"
+            )
+        }
+        is CallRecordingState.Saved -> {
+            Quadruple(
+                CallogSemanticColors.LeadCold.copy(alpha = 0.2f),
+                CallogSemanticColors.LeadCold,
+                "Saved",
+                "Call recording saved"
+            )
+        }
+        is CallRecordingState.Error -> {
+            Quadruple(
+                MaterialTheme.colorScheme.errorContainer,
+                MaterialTheme.colorScheme.error,
+                "Retry",
+                "Call recording error: ${recordingState.message}"
+            )
+        }
+        is CallRecordingState.Unsupported -> {
+            Quadruple(
+                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
+                "Record",
+                "Call recording unavailable: ${recordingState.reason}"
+            )
+        }
+        CallRecordingState.Idle -> {
+            Quadruple(
+                MaterialTheme.colorScheme.surfaceVariant,
+                MaterialTheme.colorScheme.onSurface,
+                "Record",
+                "Start call recording"
+            )
+        }
+    }
+
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Box(
+            modifier = Modifier
+                .size(60.dp)
+                .clip(CircleShape)
+                .background(if (isRecording) bgColor.copy(alpha = recordingPulse) else bgColor)
+                .border(1.dp, if (isRecording) Red500.copy(alpha = 0.5f) else MaterialTheme.colorScheme.outline.copy(alpha = 0.3f), CircleShape)
+                .clickable(onClick = onClick),
+            contentAlignment = Alignment.Center
+        ) {
+            when {
+                isStarting || isStopping -> {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(24.dp),
+                        strokeWidth = 2.5.dp,
+                        color = iconColor
+                    )
+                }
+                isRecording -> {
+                    Icon(
+                        imageVector = Icons.Default.Stop,
+                        contentDescription = accessibilityDesc,
+                        tint = iconColor,
+                        modifier = Modifier.size(28.dp)
+                    )
+                }
+                isSaved -> {
+                    Icon(
+                        imageVector = Icons.Default.Check,
+                        contentDescription = accessibilityDesc,
+                        tint = iconColor,
+                        modifier = Modifier.size(28.dp)
+                    )
+                }
+                else -> {
+                    Icon(
+                        imageVector = Icons.Default.FiberManualRecord,
+                        contentDescription = accessibilityDesc,
+                        tint = if (recordingState is CallRecordingState.Idle) Red500 else iconColor,
+                        modifier = Modifier.size(24.dp)
+                    )
+                }
+            }
+        }
+        Spacer(modifier = Modifier.height(8.dp))
+        Text(
+            text = labelText,
+            style = MaterialTheme.typography.labelSmall,
+            color = if (isRecording) Red500 else MaterialTheme.colorScheme.onSurfaceVariant,
+            fontWeight = if (isRecording) FontWeight.Bold else FontWeight.Normal
+        )
+    }
+}
+
+@Composable
+fun RecordingStatusBadge(
+    recordingState: CallRecordingState,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val infiniteTransition = rememberInfiniteTransition(label = "recordingPulse")
+    val pulseAlpha by infiniteTransition.animateFloat(
+        initialValue = 0.4f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(800, easing = LinearEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "pulseAlpha"
+    )
+
+    val (bgColor, contentColor, text, subtext) = when (recordingState) {
+        is CallRecordingState.Recording -> {
+            val totalSeconds = (recordingState.elapsedMillis / 1000L).coerceAtLeast(0L)
+            val mins = totalSeconds / 60
+            val secs = totalSeconds % 60
+            val formattedTime = String.format("%02d:%02d", mins, secs)
+            Quadruple(
+                Red500.copy(alpha = 0.15f),
+                Red500,
+                "Recording Call",
+                formattedTime
+            )
+        }
+        is CallRecordingState.Starting -> {
+            Quadruple(
+                MaterialTheme.colorScheme.primaryContainer,
+                MaterialTheme.colorScheme.primary,
+                "Starting Recording…",
+                null
+            )
+        }
+        is CallRecordingState.Stopping -> {
+            Quadruple(
+                MaterialTheme.colorScheme.surfaceVariant,
+                MaterialTheme.colorScheme.onSurfaceVariant,
+                "Saving Recording…",
+                null
+            )
+        }
+        is CallRecordingState.Saved -> {
+            Quadruple(
+                CallogSemanticColors.LeadCold.copy(alpha = 0.15f),
+                CallogSemanticColors.LeadCold,
+                "Recording Saved",
+                null
+            )
+        }
+        is CallRecordingState.Error -> {
+            Quadruple(
+                MaterialTheme.colorScheme.errorContainer,
+                MaterialTheme.colorScheme.error,
+                "Recording Error",
+                recordingState.message
+            )
+        }
+        is CallRecordingState.Unsupported -> {
+            Quadruple(
+                MaterialTheme.colorScheme.surfaceVariant,
+                MaterialTheme.colorScheme.onSurfaceVariant,
+                "Recording Unavailable",
+                recordingState.reason
+            )
+        }
+        CallRecordingState.Idle -> {
+            Quadruple(Color.Transparent, Color.Transparent, "", null)
+        }
+    }
+
+    if (text.isNotBlank()) {
+        Surface(
+            shape = RoundedCornerShape(20.dp),
+            color = bgColor,
+            border = androidx.compose.foundation.BorderStroke(1.dp, contentColor.copy(alpha = 0.3f)),
+            modifier = modifier.clickable(onClick = onClick)
+        ) {
+            Row(
+                modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                if (recordingState is CallRecordingState.Recording) {
+                    Box(
+                        modifier = Modifier
+                            .size(10.dp)
+                            .clip(CircleShape)
+                            .background(Red500.copy(alpha = pulseAlpha))
+                    )
+                } else if (recordingState is CallRecordingState.Starting || recordingState is CallRecordingState.Stopping) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(12.dp),
+                        strokeWidth = 2.dp,
+                        color = contentColor
+                    )
+                } else if (recordingState is CallRecordingState.Saved) {
+                    Icon(
+                        imageVector = Icons.Default.CheckCircle,
+                        contentDescription = null,
+                        tint = contentColor,
+                        modifier = Modifier.size(14.dp)
+                    )
+                }
+
+                Text(
+                    text = text,
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = contentColor
+                )
+
+                if (subtext != null) {
+                    Text(
+                        text = subtext,
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = contentColor
+                    )
+                }
+            }
+        }
+    }
+}
+
+private data class Quadruple<A, B, C, D>(val first: A, val second: B, val third: C, val fourth: D)
 
 @Composable
 fun DtmfKeypadView(

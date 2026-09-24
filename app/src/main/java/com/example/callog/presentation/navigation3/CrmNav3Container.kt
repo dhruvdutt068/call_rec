@@ -718,6 +718,7 @@ fun CrmNav3Container(
                     // --- 1. Dialer Screen ---
                     is Nav3Key.CrmTab.Dialer -> {
                         DialerScreen(
+                            onCallClick = onCallClick,
                             onNavigateToContact = { contactId ->
                                 multiStack.selectTab(CrmBottomTab.CONTACTS)
                                 multiStack.navigate(Nav3Key.Contacts.ContactDetails(contactId = contactId))

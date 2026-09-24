@@ -21,4 +21,5 @@ interface RecordingRepository {
     suspend fun clearAllRecordings()
     suspend fun manualMatchRecording(recordingId: Long, callId: Long)
     suspend fun updateRecordingUploadStatus(callId: Long, status: UploadStatus, cloudUrl: String? = null, reason: String? = null)
+    suspend fun registerCompletedRecording(session: com.example.callog.domain.call.RecordingSession): Result<RecordingEntity>
 }

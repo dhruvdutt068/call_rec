@@ -54,25 +54,62 @@ class ContactDetailsViewModel @Inject constructor(
                 // 1. Try finding by canonical Person ID in Room
                 var person = personRepository.getPersonById(contactId)
                 
-                // 2. If not found by Person ID, search if contactId is an Android Contact ID or phone number
+                // 2. If not found by Person ID, check if contactId is a phone number
+                val normPhone = PhoneNumberNormalizer.normalize(contactId)
+                if (person == null && normPhone.isNotEmpty()) {
+                    person = personRepository.findPersonByNormalizedPhone(normPhone)
+                }
+
+                // 3. If not found, search if contactId is an Android Contact ID or device contact
                 if (person == null) {
                     val rawContacts = callRepository.getContacts()
-                    val matchedContact = rawContacts.find { it.contactId == contactId }
+                    val matchedContact = rawContacts.find { 
+                        it.contactId == contactId || (normPhone.isNotEmpty() && it.phoneNumbers.any { p -> PhoneNumberNormalizer.normalize(p) == normPhone })
+                    }
                     if (matchedContact != null) {
                         val firstPhone = matchedContact.phoneNumbers.firstOrNull() ?: ""
-                        person = personRepository.findPersonByNormalizedPhone(firstPhone)
+                        val normFirst = PhoneNumberNormalizer.normalize(firstPhone)
+                        if (normFirst.isNotEmpty()) {
+                            person = personRepository.findPersonByNormalizedPhone(normFirst)
+                        }
                         if (person == null) {
                             personRepository.syncContactsFromDevice()
-                            person = personRepository.findPersonByNormalizedPhone(firstPhone)
+                            if (normFirst.isNotEmpty()) {
+                                person = personRepository.findPersonByNormalizedPhone(normFirst)
+                            }
+                            if (person == null && normPhone.isNotEmpty()) {
+                                person = personRepository.findPersonByNormalizedPhone(normPhone)
+                            }
                         }
                     }
+                }
+
+                // 4. If still not found by Person in Room, but we have a valid phone number, create/resolve canonical Person
+                if (person == null && normPhone.isNotEmpty()) {
+                    val currentDevice = personRepository.getOrCreateCurrentDevice()
+                    val rawContacts = callRepository.getContacts()
+                    val matchedRaw = rawContacts.find { it.phoneNumbers.any { p -> PhoneNumberNormalizer.normalize(p) == normPhone } }
+                    val allLogs = callRepository.getCallLogsFlow().first()
+                    val matchedLog = allLogs.find { PhoneNumberNormalizer.normalize(it.number) == normPhone && !it.name.isNullOrBlank() }
+                    
+                    val displayName = matchedRaw?.name ?: matchedLog?.name ?: contactId
+                    val contactDto = ContactDto(
+                        contactId = matchedRaw?.contactId ?: "direct_${System.currentTimeMillis()}",
+                        name = displayName,
+                        phoneNumbers = listOf(contactId),
+                        emails = emptyList(),
+                        photoUri = null,
+                        isFavorite = false
+                    )
+                    val result = personRepository.resolveAndAttachContact(currentDevice.id, contactDto)
+                    person = personRepository.getPersonById(result.personId)
                 }
 
                 val allLogs = callRepository.getCallLogsFlow().first()
 
                 if (person != null) {
                     currentPersonId = person.id
-                    val phoneList = person.phoneNumbers.map { it.phoneNumber }.ifEmpty { listOf("+91 98765 43210") }
+                    val phoneList = person.phoneNumbers.map { it.phoneNumber }.ifEmpty { listOf(contactId) }
                     val normalizedSet = person.phoneNumbers.map { it.normalizedNumber }.toSet()
                     
                     // Canonical Person identity: load calls directly by personId
@@ -80,7 +117,9 @@ class ContactDetailsViewModel @Inject constructor(
                     val matchedLogs = personCalls.ifEmpty {
                         // Fallback for unlinked legacy call records
                         allLogs.filter { log ->
-                            log.personId == person.id || normalizedSet.contains(PhoneNumberNormalizer.normalize(log.number))
+                            log.personId == person.id || 
+                            normalizedSet.contains(PhoneNumberNormalizer.normalize(log.number)) ||
+                            (normPhone.isNotEmpty() && PhoneNumberNormalizer.normalize(log.number) == normPhone)
                         }
                     }
 
@@ -108,7 +147,9 @@ class ContactDetailsViewModel @Inject constructor(
                 } else {
                     // Fallback to legacy contact lookup
                     val contacts = callRepository.getContacts()
-                    val contact = contacts.find { it.contactId == contactId }
+                    val contact = contacts.find { 
+                        it.contactId == contactId || (normPhone.isNotEmpty() && it.phoneNumbers.any { p -> PhoneNumberNormalizer.normalize(p) == normPhone })
+                    }
                     if (contact == null) {
                         _uiState.value = ContactDetailUiState.Error("Contact with ID $contactId not found.")
                     } else {

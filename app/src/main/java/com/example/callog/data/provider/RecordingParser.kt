@@ -170,6 +170,94 @@ class SimpleDateTimeParser : BaseRecordingParser() {
 }
 
 /**
+ * Matches standalone format: ...YYYY-MM-DD_HH-MM-SS... with any random string prefix/suffix
+ */
+class TimestampOnlyParser : BaseRecordingParser() {
+    private val regex = Regex("(\\d{4})[-_](\\d{2})[-_](\\d{2})[-_\\s]+(\\d{2})[-_](\\d{2})[-_](\\d{2})")
+
+    override fun parse(fileName: String): RecordingMetadata? {
+        val nameWithoutExt = fileName.substringBeforeLast(".")
+        val match = regex.find(nameWithoutExt) ?: return null
+        
+        val dateStr = "${match.groupValues[1]}-${match.groupValues[2]}-${match.groupValues[3]}"
+        val timeStr = "${match.groupValues[4]}-${match.groupValues[5]}-${match.groupValues[6]}"
+        
+        val timestamp = parseDateTime("${dateStr} ${timeStr}", "yyyy-MM-dd HH-mm-ss")
+        return RecordingMetadata(
+            phoneNumber = null,
+            contactName = null,
+            timestamp = timestamp,
+            originalFileName = fileName,
+            parserName = "TimestampOnlyParser"
+        )
+    }
+}
+
+/**
+ * Matches standalone compact format: ...YYYYMMDD_HHMMSS... with any random string prefix/suffix
+ */
+class CompactTimestampOnlyParser : BaseRecordingParser() {
+    private val regex = Regex("(\\d{8})[_T-](\\d{6})")
+
+    override fun parse(fileName: String): RecordingMetadata? {
+        val nameWithoutExt = fileName.substringBeforeLast(".")
+        val match = regex.find(nameWithoutExt) ?: return null
+        
+        val dateStr = match.groupValues[1]
+        val timeStr = match.groupValues[2]
+        
+        val timestamp = parseDateTime("${dateStr}${timeStr}", "yyyyMMddHHmmss")
+        return RecordingMetadata(
+            phoneNumber = null,
+            contactName = null,
+            timestamp = timestamp,
+            originalFileName = fileName,
+            parserName = "CompactTimestampOnlyParser"
+        )
+    }
+}
+
+/**
+ * Matches 13-digit (ms) or 10-digit (s) Epoch timestamp anywhere in the filename
+ */
+class EpochTimestampParser : BaseRecordingParser() {
+    private val msRegex = Regex("(\\b|[^0-9])(1[6-9]\\d{11})(\\b|[^0-9])")
+    private val sRegex = Regex("(\\b|[^0-9])(1[6-9]\\d{8})(\\b|[^0-9])")
+
+    override fun parse(fileName: String): RecordingMetadata? {
+        val nameWithoutExt = fileName.substringBeforeLast(".")
+        val msMatch = msRegex.find(nameWithoutExt)
+        if (msMatch != null) {
+            val epochMs = msMatch.groupValues[2].toLongOrNull()
+            if (epochMs != null && epochMs > 1_500_000_000_000L) {
+                return RecordingMetadata(
+                    phoneNumber = null,
+                    contactName = null,
+                    timestamp = epochMs,
+                    originalFileName = fileName,
+                    parserName = "EpochTimestampParser"
+                )
+            }
+        }
+
+        val sMatch = sRegex.find(nameWithoutExt)
+        if (sMatch != null) {
+            val epochS = sMatch.groupValues[2].toLongOrNull()
+            if (epochS != null && epochS > 1_500_000_000L) {
+                return RecordingMetadata(
+                    phoneNumber = null,
+                    contactName = null,
+                    timestamp = epochS * 1000L,
+                    originalFileName = fileName,
+                    parserName = "EpochTimestampParser"
+                )
+            }
+        }
+        return null
+    }
+}
+
+/**
  * Fallback parser using file last modified
  */
 class FallbackParser(private val fileLastModified: Long) : BaseRecordingParser() {
@@ -196,7 +284,10 @@ object RecordingParserChain {
             SamsungCallParser(),
             CompactDateTimeParser(),
             StandardDateTimeParser(),
-            SimpleDateTimeParser()
+            SimpleDateTimeParser(),
+            TimestampOnlyParser(),
+            CompactTimestampOnlyParser(),
+            EpochTimestampParser()
         )
         
         for (parser in parsers) {

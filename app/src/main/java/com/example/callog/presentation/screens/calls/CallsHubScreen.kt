@@ -97,6 +97,7 @@ fun CallsHubScreen(
                 }
                 CallsSubTab.DIALER -> {
                     DialerScreen(
+                        onCallClick = onCallClick,
                         onNavigateToContact = { contactId -> onContactClick?.invoke(contactId) }
                     )
                 }

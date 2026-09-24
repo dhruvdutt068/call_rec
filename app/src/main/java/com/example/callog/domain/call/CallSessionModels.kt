@@ -60,6 +60,7 @@ data class CallSessionState(
     val isSpeakerOn: Boolean = false,
     val isOnHold: Boolean = false,
     val isKeypadVisible: Boolean = false,
+    val recordingState: CallRecordingState = CallRecordingState.Idle,
     val recentInteractionSummary: String? = null,
     val pendingFollowUp: String? = null
 ) {
@@ -81,6 +82,8 @@ sealed interface CallAction {
     data class ToggleMute(val callId: String) : CallAction
     data class ToggleSpeaker(val callId: String) : CallAction
     data class ToggleHold(val callId: String) : CallAction
+    data class ToggleRecording(val callId: String) : CallAction
+    data class StopRecording(val callId: String) : CallAction
     data object SwapCalls : CallAction
     data class MergeCalls(val callId1: String, val callId2: String) : CallAction
     data class SetAudioRoute(val route: AudioRoute) : CallAction

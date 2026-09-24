@@ -190,12 +190,14 @@ open class CallNotificationManager @Inject constructor(
             .build()
 
         val crmBadge = buildCrmSubtitle(session)
+        val isRecording = session.recordingState is com.example.callog.domain.call.CallRecordingState.Recording
+        val recordingText = if (isRecording) " • 🔴 Recording" else ""
         val startTime = if (session.connectTimeMillis > 0) session.connectTimeMillis else System.currentTimeMillis()
 
         val builder = NotificationCompat.Builder(context, CallVaultApp.CALLS_NOTIFICATION_CHANNEL_ID)
             .setSmallIcon(R.mipmap.ic_launcher)
             .setContentTitle(callerName)
-            .setContentText(if (crmBadge.isNotBlank()) "$crmBadge • ${session.phoneNumber}" else session.phoneNumber)
+            .setContentText(if (crmBadge.isNotBlank()) "$crmBadge • ${session.phoneNumber}$recordingText" else "${session.phoneNumber}$recordingText")
             .setPriority(NotificationCompat.PRIORITY_DEFAULT)
             .setCategory(NotificationCompat.CATEGORY_CALL)
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
