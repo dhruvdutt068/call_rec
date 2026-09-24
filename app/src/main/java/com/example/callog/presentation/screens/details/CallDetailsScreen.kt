@@ -7,14 +7,12 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -26,9 +24,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.example.callog.core.extensions.toDateTimeString
 import com.example.callog.core.extensions.toDurationString
@@ -131,6 +128,10 @@ fun CallDetailsScreen(
         var showReminderDialog by remember { mutableStateOf(false) }
         var reminderNote by remember { mutableStateOf("") }
 
+        // State for delete confirmation dialog & overflow menu
+        var showDeleteConfirmDialog by remember { mutableStateOf(false) }
+        var showOverflowMenu by remember { mutableStateOf(false) }
+
         var isUploadingManual by remember { mutableStateOf(false) }
         val audioPickerLauncher = rememberLauncherForActivityResult(
             contract = ActivityResultContracts.GetContent()
@@ -149,7 +150,7 @@ fun CallDetailsScreen(
                             }
                         }
 
-                        viewModel.associateAndUploadRecording(call.id, cacheFile.absolutePath) { result ->
+                        viewModel.associateAndUploadRecording(call.id, cacheFile.absolutePath) { _ ->
                             isUploadingManual = false
                         }
                     } catch (e: Exception) {
@@ -166,7 +167,7 @@ fun CallDetailsScreen(
                     title = {
                         Text(
                             text = "Call Details",
-                            style = CallogTypography.sectionTitle,
+                            style = MaterialTheme.typography.titleLarge,
                             fontWeight = FontWeight.Bold
                         )
                     },
@@ -192,18 +193,41 @@ fun CallDetailsScreen(
                                 tint = if (call.isFavorite) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
-                        IconButton(
-                            onClick = {
-                                viewModel.deleteCall(call.id)
-                                onBackClick()
-                            },
-                            modifier = Modifier.sizeIn(minWidth = 48.dp, minHeight = 48.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Delete,
-                                contentDescription = "Delete call log",
-                                tint = MaterialTheme.colorScheme.error
-                            )
+                        Box {
+                            IconButton(
+                                onClick = { showOverflowMenu = true },
+                                modifier = Modifier.sizeIn(minWidth = 48.dp, minHeight = 48.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.MoreVert,
+                                    contentDescription = "More options",
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            DropdownMenu(
+                                expanded = showOverflowMenu,
+                                onDismissRequest = { showOverflowMenu = false }
+                            ) {
+                                DropdownMenuItem(
+                                    text = {
+                                        Text(
+                                            text = "Delete call log",
+                                            color = MaterialTheme.colorScheme.error
+                                        )
+                                    },
+                                    leadingIcon = {
+                                        Icon(
+                                            imageVector = Icons.Default.Delete,
+                                            contentDescription = null,
+                                            tint = MaterialTheme.colorScheme.error
+                                        )
+                                    },
+                                    onClick = {
+                                        showOverflowMenu = false
+                                        showDeleteConfirmDialog = true
+                                    }
+                                )
+                            }
                         }
                     },
                     colors = TopAppBarDefaults.topAppBarColors(
@@ -222,64 +246,105 @@ fun CallDetailsScreen(
                     .fillMaxSize()
                     .padding(innerPadding)
                     .verticalScroll(rememberScrollState())
-                    .padding(16.dp),
+                    .padding(horizontal = 16.dp, vertical = 12.dp)
+                    .navigationBarsPadding(),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                // Header profile card
-                GlassyCard {
+                // ==========================================
+                // 1. CALLER IDENTITY CARD
+                // ==========================================
+                GlassyCard(modifier = Modifier.fillMaxWidth()) {
                     Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(16.dp)
+                        verticalAlignment = Alignment.Top,
+                        modifier = Modifier.fillMaxWidth()
                     ) {
                         ContactAvatar(
                             name = call.name,
                             initials = call.initials,
                             photoUri = call.contactPhotoUri,
-                            modifier = Modifier.size(64.dp)
+                            modifier = Modifier.size(56.dp)
                         )
 
                         Spacer(modifier = Modifier.width(16.dp))
 
-                        Column(modifier = Modifier.weight(1f)) {
+                        Column(
+                            modifier = Modifier.weight(1f),
+                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
                             Text(
                                 text = call.displayName,
-                                style = CallogTypography.entityName,
+                                style = MaterialTheme.typography.titleLarge,
+                                fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.onSurface
                             )
-                            Spacer(modifier = Modifier.height(2.dp))
+
                             Text(
                                 text = call.number,
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
-                            Spacer(modifier = Modifier.height(6.dp))
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                CallTypeIcon(call.callType)
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text(
-                                    text = "${call.callType} • ${call.timestamp.toDateTimeString()}",
-                                    style = CallogTypography.denseData,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
+
+                            Spacer(modifier = Modifier.height(4.dp))
+
+                            // Formatted Call Type and Duration Row
+                            val (callTypeLabel, callTypeColor) = when (call.callType.uppercase()) {
+                                "INCOMING" -> "Incoming call" to CallogSemanticColors.CallIncoming
+                                "OUTGOING" -> "Outgoing call" to CallogSemanticColors.CallOutgoing
+                                "MISSED" -> "Missed call" to CallogSemanticColors.CallMissed
+                                "REJECTED" -> "Rejected call" to CallogSemanticColors.CallRejected
+                                "BLOCKED" -> "Blocked call" to CallogSemanticColors.CallRejected
+                                else -> call.callType to MaterialTheme.colorScheme.onSurfaceVariant
                             }
-                            Spacer(modifier = Modifier.height(8.dp))
+
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                CallTypeIcon(call.callType, modifier = Modifier.size(16.dp))
+                                Text(
+                                    text = callTypeLabel,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.Medium,
+                                    color = callTypeColor
+                                )
+                                if (call.duration > 0) {
+                                    Text(
+                                        text = "• ${call.duration.toDurationString()}",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+
+                            // Clean Date & Time Display
+                            Text(
+                                text = call.timestamp.toDateTimeString().replace(" • ", " · "),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+
+                            Spacer(modifier = Modifier.height(2.dp))
+
+                            // Sync Status Badge
                             SyncStatusPill(status = call.unifiedSyncStatus)
                         }
                     }
                 }
 
-                // Quick Action Bar: Call, Message, View CRM Profile
+                // ==========================================
+                // 2. PRIMARY ACTION ROW (Call, Message, CRM)
+                // ==========================================
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    // Call Button
+                    // Call Action Button
                     Button(
                         onClick = { viewModel.initiateCall(context, call.number) },
                         modifier = Modifier.weight(1f),
-                        shape = RoundedCornerShape(12.dp),
+                        shape = CallogShapes.interactive,
+                        contentPadding = PaddingValues(horizontal = 6.dp, vertical = 10.dp),
                         colors = ButtonDefaults.buttonColors(
                             containerColor = CallogSemanticColors.CallIncoming,
                             contentColor = Color.White
@@ -287,14 +352,20 @@ fun CallDetailsScreen(
                     ) {
                         Icon(
                             imageVector = Icons.Default.Call,
-                            contentDescription = "Call",
+                            contentDescription = "Call ${call.displayName}",
                             modifier = Modifier.size(18.dp)
                         )
                         Spacer(modifier = Modifier.width(6.dp))
-                        Text("Call", fontWeight = FontWeight.SemiBold)
+                        Text(
+                            text = "Call",
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.SemiBold,
+                            maxLines = 1,
+                            softWrap = false
+                        )
                     }
 
-                    // Message Button
+                    // Message Action Button
                     FilledTonalButton(
                         onClick = {
                             try {
@@ -307,18 +378,26 @@ fun CallDetailsScreen(
                             }
                         },
                         modifier = Modifier.weight(1f),
-                        shape = RoundedCornerShape(12.dp)
+                        shape = CallogShapes.interactive,
+                        contentPadding = PaddingValues(horizontal = 6.dp, vertical = 10.dp)
                     ) {
                         Icon(
                             imageVector = Icons.Default.Message,
-                            contentDescription = "Message",
+                            contentDescription = "Message ${call.displayName}",
                             modifier = Modifier.size(18.dp)
                         )
                         Spacer(modifier = Modifier.width(6.dp))
-                        Text("Message", fontWeight = FontWeight.SemiBold)
+                        Text(
+                            text = "Message",
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.SemiBold,
+                            maxLines = 1,
+                            softWrap = false,
+                            overflow = TextOverflow.Clip
+                        )
                     }
 
-                    // CRM Profile Button
+                    // CRM Action Button
                     FilledTonalButton(
                         onClick = {
                             val targetId = call.personId ?: call.number
@@ -332,19 +411,28 @@ fun CallDetailsScreen(
                             }
                         },
                         modifier = Modifier.weight(1f),
-                        shape = RoundedCornerShape(12.dp)
+                        shape = CallogShapes.interactive,
+                        contentPadding = PaddingValues(horizontal = 6.dp, vertical = 10.dp)
                     ) {
                         Icon(
                             imageVector = Icons.Default.Person,
-                            contentDescription = "CRM Profile",
+                            contentDescription = "Open CRM profile for ${call.displayName}",
                             modifier = Modifier.size(18.dp)
                         )
                         Spacer(modifier = Modifier.width(6.dp))
-                        Text("CRM", fontWeight = FontWeight.SemiBold)
+                        Text(
+                            text = "CRM",
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.SemiBold,
+                            maxLines = 1,
+                            softWrap = false
+                        )
                     }
                 }
 
-                // Interactive Callback Reminder trigger
+                // ==========================================
+                // 3. CALLBACK REMINDER (Compact Card)
+                // ==========================================
                 val reminderInteraction = remember { MutableInteractionSource() }
                 val reminderPressed by reminderInteraction.collectIsPressedAsState()
                 val reminderScale by animateFloatAsState(
@@ -358,7 +446,10 @@ fun CallDetailsScreen(
                     interactionSource = reminderInteraction,
                     shape = CallogShapes.card,
                     color = MaterialTheme.colorScheme.surfaceContainerLow,
-                    border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
+                    border = androidx.compose.foundation.BorderStroke(
+                        1.dp,
+                        MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                    ),
                     modifier = Modifier
                         .fillMaxWidth()
                         .scale(reminderScale)
@@ -368,28 +459,32 @@ fun CallDetailsScreen(
                         horizontalArrangement = Arrangement.SpaceBetween,
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(16.dp)
+                            .padding(horizontal = 14.dp, vertical = 12.dp)
                     ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.weight(1f)
+                        ) {
                             Surface(
-                                shape = CallogShapes.avatar,
+                                shape = CallogShapes.pill,
                                 color = CallogSemanticColors.LeadWarm.copy(alpha = 0.15f),
-                                modifier = Modifier.size(44.dp)
+                                modifier = Modifier.size(36.dp)
                             ) {
                                 Box(contentAlignment = Alignment.Center) {
                                     Icon(
                                         imageVector = Icons.Default.NotificationsActive,
-                                        contentDescription = null,
+                                        contentDescription = "Schedule reminder",
                                         tint = CallogSemanticColors.LeadWarm,
-                                        modifier = Modifier.size(22.dp)
+                                        modifier = Modifier.size(18.dp)
                                     )
                                 }
                             }
-                            Spacer(modifier = Modifier.width(14.dp))
+                            Spacer(modifier = Modifier.width(12.dp))
                             Column {
                                 Text(
                                     text = "Callback Reminder",
-                                    style = CallogTypography.sectionTitle,
+                                    style = MaterialTheme.typography.titleSmall,
+                                    fontWeight = FontWeight.SemiBold,
                                     color = MaterialTheme.colorScheme.onSurface
                                 )
                                 Text(
@@ -402,60 +497,89 @@ fun CallDetailsScreen(
                         Icon(
                             imageVector = Icons.Default.ChevronRight,
                             contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(20.dp)
                         )
                     }
                 }
 
-                // Call Recording Player (Waveforms)
-                if (call.recordingPath != null) {
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text(
-                            text = "Call Recording",
-                            style = CallogTypography.sectionTitle,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
+                // ==========================================
+                // 4. CALL RECORDING SECTION
+                // ==========================================
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        text = "Call Recording",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
 
+                    if (call.recordingPath != null) {
                         GlassyCard(modifier = Modifier.fillMaxWidth()) {
                             Column(
                                 horizontalAlignment = Alignment.CenterHorizontally,
-                                modifier = Modifier.padding(16.dp)
+                                verticalArrangement = Arrangement.spacedBy(10.dp)
                             ) {
                                 Row(
                                     verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    modifier = Modifier.fillMaxWidth()
                                 ) {
-                                    Icon(
-                                        imageVector = Icons.Default.Mic,
-                                        contentDescription = null,
-                                        tint = CallogSemanticColors.RecordingActive,
-                                        modifier = Modifier.size(20.dp)
-                                    )
-                                    Text(
-                                        text = call.recordingPath?.substringAfterLast("/") ?: "recording",
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = MaterialTheme.colorScheme.onSurface,
-                                        fontWeight = FontWeight.SemiBold
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                        modifier = Modifier.weight(1f)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Mic,
+                                            contentDescription = null,
+                                            tint = CallogSemanticColors.RecordingActive,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                        Text(
+                                            text = call.recordingPath?.substringAfterLast("/") ?: "recording.m4a",
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            color = MaterialTheme.colorScheme.onSurface,
+                                            fontWeight = FontWeight.SemiBold,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                    }
+
+                                    // Upload status pill
+                                    val uploadStatusLabel = when (call.recordingUploadStatus) {
+                                        "SUCCESS" -> "Uploaded"
+                                        "UPLOADING" -> "Uploading..."
+                                        "FAILED" -> "Upload Failed"
+                                        else -> "Local Only"
+                                    }
+                                    val uploadStatusColor = when (call.recordingUploadStatus) {
+                                        "SUCCESS" -> CallogSemanticColors.SyncSuccess
+                                        "UPLOADING" -> CallogSemanticColors.SyncInProgress
+                                        "FAILED" -> CallogSemanticColors.SyncFailed
+                                        else -> MaterialTheme.colorScheme.onSurfaceVariant
+                                    }
+                                    ExpressiveStatusPill(
+                                        label = uploadStatusLabel,
+                                        accentColor = uploadStatusColor
                                     )
                                 }
-
-                                Spacer(modifier = Modifier.height(14.dp))
 
                                 // Bouncing animated waveform
                                 Row(
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .height(40.dp)
-                                        .padding(horizontal = 8.dp),
+                                        .height(32.dp)
+                                        .padding(horizontal = 4.dp),
                                     horizontalArrangement = Arrangement.SpaceBetween,
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
                                     for (i in 0..24) {
                                         val waveHeight by animateDpAsState(
                                             targetValue = if (isPlaying) {
-                                                ((i * 13 + (playProgress * 1000).toInt()) % 30 + 10).dp
+                                                ((i * 13 + (playProgress * 1000).toInt()) % 24 + 8).dp
                                             } else {
-                                                10.dp
+                                                8.dp
                                             },
                                             animationSpec = spring(dampingRatio = 0.5f),
                                             label = "wave_$i"
@@ -463,15 +587,13 @@ fun CallDetailsScreen(
 
                                         Box(
                                             modifier = Modifier
-                                                .width(4.dp)
+                                                .width(3.dp)
                                                 .height(waveHeight)
                                                 .clip(CircleShape)
                                                 .background(if (isPlaying) CallogSemanticColors.RecordingActive else MaterialTheme.colorScheme.outlineVariant)
                                         )
                                     }
                                 }
-
-                                Spacer(modifier = Modifier.height(12.dp))
 
                                 // Player Slider
                                 Slider(
@@ -507,11 +629,9 @@ fun CallDetailsScreen(
                                     )
                                 }
 
-                                Spacer(modifier = Modifier.height(12.dp))
-
-                                // Play and Upload controls
+                                // Play & Cloud controls
                                 Row(
-                                    horizontalArrangement = Arrangement.spacedBy(24.dp, Alignment.CenterHorizontally),
+                                    horizontalArrangement = Arrangement.spacedBy(16.dp, Alignment.CenterHorizontally),
                                     verticalAlignment = Alignment.CenterVertically,
                                     modifier = Modifier.fillMaxWidth()
                                 ) {
@@ -519,7 +639,7 @@ fun CallDetailsScreen(
                                     val playInteraction = remember { MutableInteractionSource() }
                                     val playPressed by playInteraction.collectIsPressedAsState()
                                     val playScale by animateFloatAsState(
-                                        targetValue = if (playPressed) 0.90f else 1f,
+                                        targetValue = if (playPressed) 0.92f else 1f,
                                         animationSpec = CallogMotion.bouncySpring(),
                                         label = "playScale"
                                     )
@@ -528,7 +648,7 @@ fun CallDetailsScreen(
                                         onClick = { isPlaying = !isPlaying },
                                         interactionSource = playInteraction,
                                         modifier = Modifier
-                                            .size(56.dp)
+                                            .size(48.dp)
                                             .scale(playScale),
                                         colors = IconButtonDefaults.filledIconButtonColors(
                                             containerColor = MaterialTheme.colorScheme.primary
@@ -536,9 +656,9 @@ fun CallDetailsScreen(
                                     ) {
                                         Icon(
                                             imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                                            contentDescription = if (isPlaying) "Pause playback" else "Start playback",
+                                            contentDescription = if (isPlaying) "Pause recording" else "Play recording",
                                             tint = MaterialTheme.colorScheme.onPrimary,
-                                            modifier = Modifier.size(32.dp)
+                                            modifier = Modifier.size(26.dp)
                                         )
                                     }
 
@@ -556,7 +676,7 @@ fun CallDetailsScreen(
                                                     }
                                                 },
                                                 enabled = !isActionInProgress,
-                                                modifier = Modifier.size(56.dp),
+                                                modifier = Modifier.size(48.dp),
                                                 colors = IconButtonDefaults.outlinedIconButtonColors(
                                                     contentColor = MaterialTheme.colorScheme.error
                                                 ),
@@ -564,16 +684,16 @@ fun CallDetailsScreen(
                                             ) {
                                                 if (isActionInProgress) {
                                                     CircularProgressIndicator(
-                                                        modifier = Modifier.size(24.dp),
+                                                        modifier = Modifier.size(20.dp),
                                                         strokeWidth = 2.dp,
                                                         color = MaterialTheme.colorScheme.error
                                                     )
                                                 } else {
                                                     Icon(
                                                         imageVector = Icons.Default.DeleteSweep,
-                                                        contentDescription = "Delete Cloud Recording",
+                                                        contentDescription = "Delete cloud recording",
                                                         tint = MaterialTheme.colorScheme.error,
-                                                        modifier = Modifier.size(28.dp)
+                                                        modifier = Modifier.size(22.dp)
                                                     )
                                                 }
                                             }
@@ -582,10 +702,10 @@ fun CallDetailsScreen(
                                             FilledTonalIconButton(
                                                 onClick = {},
                                                 enabled = false,
-                                                modifier = Modifier.size(56.dp)
+                                                modifier = Modifier.size(48.dp)
                                             ) {
                                                 CircularProgressIndicator(
-                                                    modifier = Modifier.size(24.dp),
+                                                    modifier = Modifier.size(20.dp),
                                                     strokeWidth = 2.dp,
                                                     color = MaterialTheme.colorScheme.primary
                                                 )
@@ -600,20 +720,20 @@ fun CallDetailsScreen(
                                                     }
                                                 },
                                                 enabled = !isActionInProgress,
-                                                modifier = Modifier.size(56.dp)
+                                                modifier = Modifier.size(48.dp)
                                             ) {
                                                 if (isActionInProgress) {
                                                     CircularProgressIndicator(
-                                                        modifier = Modifier.size(24.dp),
+                                                        modifier = Modifier.size(20.dp),
                                                         strokeWidth = 2.dp,
                                                         color = MaterialTheme.colorScheme.primary
                                                     )
                                                 } else {
                                                     Icon(
                                                         imageVector = if (status == "FAILED") Icons.Default.Replay else Icons.Default.CloudUpload,
-                                                        contentDescription = "Upload to Cloud",
+                                                        contentDescription = "Upload recording to cloud",
                                                         tint = MaterialTheme.colorScheme.primary,
-                                                        modifier = Modifier.size(28.dp)
+                                                        modifier = Modifier.size(22.dp)
                                                     )
                                                 }
                                             }
@@ -622,61 +742,88 @@ fun CallDetailsScreen(
                                 }
                             }
                         }
-                    }
-                } else {
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text(
-                            text = "Call Recording",
-                            style = CallogTypography.sectionTitle,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-
+                    } else {
+                        // Compact Empty State
                         GlassyCard(modifier = Modifier.fillMaxWidth()) {
-                            Column(
-                                horizontalAlignment = Alignment.CenterHorizontally,
-                                modifier = Modifier.padding(16.dp),
-                                verticalArrangement = Arrangement.spacedBy(12.dp)
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                modifier = Modifier.fillMaxWidth()
                             ) {
-                                Text(
-                                    text = "No recording file associated with this call log.",
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    textAlign = TextAlign.Center
-                                )
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Surface(
+                                        shape = CallogShapes.pill,
+                                        color = MaterialTheme.colorScheme.surfaceVariant,
+                                        modifier = Modifier.size(36.dp)
+                                    ) {
+                                        Box(contentAlignment = Alignment.Center) {
+                                            Icon(
+                                                imageVector = Icons.Default.MicNone,
+                                                contentDescription = null,
+                                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                modifier = Modifier.size(18.dp)
+                                            )
+                                        }
+                                    }
+                                    Spacer(modifier = Modifier.width(12.dp))
+                                    Column {
+                                        Text(
+                                            text = "No recording available",
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = MaterialTheme.colorScheme.onSurface
+                                        )
+                                        Text(
+                                            text = "Add a recording to this call",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                }
 
-                                Button(
+                                Spacer(modifier = Modifier.width(8.dp))
+
+                                FilledTonalButton(
                                     onClick = {
                                         if (!isUploadingManual) {
                                             audioPickerLauncher.launch("audio/*")
                                         }
                                     },
                                     enabled = !isUploadingManual,
-                                    shape = CallogShapes.interactive
+                                    shape = CallogShapes.interactive,
+                                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
                                 ) {
                                     if (isUploadingManual) {
                                         CircularProgressIndicator(
-                                            modifier = Modifier.size(20.dp),
+                                            modifier = Modifier.size(16.dp),
                                             strokeWidth = 2.dp,
-                                            color = MaterialTheme.colorScheme.onPrimary
+                                            color = MaterialTheme.colorScheme.primary
                                         )
                                     } else {
                                         Icon(
                                             imageVector = Icons.Default.CloudUpload,
-                                            contentDescription = null
+                                            contentDescription = "Upload call recording",
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text(
+                                            text = "Upload",
+                                            style = MaterialTheme.typography.labelMedium,
+                                            fontWeight = FontWeight.SemiBold
                                         )
                                     }
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    Text(
-                                        text = if (isUploadingManual) "Uploading..." else "Upload Recording",
-                                        fontWeight = FontWeight.Bold
-                                    )
                                 }
                             }
                         }
                     }
                 }
 
-                // Notes input field
+                // ==========================================
+                // 5. CALL NOTES SECTION
+                // ==========================================
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -685,7 +832,8 @@ fun CallDetailsScreen(
                     ) {
                         Text(
                             text = "Call Notes",
-                            style = CallogTypography.sectionTitle,
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold,
                             color = MaterialTheme.colorScheme.onSurface
                         )
                         AnimatedVisibility(
@@ -693,14 +841,16 @@ fun CallDetailsScreen(
                             enter = fadeIn() + slideInVertically(),
                             exit = fadeOut()
                         ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
                                 Icon(
                                     imageVector = Icons.Default.Check,
                                     contentDescription = null,
                                     tint = CallogSemanticColors.SyncSuccess,
                                     modifier = Modifier.size(16.dp)
                                 )
-                                Spacer(modifier = Modifier.width(4.dp))
                                 Text(
                                     text = "Saved",
                                     color = CallogSemanticColors.SyncSuccess,
@@ -723,52 +873,70 @@ fun CallDetailsScreen(
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         },
-                        minLines = 3,
+                        minLines = 2,
+                        maxLines = 5,
                         modifier = Modifier.fillMaxWidth(),
-                        shape = CallogShapes.card
+                        shape = CallogShapes.interactive
                     )
 
-                    Spacer(modifier = Modifier.height(4.dp))
-
-                    FilledTonalButton(
-                        onClick = {
-                            viewModel.updateNotes(call.id, notesText)
-                            isNotesSaved = true
-                        },
-                        shape = CallogShapes.interactive,
-                        modifier = Modifier.align(Alignment.End)
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.End
                     ) {
-                        Text("Save Notes", fontWeight = FontWeight.Bold)
+                        FilledTonalButton(
+                            onClick = {
+                                viewModel.updateNotes(call.id, notesText)
+                                isNotesSaved = true
+                            },
+                            enabled = notesText != (call.notes ?: "") || !isNotesSaved,
+                            shape = CallogShapes.interactive,
+                            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Save,
+                                contentDescription = "Save call notes",
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = "Save",
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
                     }
                 }
 
-                // Tags Manager
+                // ==========================================
+                // 6. CALL TAGS SECTION
+                // ==========================================
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(
                         text = "Call Tags",
-                        style = CallogTypography.sectionTitle,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
                         color = MaterialTheme.colorScheme.onSurface
                     )
 
                     // Current tags layout
-                    FlowRow(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        currentTags.forEach { tag ->
-                            TagChip(
-                                text = tag,
-                                isRemovable = true,
-                                onRemove = {
-                                    currentTags.remove(tag)
-                                    viewModel.updateTags(call.id, currentTags.toList())
-                                }
-                            )
+                    if (currentTags.isNotEmpty()) {
+                        FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            currentTags.forEach { tag ->
+                                TagChip(
+                                    text = tag,
+                                    isRemovable = true,
+                                    onRemove = {
+                                        currentTags.remove(tag)
+                                        viewModel.updateTags(call.id, currentTags.toList())
+                                    }
+                                )
+                            }
                         }
                     }
-
-                    Spacer(modifier = Modifier.height(4.dp))
 
                     // Preset quick selection tags
                     Text(
@@ -798,8 +966,6 @@ fun CallDetailsScreen(
                             )
                         }
                     }
-
-                    Spacer(modifier = Modifier.height(4.dp))
 
                     // Add Custom Tag text field
                     Row(
@@ -839,6 +1005,8 @@ fun CallDetailsScreen(
                         }
                     }
                 }
+
+                Spacer(modifier = Modifier.height(16.dp))
             }
         }
 
@@ -849,7 +1017,7 @@ fun CallDetailsScreen(
                 title = {
                     Text(
                         text = "Schedule Callback Reminder",
-                        style = CallogTypography.sectionTitle,
+                        style = MaterialTheme.typography.titleMedium,
                         color = MaterialTheme.colorScheme.onSurface,
                         fontWeight = FontWeight.Bold
                     )
@@ -873,7 +1041,7 @@ fun CallDetailsScreen(
                             },
                             singleLine = true,
                             label = { Text("Reminder Notes") },
-                            shape = CallogShapes.card,
+                            shape = CallogShapes.interactive,
                             modifier = Modifier.fillMaxWidth()
                         )
 
@@ -927,6 +1095,49 @@ fun CallDetailsScreen(
                 shape = CallogShapes.dialog
             )
         }
+
+        // Dialog for confirming call deletion
+        if (showDeleteConfirmDialog) {
+            AlertDialog(
+                onDismissRequest = { showDeleteConfirmDialog = false },
+                title = {
+                    Text(
+                        text = "Delete Call Log",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        fontWeight = FontWeight.Bold
+                    )
+                },
+                text = {
+                    Text(
+                        text = "Are you sure you want to delete this call record for ${call.displayName}?",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            showDeleteConfirmDialog = false
+                            viewModel.deleteCall(call.id)
+                            onBackClick()
+                        },
+                        colors = ButtonDefaults.textButtonColors(
+                            contentColor = MaterialTheme.colorScheme.error
+                        )
+                    ) {
+                        Text("Delete", fontWeight = FontWeight.Bold)
+                    }
+                },
+                dismissButton = {
+                    TextButton(
+                        onClick = { showDeleteConfirmDialog = false }
+                    ) {
+                        Text("Cancel")
+                    }
+                },
+                shape = CallogShapes.dialog
+            )
+        }
     }
 }
-

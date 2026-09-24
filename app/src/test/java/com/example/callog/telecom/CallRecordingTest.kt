@@ -19,15 +19,24 @@ import com.example.callog.domain.service.CallSessionManager
 import com.example.callog.domain.service.DialerRoleManager
 import com.example.callog.domain.service.simulator.CallSimulatorManager
 import com.example.callog.presentation.call.CallSessionViewModel
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.resetMain
+import kotlinx.coroutines.test.setMain
+import org.junit.After
 import org.junit.Assert.*
 import org.junit.Before
 import org.junit.Test
 import java.lang.reflect.Proxy
 
+@OptIn(ExperimentalCoroutinesApi::class)
 class CallRecordingTest {
+
+    private val testDispatcher = StandardTestDispatcher()
 
     private lateinit var callSessionManager: CallSessionManager
     private lateinit var fakePersonRepo: CallSessionManagerTest.FakePersonRepository
@@ -46,19 +55,8 @@ class CallRecordingTest {
     private lateinit var fakeContext: Context
 
     private fun createFakeContext(): Context {
-        val baseContext = Proxy.newProxyInstance(
-            Context::class.java.classLoader,
-            arrayOf(Context::class.java)
-        ) { _, method, _ ->
-            when (method.name) {
-                "getSystemService" -> null
-                "getPackageName" -> "com.example.callog"
-                "getApplicationContext" -> null
-                "getContentResolver" -> null
-                else -> null
-            }
-        } as Context
-        return object : ContextWrapper(baseContext) {
+        return object : ContextWrapper(null) {
+            override fun getPackageName(): String = "com.example.callog"
             override fun getApplicationContext(): Context = this
             override fun startActivity(intent: Intent?) {}
             override fun getSystemService(name: String): Any? = null
@@ -67,6 +65,8 @@ class CallRecordingTest {
 
     @Before
     fun setUp() {
+        Dispatchers.setMain(testDispatcher)
+
         fakeContext = createFakeContext()
         fakePersonRepo = CallSessionManagerTest.FakePersonRepository()
         fakeLeadRepo = CallSessionManagerTest.FakeLeadRepository()
@@ -99,24 +99,19 @@ class CallRecordingTest {
             recordingRepository = fakeRecordingRepo
         )
 
-        val fakeCallDao = Proxy.newProxyInstance(
-            CallDao::class.java.classLoader,
-            arrayOf(CallDao::class.java)
-        ) { _, _, _ -> null } as CallDao
-
-        val fakeSalesCallDao = Proxy.newProxyInstance(
-            SalesCallDao::class.java.classLoader,
-            arrayOf(SalesCallDao::class.java)
-        ) { _, _, _ -> null } as SalesCallDao
-
         fakeSimulatorManager = CallSimulatorManager(
             context = fakeContext,
             callSessionManager = callSessionManager,
             personRepository = fakePersonRepo,
             simRepository = fakeSimRepo,
-            callDao = fakeCallDao,
-            salesCallDao = fakeSalesCallDao
+            callDao = CallSimulatorManagerTest.FakeCallDao(),
+            salesCallDao = CallSimulatorManagerTest.FakeSalesCallDao()
         )
+    }
+
+    @After
+    fun tearDown() {
+        Dispatchers.resetMain()
     }
 
     private fun addActiveCall(callId: String = "CALL_REC_001"): String {
