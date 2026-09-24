@@ -177,6 +177,10 @@ class SyncWorker(
                         }
                     }
                 }
+
+                // 4. Download latest global contacts and leads from Supabase into Room cache
+                DeveloperLogger.info("GLOBAL_CONTACTS_SYNC", "Downloading latest global contacts from Supabase into local Room database", network = network)
+                personRepository.syncGlobalContactsFromSupabase()
             } catch (e: Exception) {
                 DeveloperLogger.error("IDENTITY_SYNC_FAILED", "Exception during Person identity sync: ${e.message}", exception = e, network = network)
             }

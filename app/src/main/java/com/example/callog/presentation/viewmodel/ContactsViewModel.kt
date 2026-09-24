@@ -40,6 +40,10 @@ class ContactsViewModel(
         SharingStarted.WhileSubscribed(5_000)
     )
 
+    init {
+        refresh()
+    }
+
     private val _selectedSource = MutableStateFlow(ContactSource.CLOUD)
     private val _searchQuery = MutableStateFlow("")
     private val _isRefreshing = MutableStateFlow(false)

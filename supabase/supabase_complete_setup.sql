@@ -21,6 +21,10 @@ CREATE TABLE IF NOT EXISTS public.sales_calls (
     CONSTRAINT uq_salesperson_call UNIQUE (salesperson_phone, call_id)
 );
 
+-- Drop conflicting legacy constraints if present
+ALTER TABLE public.sales_calls DROP CONSTRAINT IF EXISTS uq_sales_call_natural;
+ALTER TABLE public.sales_calls DROP CONSTRAINT IF EXISTS sales_calls_salesperson_phone_buyer_phone_created_at_key;
+
 -- Safely alter column type if table previously existed with TEXT / BIGINT
 DO $$
 BEGIN

@@ -104,6 +104,9 @@ interface PersonDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertDevice(device: DeviceEntity)
 
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertDevices(devices: List<DeviceEntity>)
+
     @Query("SELECT * FROM devices WHERE id = :id")
     suspend fun getDeviceById(id: String): DeviceEntity?
 

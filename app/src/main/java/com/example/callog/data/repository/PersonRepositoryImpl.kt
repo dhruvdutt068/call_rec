@@ -3,6 +3,7 @@ package com.example.callog.data.repository
 import android.os.Build
 import com.example.callog.core.diagnostics.DeveloperLogger
 import com.example.callog.core.utils.PhoneNumberNormalizer
+import com.example.callog.data.local.dao.LeadDao
 import com.example.callog.data.local.dao.PersonDao
 import com.example.callog.data.local.entity.*
 import com.example.callog.data.provider.ContactsProvider
@@ -26,6 +27,7 @@ import javax.inject.Singleton
 class PersonRepositoryImpl @Inject constructor(
     @ApplicationContext private val context: Context,
     private val personDao: PersonDao,
+    private val leadDao: LeadDao,
     private val contactsProvider: ContactsProvider,
     private val firestoreService: FirestoreService,
     private val supabaseService: SupabaseService,
@@ -302,107 +304,199 @@ class PersonRepositoryImpl @Inject constructor(
 
     override suspend fun syncGlobalContactsFromSupabase(): Result<List<Person>> = withContext(Dispatchers.IO) {
         return@withContext try {
-            val remotePeopleResult = supabaseService.fetchGlobalPeople()
-            if (remotePeopleResult.isFailure) {
-                return@withContext Result.failure(remotePeopleResult.exceptionOrNull() ?: Exception("Failed to fetch people from Supabase"))
-            }
-            val remotePeople = remotePeopleResult.getOrNull() ?: emptyList()
+            // 1. Fetch remote resources concurrently
+            val (remotePeopleResult, remoteDevicesResult, remotePhonesResult, remoteAliasesResult, remoteLeadsResult) = kotlinx.coroutines.coroutineScope {
+                val peopleDeferred = kotlinx.coroutines.async { supabaseService.fetchGlobalPeople() }
+                val devicesDeferred = kotlinx.coroutines.async { supabaseService.fetchGlobalDevices() }
+                val phonesDeferred = kotlinx.coroutines.async { supabaseService.fetchGlobalPhoneNumbers() }
+                val aliasesDeferred = kotlinx.coroutines.async { supabaseService.fetchGlobalContactAliases() }
+                val leadsDeferred = kotlinx.coroutines.async { supabaseService.fetchGlobalLeads() }
 
-            val remoteDevices = supabaseService.fetchGlobalDevices().getOrNull() ?: emptyList()
-            val remotePhones = supabaseService.fetchGlobalPhoneNumbers().getOrNull() ?: emptyList()
-            val remoteAliases = supabaseService.fetchGlobalContactAliases().getOrNull() ?: emptyList()
-
-            // 1. Upsert Devices into Room (avoids Foreign Key constraint failure on ContactAliasEntity)
-            for (d in remoteDevices) {
-                val entity = DeviceEntity(
-                    id = d.id,
-                    deviceName = d.deviceName,
-                    devicePhone = d.devicePhone,
-                    deviceIdentifier = d.deviceIdentifier,
-                    createdAt = parseTimestamp(d.createdAt),
-                    updatedAt = parseTimestamp(d.updatedAt),
-                    lastSyncAt = d.lastSyncAt?.let { parseTimestamp(it) }
+                listOf(
+                    peopleDeferred.await(),
+                    devicesDeferred.await(),
+                    phonesDeferred.await(),
+                    aliasesDeferred.await(),
+                    leadsDeferred.await()
                 )
-                personDao.insertDevice(entity)
             }
 
-            // 2. Upsert People into Room
+            @Suppress("UNCHECKED_CAST")
+            val remotePeople = (remotePeopleResult as Result<List<com.example.callog.data.remote.model.SupabasePerson>>).getOrNull()
+                ?: return@withContext Result.failure(remotePeopleResult.exceptionOrNull() ?: Exception("Failed to fetch people from Supabase"))
+
+            @Suppress("UNCHECKED_CAST")
+            val remoteDevices = (remoteDevicesResult as Result<List<com.example.callog.data.remote.model.SupabaseDevice>>).getOrNull() ?: emptyList()
+            @Suppress("UNCHECKED_CAST")
+            val remotePhones = (remotePhonesResult as Result<List<com.example.callog.data.remote.model.SupabasePhoneNumber>>).getOrNull() ?: emptyList()
+            @Suppress("UNCHECKED_CAST")
+            val remoteAliases = (remoteAliasesResult as Result<List<com.example.callog.data.remote.model.SupabaseContactAlias>>).getOrNull() ?: emptyList()
+            @Suppress("UNCHECKED_CAST")
+            val remoteLeads = (remoteLeadsResult as Result<List<com.example.callog.data.remote.model.SupabaseLead>>).getOrNull() ?: emptyList()
+
+            // Track existing and new IDs in memory to avoid redundant queries and satisfy foreign keys
+            val knownDeviceIds = (personDao.getAllDevices().map { it.id } + remoteDevices.map { it.id }).toMutableSet()
+            val knownPersonIds = (personDao.getAllPeopleWithDetails().map { it.person.id } + remotePeople.map { it.id }).toMutableSet()
+
+            val devicesToInsert = mutableListOf<DeviceEntity>()
+            for (d in remoteDevices) {
+                devicesToInsert.add(
+                    DeviceEntity(
+                        id = d.id,
+                        deviceName = d.deviceName,
+                        devicePhone = d.devicePhone,
+                        deviceIdentifier = d.deviceIdentifier,
+                        createdAt = parseTimestamp(d.createdAt),
+                        updatedAt = parseTimestamp(d.updatedAt),
+                        lastSyncAt = d.lastSyncAt?.let { parseTimestamp(it) }
+                    )
+                )
+            }
+
+            val peopleToInsert = mutableListOf<PersonEntity>()
             for (p in remotePeople) {
                 val cleanName = p.displayName.trim().let { if (it == "." || it.isBlank()) "Unknown Contact" else it }
-                val entity = PersonEntity(
-                    id = p.id,
-                    displayName = cleanName,
-                    companyName = p.companyName?.trim()?.ifBlank { null },
-                    notes = p.notes?.trim()?.ifBlank { null },
-                    createdAt = parseTimestamp(p.createdAt),
-                    updatedAt = parseTimestamp(p.updatedAt),
-                    syncStatus = "SYNCED"
-                )
-                personDao.insertPerson(entity)
-            }
-
-            // 3. Upsert Phone Numbers (ensuring parent Person exists to satisfy foreign key)
-            for (ph in remotePhones) {
-                if (personDao.getPersonById(ph.personId) == null) {
-                    val fallbackPerson = PersonEntity(
-                        id = ph.personId,
-                        displayName = "Unknown Contact",
-                        createdAt = parseTimestamp(ph.createdAt),
-                        updatedAt = parseTimestamp(ph.createdAt),
-                        syncStatus = "SYNCED"
-                    )
-                    personDao.insertPerson(fallbackPerson)
-                }
-                val entity = PhoneNumberEntity(
-                    id = ph.id,
-                    personId = ph.personId,
-                    phoneNumber = ph.phoneNumber,
-                    normalizedNumber = ph.normalizedNumber,
-                    phoneType = ph.phoneType,
-                    isPrimary = ph.isPrimary,
-                    createdAt = parseTimestamp(ph.createdAt),
-                    syncStatus = "SYNCED"
-                )
-                personDao.insertPhoneNumber(entity)
-            }
-
-            // 4. Upsert Aliases (ensuring parent Person and Device exist to satisfy foreign keys)
-            for (al in remoteAliases) {
-                if (personDao.getPersonById(al.personId) == null) {
-                    val cleanName = al.aliasName.trim().let { if (it == "." || it.isBlank()) "Unknown Contact" else it }
-                    val fallbackPerson = PersonEntity(
-                        id = al.personId,
+                peopleToInsert.add(
+                    PersonEntity(
+                        id = p.id,
                         displayName = cleanName,
-                        createdAt = parseTimestamp(al.createdAt),
-                        updatedAt = parseTimestamp(al.createdAt),
+                        companyName = p.companyName?.trim()?.ifBlank { null },
+                        notes = p.notes?.trim()?.ifBlank { null },
+                        createdAt = parseTimestamp(p.createdAt),
+                        updatedAt = parseTimestamp(p.updatedAt),
                         syncStatus = "SYNCED"
                     )
-                    personDao.insertPerson(fallbackPerson)
-                }
-                if (personDao.getDeviceById(al.deviceId) == null) {
-                    val fallbackDevice = DeviceEntity(
-                        id = al.deviceId,
-                        deviceName = "Synced Device",
-                        devicePhone = al.phoneNumber,
-                        deviceIdentifier = al.deviceId,
-                        createdAt = parseTimestamp(al.createdAt),
-                        updatedAt = parseTimestamp(al.createdAt)
+                )
+            }
+
+            val phoneNumbersToInsert = mutableListOf<PhoneNumberEntity>()
+            for (ph in remotePhones) {
+                if (!knownPersonIds.contains(ph.personId)) {
+                    peopleToInsert.add(
+                        PersonEntity(
+                            id = ph.personId,
+                            displayName = "Unknown Contact",
+                            createdAt = parseTimestamp(ph.createdAt),
+                            updatedAt = parseTimestamp(ph.createdAt),
+                            syncStatus = "SYNCED"
+                        )
                     )
-                    personDao.insertDevice(fallbackDevice)
+                    knownPersonIds.add(ph.personId)
+                }
+                phoneNumbersToInsert.add(
+                    PhoneNumberEntity(
+                        id = ph.id,
+                        personId = ph.personId,
+                        phoneNumber = ph.phoneNumber,
+                        normalizedNumber = ph.normalizedNumber,
+                        phoneType = ph.phoneType,
+                        isPrimary = ph.isPrimary,
+                        createdAt = parseTimestamp(ph.createdAt),
+                        syncStatus = "SYNCED"
+                    )
+                )
+            }
+
+            val aliasesToInsert = mutableListOf<ContactAliasEntity>()
+            for (al in remoteAliases) {
+                if (!knownPersonIds.contains(al.personId)) {
+                    val cleanAliasName = al.aliasName.trim().let { if (it == "." || it.isBlank()) "Unknown Contact" else it }
+                    peopleToInsert.add(
+                        PersonEntity(
+                            id = al.personId,
+                            displayName = cleanAliasName,
+                            createdAt = parseTimestamp(al.createdAt),
+                            updatedAt = parseTimestamp(al.createdAt),
+                            syncStatus = "SYNCED"
+                        )
+                    )
+                    knownPersonIds.add(al.personId)
+                }
+                if (!knownDeviceIds.contains(al.deviceId)) {
+                    devicesToInsert.add(
+                        DeviceEntity(
+                            id = al.deviceId,
+                            deviceName = "Synced Device",
+                            devicePhone = al.phoneNumber,
+                            deviceIdentifier = al.deviceId,
+                            createdAt = parseTimestamp(al.createdAt),
+                            updatedAt = parseTimestamp(al.createdAt)
+                        )
+                    )
+                    knownDeviceIds.add(al.deviceId)
                 }
                 val cleanAliasName = al.aliasName.trim().let { if (it == "." || it.isBlank()) "Unknown Contact" else it }
-                val entity = ContactAliasEntity(
-                    id = al.id,
-                    personId = al.personId,
-                    deviceId = al.deviceId,
-                    androidContactId = al.androidContactId,
-                    aliasName = cleanAliasName,
-                    phoneNumber = al.phoneNumber,
-                    normalizedNumber = al.normalizedNumber,
-                    createdAt = parseTimestamp(al.createdAt),
-                    syncStatus = "SYNCED"
+                aliasesToInsert.add(
+                    ContactAliasEntity(
+                        id = al.id,
+                        personId = al.personId,
+                        deviceId = al.deviceId,
+                        androidContactId = al.androidContactId,
+                        aliasName = cleanAliasName,
+                        phoneNumber = al.phoneNumber,
+                        normalizedNumber = al.normalizedNumber,
+                        createdAt = parseTimestamp(al.createdAt),
+                        syncStatus = "SYNCED"
+                    )
                 )
-                personDao.insertAlias(entity)
+            }
+
+            val leadsToInsert = mutableListOf<LeadEntity>()
+            for (l in remoteLeads) {
+                val existingLocal = leadDao.getLeadByPersonId(l.personId)
+                val remoteUpdatedAt = parseTimestamp(l.updatedAt)
+                if (existingLocal != null && existingLocal.syncStatus == "PENDING" && existingLocal.updatedAt > remoteUpdatedAt) {
+                    // Retain pending offline edits to be synced by background worker
+                    continue
+                }
+                if (!knownPersonIds.contains(l.personId)) {
+                    peopleToInsert.add(
+                        PersonEntity(
+                            id = l.personId,
+                            displayName = "Unknown Contact",
+                            createdAt = parseTimestamp(l.createdAt),
+                            updatedAt = remoteUpdatedAt,
+                            syncStatus = "SYNCED"
+                        )
+                    )
+                    knownPersonIds.add(l.personId)
+                }
+                leadsToInsert.add(
+                    LeadEntity(
+                        id = l.id,
+                        personId = l.personId,
+                        status = l.status,
+                        priority = l.priority,
+                        feedback = l.feedback,
+                        feedbackRating = l.feedbackRating,
+                        notes = l.notes,
+                        ownerId = l.ownerId,
+                        source = l.source,
+                        nextFollowUpAt = l.nextFollowUpAt?.let { parseTimestamp(it) },
+                        isArchived = l.isArchived,
+                        archivedAt = l.archivedAt?.let { parseTimestamp(it) },
+                        createdAt = parseTimestamp(l.createdAt),
+                        updatedAt = remoteUpdatedAt,
+                        syncStatus = "SYNCED"
+                    )
+                )
+            }
+
+            // Perform batch Room insertions
+            if (devicesToInsert.isNotEmpty()) {
+                personDao.insertDevices(devicesToInsert.distinctBy { it.id })
+            }
+            if (peopleToInsert.isNotEmpty()) {
+                personDao.insertPeople(peopleToInsert.distinctBy { it.id })
+            }
+            if (phoneNumbersToInsert.isNotEmpty()) {
+                personDao.insertPhoneNumbers(phoneNumbersToInsert.distinctBy { it.id })
+            }
+            if (aliasesToInsert.isNotEmpty()) {
+                personDao.insertAliases(aliasesToInsert.distinctBy { it.id })
+            }
+            if (leadsToInsert.isNotEmpty()) {
+                leadDao.insertLeads(leadsToInsert.distinctBy { it.id })
             }
 
             val allPeople = getAllPeople()

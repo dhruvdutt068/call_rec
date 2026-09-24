@@ -134,21 +134,21 @@ class SupabaseService @Inject constructor(
                     createdAt = toUtcIsoString(entity.createdAt),
                     personId = entity.personId
                 )
-            }
+            }.distinctBy { "${it.salespersonPhone}_${it.callId}" }
 
-            Log.i(TAG, "Syncing ${supabaseCalls.size} calls to Supabase (${getActiveConfig().url})...")
+            Log.i(TAG, "Syncing ${supabaseCalls.size} calls to Supabase in chunks (${getActiveConfig().url})...")
             
-            // Log payload objects right before sending
-            supabaseCalls.forEach { call ->
-                Log.d("SUPABASE", "Uploading call to Supabase: $call")
+            // Perform chunked bulk upsert to Supabase
+            val chunkSize = 100
+            val chunks = supabaseCalls.chunked(chunkSize)
+            chunks.forEachIndexed { index, chunk ->
+                Log.d("SUPABASE", "Uploading chunk ${index + 1}/${chunks.size} (${chunk.size} calls) to Supabase")
+                getClient().from(SupabaseDefaults.TABLE_SALES_CALLS).upsert(chunk) {
+                    onConflict = "salesperson_phone,call_id"
+                }
             }
             
-            // Perform bulk upsert to Supabase
-            val response = getClient().from(SupabaseDefaults.TABLE_SALES_CALLS).upsert(supabaseCalls) {
-                onConflict = "salesperson_phone,call_id"
-            }
-            
-            Log.d("SUPABASE", "Upsert completed successfully. Response = $response")
+            Log.d("SUPABASE", "Upsert of all ${supabaseCalls.size} calls completed successfully.")
             Result.success(Unit)
         } catch (e: Exception) {
             Log.e("SUPABASE", "Error syncing sales calls to Supabase", e)
@@ -358,6 +358,35 @@ class SupabaseService @Inject constructor(
             Result.success(devices)
         } catch (e: Exception) {
             Log.e(TAG, "Error fetching global devices from Supabase", e)
+            Result.failure(e)
+        }
+    }
+
+    suspend fun fetchGlobalLeads(): Result<List<com.example.callog.data.remote.model.SupabaseLead>> = withContext(Dispatchers.IO) {
+        return@withContext try {
+            val leads = getClient().from(SupabaseDefaults.TABLE_LEADS)
+                .select()
+                .decodeList<com.example.callog.data.remote.model.SupabaseLead>()
+            Result.success(leads)
+        } catch (e: Exception) {
+            Log.e(TAG, "Error fetching global leads from Supabase", e)
+            Result.failure(e)
+        }
+    }
+
+    suspend fun fetchLeadByPersonId(personId: String): Result<com.example.callog.data.remote.model.SupabaseLead?> = withContext(Dispatchers.IO) {
+        return@withContext try {
+            val leads = getClient().from(SupabaseDefaults.TABLE_LEADS)
+                .select {
+                    filter {
+                        eq("person_id", personId)
+                    }
+                    limit(1)
+                }
+                .decodeList<com.example.callog.data.remote.model.SupabaseLead>()
+            Result.success(leads.firstOrNull())
+        } catch (e: Exception) {
+            Log.e(TAG, "Error fetching lead by personId from Supabase", e)
             Result.failure(e)
         }
     }
