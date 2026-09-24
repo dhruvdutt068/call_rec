@@ -448,9 +448,8 @@ class CallViewModel @Inject constructor(
      */
     fun populateSalesCalls() {
         viewModelScope.launch {
-            val salespersonPhoneRaw = firestoreRepository.getDevicePhoneNumber()
-            val salespersonName  = firestoreRepository.getDeviceOwnerName()
-            if (salespersonPhoneRaw.isEmpty()) return@launch  // device not configured yet
+            val salespersonPhoneRaw = firestoreRepository.getDevicePhoneNumber().ifBlank { "device_owner" }
+            val salespersonName  = firestoreRepository.getDeviceOwnerName().ifBlank { "Sales Rep" }
 
             val salespersonPhone = com.example.callog.data.repository.FirestoreRepositoryImpl.normalizePhoneNumber(salespersonPhoneRaw)
             val allCalls = repository.getAllCallsSnapshot()
@@ -469,7 +468,18 @@ class CallViewModel @Inject constructor(
                             personId         = call.personId,
                             createdAt        = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", java.util.Locale.US).apply {
                                 timeZone = java.util.TimeZone.getTimeZone("UTC")
-                            }.format(java.util.Date(call.timestamp))
+                            }.format(java.util.Date(call.timestamp)),
+                            syncStatus       = "PENDING"
+                        )
+                    )
+                } else if (existing.duration != call.duration || existing.buyerName != call.name || existing.personId != call.personId || existing.callType != call.callType) {
+                    salesCallDao.insertSalesCall(
+                        existing.copy(
+                            duration = call.duration,
+                            buyerName = call.name,
+                            personId = call.personId ?: existing.personId,
+                            callType = call.callType,
+                            syncStatus = "PENDING"
                         )
                     )
                 }

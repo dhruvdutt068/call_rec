@@ -166,7 +166,7 @@ class RecordingScanner @Inject constructor(
 
         // 3. Check display name hints
         val nameLower = displayName.lowercase()
-        if (nameLower.contains("call") || nameLower.contains("record") || nameLower.contains("recorder")) {
+        if (nameLower.contains("call") || nameLower.contains("record") || nameLower.contains("recorder") || nameLower.contains("callog")) {
             return true
         }
 

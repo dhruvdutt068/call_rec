@@ -27,6 +27,7 @@ data class RecordingSession(
     val recordingId: String,
     val callId: String,
     val phoneNumber: String?,
+    val contactName: String? = null,
     val personId: String? = null,
     val simSlot: Int? = null,
     val filePath: String,
@@ -44,6 +45,7 @@ interface CallRecordingController {
     suspend fun start(
         callId: String,
         phoneNumber: String?,
+        contactName: String? = null,
         personId: String? = null,
         simSlot: Int? = null,
         startedAt: Long = System.currentTimeMillis()

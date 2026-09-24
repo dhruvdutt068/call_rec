@@ -21,6 +21,9 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import java.io.File
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -58,12 +61,13 @@ class AndroidCallRecordingController @Inject constructor(
     override suspend fun start(
         callId: String,
         phoneNumber: String?,
+        contactName: String?,
         personId: String?,
         simSlot: Int?,
         startedAt: Long
     ): Result<RecordingSession> = mutex.withLock {
         withContext(Dispatchers.IO) {
-            DeveloperLogger.info(TAG, "Request to start recording for callId=$callId (phoneNumber=$phoneNumber, personId=$personId)")
+            DeveloperLogger.info(TAG, "Request to start recording for callId=$callId (contactName=$contactName, phoneNumber=$phoneNumber, personId=$personId)")
 
             if (!canRecord()) {
                 val hasPermission = ContextCompat.checkSelfPermission(
@@ -89,9 +93,21 @@ class AndroidCallRecordingController @Inject constructor(
                     outputDir.mkdirs()
                 }
 
-                val safeCallId = callId.replace(Regex("[^a-zA-Z0-9_-]"), "_")
+                val dateFormat = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US)
+                val formattedDate = dateFormat.format(Date(startedAt))
+
+                val safeIdentifier = when {
+                    !contactName.isNullOrBlank() && !contactName.equals("Unknown Caller", ignoreCase = true) -> {
+                        contactName.trim().replace(Regex("[^a-zA-Z0-9 _-]"), "_")
+                    }
+                    !phoneNumber.isNullOrBlank() -> {
+                        phoneNumber.trim().replace(Regex("[^a-zA-Z0-9+_-]"), "_")
+                    }
+                    else -> "Call_${callId.replace(Regex("[^a-zA-Z0-9_-]"), "_")}"
+                }
+
                 val recordingId = "rec_${UUID.randomUUID()}"
-                val outputFile = File(outputDir, "Callog_Rec_${safeCallId}_${startedAt}.m4a")
+                val outputFile = File(outputDir, "Callog_${safeIdentifier}_${formattedDate}.m4a")
 
                 val recorder = createMediaRecorder()
                 setupRecorder(recorder, outputFile)
@@ -106,6 +122,7 @@ class AndroidCallRecordingController @Inject constructor(
                     recordingId = recordingId,
                     callId = callId,
                     phoneNumber = phoneNumber,
+                    contactName = contactName,
                     personId = personId,
                     simSlot = simSlot,
                     filePath = outputFile.absolutePath,

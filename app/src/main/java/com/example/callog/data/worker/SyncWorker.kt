@@ -102,69 +102,8 @@ class SyncWorker(
             DeveloperLogger.info("READ_PENDING_CALLS", "Scanning system logs & local recordings to refresh database", network = network)
             callRepository.syncCallLogs()
 
-            // Step 2b: Populate sales_calls table from refreshed call log
-            val salespersonPhoneRaw = firestoreService.getDevicePhoneNumber()
-            val salespersonName  = firestoreService.getDeviceOwnerName()
-            if (salespersonPhoneRaw.isNotEmpty()) {
-                val salespersonPhone = FirestoreRepositoryImpl.normalizePhoneNumber(salespersonPhoneRaw)
-                val allCalls = callRepository.getAllCallsSnapshot()
-                DeveloperLogger.info("SALES_CALL_CREATION_STARTED", "Generating SalesCallEntity cache. Found ${allCalls.size} calls.", network = network)
-                var createdCount = 0
-                for (call in allCalls) {
-                    val existing = salesCallDao.getSalesCallByCallId(call.id)
-                    if (existing == null) {
-                        salesCallDao.insertSalesCall(
-                            SalesCallEntity(
-                                salespersonPhone = salespersonPhone,
-                                salespersonName  = salespersonName,
-                                buyerPhone       = call.number,
-                                buyerName        = call.name,
-                                callType         = call.callType,
-                                callId           = call.id,
-                                duration         = call.duration,
-                                personId         = call.personId,
-                                createdAt        = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", java.util.Locale.US).apply {
-                                    timeZone = java.util.TimeZone.getTimeZone("UTC")
-                                }.format(java.util.Date(call.timestamp))
-                            )
-                        )
-                        createdCount++
-                    }
-                }
-                if (createdCount > 0) {
-                    DeveloperLogger.success("SALES_CALL_CREATED", "Populated $createdCount new sales call logs locally.", network = network)
-                }
-            } else {
-                DeveloperLogger.warning("SALES_CALL_CREATION_STARTED", "Device configurations not set, skipping sales calls population.", network = network)
-            }
-
-            // Step 2c: Sync pending sales_calls to Supabase
-            try {
-                val pendingSalesCalls = salesCallDao.getPendingSalesCalls()
-                if (pendingSalesCalls.isNotEmpty()) {
-                    DeveloperLogger.info("SUPABASE_UPLOAD_STARTED", "Syncing ${pendingSalesCalls.size} pending sales calls to Supabase.", network = network)
-                    val startTime = System.currentTimeMillis()
-                    val syncResult = supabaseService.syncSalesCalls(pendingSalesCalls)
-                    val duration = System.currentTimeMillis() - startTime
-                    if (syncResult.isSuccess) {
-                        for (salesCall in pendingSalesCalls) {
-                            salesCallDao.updateSyncStatus(salesCall.id, "SYNCED", null)
-                        }
-                        DeveloperLogger.success("SUPABASE_UPLOAD_SUCCESS", "Successfully synced ${pendingSalesCalls.size} rows to Supabase table sales_calls.", durationMs = duration, network = network)
-                    } else {
-                        val exception = syncResult.exceptionOrNull()
-                        val errorMsg = exception?.message ?: "Unknown sync error"
-                        for (salesCall in pendingSalesCalls) {
-                            salesCallDao.updateSyncStatus(salesCall.id, "FAILED", errorMsg)
-                        }
-                        DeveloperLogger.error("SUPABASE_UPLOAD_FAILED", "Supabase sync failed: $errorMsg", exception = exception, network = network)
-                    }
-                }
-            } catch (e: Exception) {
-                DeveloperLogger.error("SUPABASE_UPLOAD_FAILED", "Exception occurred during Supabase sync execution", exception = e, network = network)
-            }
-
-            // Step 2d: Resolve local Contacts to canonical Person and sync to Supabase
+            // Step 2a: Resolve local Contacts to canonical Person and sync to Supabase FIRST
+            // This ensures People, PhoneNumbers, Devices, Aliases exist and call.personId can be resolved properly
             try {
                 DeveloperLogger.info("IDENTITY_SYNC_STARTED", "Resolving contacts to Person canonical identity and syncing to Supabase", network = network)
                 personRepository.syncContactsFromDevice()
@@ -242,7 +181,114 @@ class SyncWorker(
                 DeveloperLogger.error("IDENTITY_SYNC_FAILED", "Exception during Person identity sync: ${e.message}", exception = e, network = network)
             }
 
-            // Step 2e: Sync pending CRM Leads to Supabase
+            // Step 2b: Populate / update sales_calls table from refreshed call log & resolved identities
+            val salespersonPhoneRaw = firestoreService.getDevicePhoneNumber().ifBlank {
+                personDao.getAllDevices().firstOrNull()?.devicePhone.orEmpty().ifBlank { "device_owner" }
+            }
+            val salespersonPhone = FirestoreRepositoryImpl.normalizePhoneNumber(salespersonPhoneRaw)
+            val salespersonName  = firestoreService.getDeviceOwnerName().ifBlank { "Sales Rep" }
+            val allCalls = callRepository.getAllCallsSnapshot()
+            DeveloperLogger.info("SALES_CALL_CREATION_STARTED", "Generating/updating SalesCallEntity cache. Found ${allCalls.size} calls.", network = network)
+            var createdCount = 0
+            var updatedCount = 0
+            for (call in allCalls) {
+                val normBuyer = com.example.callog.core.utils.PhoneNumberNormalizer.normalize(call.number)
+                val resolvedPersonId = call.personId ?: (if (normBuyer.isNotBlank()) personDao.findPhoneNumberByNormalized(normBuyer)?.personId else null)
+                val existing = salesCallDao.getSalesCallByCallId(call.id)
+                if (existing == null) {
+                    salesCallDao.insertSalesCall(
+                        SalesCallEntity(
+                            salespersonPhone = salespersonPhone,
+                            salespersonName  = salespersonName,
+                            buyerPhone       = call.number,
+                            buyerName        = call.name,
+                            callType         = call.callType,
+                            callId           = call.id,
+                            duration         = call.duration,
+                            personId         = resolvedPersonId,
+                            createdAt        = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", java.util.Locale.US).apply {
+                                timeZone = java.util.TimeZone.getTimeZone("UTC")
+                            }.format(java.util.Date(call.timestamp)),
+                            syncStatus       = "PENDING"
+                        )
+                    )
+                    createdCount++
+                } else if (existing.duration != call.duration || existing.buyerName != call.name || existing.personId != resolvedPersonId || existing.callType != call.callType) {
+                    salesCallDao.insertSalesCall(
+                        existing.copy(
+                            duration = call.duration,
+                            buyerName = call.name,
+                            personId = resolvedPersonId ?: existing.personId,
+                            callType = call.callType,
+                            syncStatus = "PENDING"
+                        )
+                    )
+                    updatedCount++
+                }
+            }
+            if (createdCount > 0 || updatedCount > 0) {
+                DeveloperLogger.success("SALES_CALL_CREATED", "Populated $createdCount new, updated $updatedCount sales call logs locally.", network = network)
+            }
+
+            // Step 2c: Sync pending sales_calls to Supabase AND Client CRM tables
+            try {
+                val pendingSalesCalls = salesCallDao.getPendingSalesCalls()
+                if (pendingSalesCalls.isNotEmpty()) {
+                    DeveloperLogger.info("SUPABASE_UPLOAD_STARTED", "Syncing ${pendingSalesCalls.size} pending sales calls to Supabase.", network = network)
+                    val startTime = System.currentTimeMillis()
+                    val syncResult = supabaseService.syncSalesCalls(pendingSalesCalls)
+                    val duration = System.currentTimeMillis() - startTime
+
+                    // Also publish integration events to Client CRM (calls_log, lead_communications) using the pending sales calls list
+                    try {
+                        DeveloperLogger.info("CRM_INTEGRATION_STARTED", "Publishing ${pendingSalesCalls.size} call events to Client CRM", network = network)
+                        val crmEvents = pendingSalesCalls.map { sc ->
+                            val epochMs = try {
+                                val sdf = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", java.util.Locale.US).apply {
+                                    timeZone = java.util.TimeZone.getTimeZone("UTC")
+                                }
+                                sdf.parse(sc.createdAt)?.time ?: System.currentTimeMillis()
+                            } catch (_: Exception) {
+                                System.currentTimeMillis()
+                            }
+                            com.example.callog.domain.crm.model.CrmCallEvent(
+                                callId = sc.callId,
+                                personId = sc.personId,
+                                rawPhoneNumber = sc.buyerPhone,
+                                contactName = sc.buyerName,
+                                salespersonPhone = sc.salespersonPhone,
+                                salespersonName = sc.salespersonName,
+                                callType = sc.callType,
+                                durationSeconds = sc.duration,
+                                timestampEpochMs = epochMs,
+                                recordingCloudUrl = null,
+                                notes = null
+                            )
+                        }
+                        crmRepository.publishBatchCallEvents(crmEvents)
+                    } catch (e: Exception) {
+                        DeveloperLogger.warning("CRM_INTEGRATION_FAILED", "Exception publishing events to Client CRM: ${e.message}", network = network)
+                    }
+
+                    if (syncResult.isSuccess) {
+                        for (salesCall in pendingSalesCalls) {
+                            salesCallDao.updateSyncStatus(salesCall.id, "SYNCED", null)
+                        }
+                        DeveloperLogger.success("SUPABASE_UPLOAD_SUCCESS", "Successfully synced ${pendingSalesCalls.size} rows to Supabase table sales_calls.", durationMs = duration, network = network)
+                    } else {
+                        val exception = syncResult.exceptionOrNull()
+                        val errorMsg = exception?.message ?: "Unknown sync error"
+                        for (salesCall in pendingSalesCalls) {
+                            salesCallDao.updateSyncStatus(salesCall.id, "FAILED", errorMsg)
+                        }
+                        DeveloperLogger.error("SUPABASE_UPLOAD_FAILED", "Supabase sync failed: $errorMsg", exception = exception, network = network)
+                    }
+                }
+            } catch (e: Exception) {
+                DeveloperLogger.error("SUPABASE_UPLOAD_FAILED", "Exception occurred during Supabase sync execution", exception = e, network = network)
+            }
+
+            // Step 2d: Sync pending CRM Leads to Supabase
             try {
                 val pendingLeads = leadDao.getPendingLeads()
                 if (pendingLeads.isNotEmpty()) {
@@ -274,40 +320,6 @@ class SyncWorker(
                 }
             } catch (e: Exception) {
                 DeveloperLogger.error("LEAD_SYNC_FAILED", "Exception during Lead sync: ${e.message}", exception = e, network = network)
-            }
-
-            // Step 2f: Publish integration events to Client CRM
-            try {
-                val pendingSalesCalls = salesCallDao.getPendingSalesCalls()
-                if (pendingSalesCalls.isNotEmpty()) {
-                    DeveloperLogger.info("CRM_INTEGRATION_STARTED", "Publishing ${pendingSalesCalls.size} call events to Client CRM", network = network)
-                    val crmEvents = pendingSalesCalls.map { sc ->
-                        val epochMs = try {
-                            val sdf = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", java.util.Locale.US).apply {
-                                timeZone = java.util.TimeZone.getTimeZone("UTC")
-                            }
-                            sdf.parse(sc.createdAt)?.time ?: System.currentTimeMillis()
-                        } catch (_: Exception) {
-                            System.currentTimeMillis()
-                        }
-                        com.example.callog.domain.crm.model.CrmCallEvent(
-                            callId = sc.callId,
-                            personId = sc.personId,
-                            rawPhoneNumber = sc.buyerPhone,
-                            contactName = sc.buyerName,
-                            salespersonPhone = sc.salespersonPhone,
-                            salespersonName = sc.salespersonName,
-                            callType = sc.callType,
-                            durationSeconds = sc.duration,
-                            timestampEpochMs = epochMs,
-                            recordingCloudUrl = null,
-                            notes = null
-                        )
-                    }
-                    crmRepository.publishBatchCallEvents(crmEvents)
-                }
-            } catch (e: Exception) {
-                DeveloperLogger.warning("CRM_INTEGRATION_FAILED", "Exception publishing events to Client CRM: ${e.message}", network = network)
             }
 
             // Step 3: Fetch all pending items from local database for Firestore

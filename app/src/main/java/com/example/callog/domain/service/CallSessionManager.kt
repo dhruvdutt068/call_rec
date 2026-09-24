@@ -841,9 +841,13 @@ class CallSessionManager @Inject constructor(
         }
         callHapticManager.vibrateActionToggle()
         scope.launch {
+            val contactName = session.callerDisplayName.takeIf {
+                it.isNotBlank() && !it.equals("Unknown Caller", ignoreCase = true)
+            }
             val result = callRecordingController.start(
                 callId = session.callId,
                 phoneNumber = session.phoneNumber,
+                contactName = contactName,
                 personId = session.personId,
                 simSlot = session.simInfo?.subscriptionId
             )

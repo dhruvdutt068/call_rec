@@ -672,9 +672,23 @@ class RecordingRepositoryImpl @Inject constructor(
                 val normNum = normalizePhoneNumber(session.phoneNumber)
                 val recentCalls = callDao.getAllCalls().filter { call ->
                     val callNorm = normalizePhoneNumber(call.number)
-                    callNorm == normNum && Math.abs(call.timestamp - session.startedAt) <= 180_000L
+                    callNorm.isNotEmpty() && normNum.isNotEmpty() && (
+                        callNorm == normNum ||
+                        (callNorm.length >= 7 && normNum.endsWith(callNorm.takeLast(7))) ||
+                        (normNum.length >= 7 && callNorm.endsWith(normNum.takeLast(7)))
+                    ) && Math.abs(call.timestamp - session.startedAt) <= 300_000L
                 }
-                matchedCall = recentCalls.firstOrNull()
+                matchedCall = recentCalls.minByOrNull { Math.abs(it.timestamp - session.startedAt) }
+            }
+
+            if (matchedCall == null && !session.contactName.isNullOrBlank()) {
+                val contactClean = session.contactName.trim().lowercase()
+                val recentCalls = callDao.getAllCalls().filter { call ->
+                    val callName = call.name?.trim()?.lowercase() ?: ""
+                    (callName == contactClean || (callName.isNotEmpty() && (callName.contains(contactClean) || contactClean.contains(callName)))) &&
+                    Math.abs(call.timestamp - session.startedAt) <= 300_000L
+                }
+                matchedCall = recentCalls.minByOrNull { Math.abs(it.timestamp - session.startedAt) }
             }
 
             val entity = RecordingEntity(
@@ -685,13 +699,13 @@ class RecordingRepositoryImpl @Inject constructor(
                 duration = durationSec,
                 lastModified = file.lastModified().takeIf { it > 0 } ?: now,
                 phoneExtracted = session.phoneNumber,
-                contactExtracted = null,
+                contactExtracted = session.contactName,
                 timestampExtracted = session.startedAt,
                 matchedCallId = matchedCall?.id ?: callIdLong,
-                matchStatus = MatchStatus.MATCHED,
+                matchStatus = if (matchedCall != null || callIdLong != null) MatchStatus.MATCHED else MatchStatus.UNMATCHED,
                 uploadStatus = UploadStatus.PENDING,
                 parser = "InCallRecorder",
-                reason = "Recorded during active call (${session.callId})"
+                reason = if (matchedCall != null) "Matched during active call (${session.callId})" else "Recorded during call (${session.callId})"
             )
 
             val insertedId = recordingDao.insertRecording(entity)

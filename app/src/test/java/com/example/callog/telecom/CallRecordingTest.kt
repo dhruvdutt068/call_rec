@@ -208,7 +208,7 @@ class CallRecordingTest {
         val failingRecordingCtrl = object : CallRecordingController {
             override val recordingState = MutableStateFlow<CallRecordingState>(CallRecordingState.Idle)
             override suspend fun canRecord(): Boolean = true
-            override suspend fun start(callId: String, phoneNumber: String?, personId: String?, simSlot: Int?, startedAt: Long): Result<RecordingSession> {
+            override suspend fun start(callId: String, phoneNumber: String?, contactName: String?, personId: String?, simSlot: Int?, startedAt: Long): Result<RecordingSession> {
                 recordingState.value = CallRecordingState.Error("Simulated hardware error")
                 return Result.failure(IllegalStateException("Simulated hardware error"))
             }
@@ -278,5 +278,92 @@ class CallRecordingTest {
         delay(100)
 
         assertEquals(1, fakeRecordingCtrl.startCount)
+    }
+
+    @Test
+    fun testRecordingPassesContactNameFromSession() = runBlocking {
+        var capturedContactName: String? = null
+        val customRecordingCtrl = object : CallRecordingController {
+            override val recordingState = MutableStateFlow<CallRecordingState>(CallRecordingState.Idle)
+            override suspend fun canRecord(): Boolean = true
+            override suspend fun start(
+                callId: String,
+                phoneNumber: String?,
+                contactName: String?,
+                personId: String?,
+                simSlot: Int?,
+                startedAt: Long
+            ): Result<RecordingSession> {
+                capturedContactName = contactName
+                val session = RecordingSession(
+                    recordingId = "rec_$callId",
+                    callId = callId,
+                    phoneNumber = phoneNumber,
+                    contactName = contactName,
+                    filePath = "/fake/rec.m4a",
+                    startedAt = startedAt
+                )
+                recordingState.value = CallRecordingState.Recording(0L, session)
+                return Result.success(session)
+            }
+            override suspend fun stop(): Result<RecordingSession> = Result.failure(IllegalStateException())
+            override suspend fun cancel() {}
+        }
+
+        val csm = CallSessionManager(
+            context = fakeContext,
+            personRepository = fakePersonRepo,
+            leadRepository = fakeLeadRepo,
+            callRepository = fakeCallRepo,
+            simRepository = fakeSimRepo,
+            ringtoneController = fakeRingtoneCtrl,
+            callAudioController = fakeAudioCtrl,
+            proximityController = fakeProximityCtrl,
+            notificationManager = fakeNotifMgr,
+            callHapticManager = fakeHapticMgr,
+            dtmfTonePlayer = fakeDtmfPlayer,
+            contactsProvider = ContactsProvider(fakeContext),
+            dialerRoleManager = DialerRoleManager(fakeContext),
+            callRecordingController = customRecordingCtrl,
+            recordingRepository = fakeRecordingRepo
+        )
+
+        val callId = "CALL_REC_CONTACT_TEST"
+        csm.onTelecomCallAdded(
+            callId = callId,
+            rawNumber = "+91 98765 43210",
+            telecomDisplayName = "John Connor",
+            direction = CallDirection.OUTGOING,
+            initialState = CallState.ACTIVE,
+            capabilities = CallCapabilities(canHold = true, canMute = true),
+            accountHandleId = "0",
+            accountComponentName = "telecom"
+        )
+        delay(100)
+
+        csm.startRecording(callId)
+        delay(100)
+
+        assertEquals("John Connor", capturedContactName)
+    }
+
+    @Test
+    fun testCallogRecordingParserExtractsContactNameAndTimestamp() {
+        val fileName = "Callog_Sarah Connor_20260925_021530.m4a"
+        val meta = com.example.callog.data.provider.RecordingParserChain.parse(fileName, 1727218530000L)
+        assertEquals("Sarah Connor", meta.contactName)
+        assertNull(meta.phoneNumber)
+        assertNotNull(meta.timestamp)
+        assertEquals("CallogRecordingParser", meta.parserName)
+    }
+
+    @Test
+    fun testCallogRecordingParserExtractsPhoneNumberAndTimestamp() {
+        val fileName = "Callog_+919876543210_20260925_021530.m4a"
+        val meta = com.example.callog.data.provider.RecordingParserChain.parse(fileName, 1727218530000L)
+        assertEquals("+919876543210", meta.phoneNumber)
+        assertNull(meta.contactName)
+        assertNotNull(meta.timestamp)
+        assertEquals("CallogRecordingParser", meta.parserName)
     }
 }

@@ -22,13 +22,14 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.example.callog.presentation.theme.CallogShapes
 
 /**
  * Material 3 Expressive [CallogAppBarWithSearch] component.
  * Compatible with stable Material 3, supporting voice search, clearing,
- * navigation icon, actions, and custom placeholder.
+ * navigation icon, actions, custom placeholder, and collapsible [TopAppBarScrollBehavior].
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -37,6 +38,7 @@ fun CallogAppBarWithSearch(
     onQueryChange: (String) -> Unit,
     placeholder: String,
     modifier: Modifier = Modifier,
+    scrollBehavior: TopAppBarScrollBehavior? = null,
     onSearch: (String) -> Unit = {},
     navigationIcon: @Composable (() -> Unit)? = null,
     actions: @Composable (RowScope.() -> Unit)? = null,
@@ -57,28 +59,13 @@ fun CallogAppBarWithSearch(
         }
     }
 
-    Surface(
-        color = MaterialTheme.colorScheme.surfaceContainerLow,
-        modifier = modifier.fillMaxWidth()
-    ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier
-                .fillMaxWidth()
-                .statusBarsPadding()
-                .padding(horizontal = 8.dp, vertical = 8.dp)
-        ) {
-            if (navigationIcon != null) {
-                navigationIcon()
-                Spacer(modifier = Modifier.width(4.dp))
-            }
-
-            // Search input box
+    TopAppBar(
+        title = {
             Surface(
                 shape = shape,
                 color = MaterialTheme.colorScheme.surfaceContainerHigh,
                 modifier = Modifier
-                    .weight(1f)
+                    .fillMaxWidth()
                     .height(48.dp)
             ) {
                 TextField(
@@ -89,7 +76,8 @@ fun CallogAppBarWithSearch(
                             text = placeholder,
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 1
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
                         )
                     },
                     leadingIcon = {
@@ -153,24 +141,37 @@ fun CallogAppBarWithSearch(
                     modifier = Modifier.fillMaxSize()
                 )
             }
-
+        },
+        navigationIcon = {
+            if (navigationIcon != null) {
+                navigationIcon()
+            }
+        },
+        actions = {
             if (actions != null) {
-                Spacer(modifier = Modifier.width(4.dp))
                 actions()
             }
-        }
-    }
+        },
+        scrollBehavior = scrollBehavior,
+        colors = TopAppBarDefaults.topAppBarColors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+            scrolledContainerColor = MaterialTheme.colorScheme.surface
+        ),
+        modifier = modifier
+    )
 }
 
 /**
  * Backwards compatibility alias for ExpressiveAppBarWithSearch.
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ExpressiveAppBarWithSearch(
     query: String,
     onQueryChange: (String) -> Unit,
     placeholder: String,
     modifier: Modifier = Modifier,
+    scrollBehavior: TopAppBarScrollBehavior? = null,
     onSearch: (String) -> Unit = {},
     navigationIcon: @Composable (() -> Unit)? = null,
     actions: @Composable (RowScope.() -> Unit)? = null,
@@ -182,6 +183,7 @@ fun ExpressiveAppBarWithSearch(
         onQueryChange = onQueryChange,
         placeholder = placeholder,
         modifier = modifier,
+        scrollBehavior = scrollBehavior,
         onSearch = onSearch,
         navigationIcon = navigationIcon,
         actions = actions,
@@ -189,3 +191,4 @@ fun ExpressiveAppBarWithSearch(
         shape = shape
     )
 }
+

@@ -19,6 +19,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -147,13 +148,16 @@ fun ContactsContent(
         }
     }
 
+    val scrollBehavior = TopAppBarDefaults.enterAlwaysScrollBehavior()
+
     Scaffold(
-        modifier = modifier,
+        modifier = modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
         topBar = {
             CallogAppBarWithSearch(
                 query = state.query,
                 onQueryChange = { onEvent(ContactsEvent.SearchChanged(it)) },
                 placeholder = searchPlaceholder,
+                scrollBehavior = scrollBehavior,
                 navigationIcon = {
                     if (onMenuClick != null) {
                         IconButton(onClick = onMenuClick) {
@@ -214,173 +218,169 @@ fun ContactsContent(
                 onSelected = { onEvent(ContactsEvent.SelectSource(it)) }
             )
 
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(horizontal = 16.dp, vertical = 8.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+            // Sync status banner for Cloud Tab (only occupies space when visible)
+            AnimatedVisibility(
+                visible = state.source == ContactSource.CLOUD && (state.syncStatus == "SYNCING" || (state.syncStatus?.startsWith("ERROR") == true))
             ) {
-
-                // Sync status banner for Cloud Tab
-                AnimatedVisibility(
-                    visible = state.source == ContactSource.CLOUD && (state.syncStatus == "SYNCING" || (state.syncStatus?.startsWith("ERROR") == true))
+                Surface(
+                    shape = CallogShapes.subtle,
+                    color = if (state.syncStatus == "SYNCING") AllSetBlue.copy(alpha = 0.12f) else Red500.copy(alpha = 0.12f),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(start = 16.dp, end = 16.dp, top = 8.dp)
                 ) {
-                    Surface(
-                        shape = CallogShapes.subtle,
-                        color = if (state.syncStatus == "SYNCING") AllSetBlue.copy(alpha = 0.12f) else Red500.copy(alpha = 0.12f),
-                        modifier = Modifier.fillMaxWidth()
+                    Row(
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                            verticalAlignment = Alignment.CenterVertically
+                        Icon(
+                            imageVector = if (state.syncStatus == "SYNCING") Icons.Default.Sync else Icons.Default.CloudOff,
+                            contentDescription = null,
+                            tint = if (state.syncStatus == "SYNCING") AllSetBlue else Red500,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = if (state.syncStatus == "SYNCING") "Syncing global contacts from Supabase..." else (state.syncStatus ?: ""),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onBackground,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                }
+            }
+
+            // Check Device tab permissions state
+            if (state.source == ContactSource.DEVICE && !state.hasContactsPermission) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f)
+                        .padding(horizontal = 16.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center,
+                        modifier = Modifier.padding(24.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.PermContactCalendar,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(56.dp)
+                        )
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Text(
+                            text = "Phone Contacts Unavailable",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onBackground
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = "Contacts on your phone aren't available yet. Allow contacts permission to browse your phone address book.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                        )
+                        Spacer(modifier = Modifier.height(20.dp))
+                        Button(
+                            onClick = {
+                                permissionLauncher.launch(Manifest.permission.READ_CONTACTS)
+                            },
+                            shape = CallogShapes.interactive,
+                            colors = ButtonDefaults.buttonColors(containerColor = AllSetBlue)
                         ) {
-                            Icon(
-                                imageVector = if (state.syncStatus == "SYNCING") Icons.Default.Sync else Icons.Default.CloudOff,
-                                contentDescription = null,
-                                tint = if (state.syncStatus == "SYNCING") AllSetBlue else Red500,
-                                modifier = Modifier.size(16.dp)
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(
-                                text = if (state.syncStatus == "SYNCING") "Syncing global contacts from Supabase..." else (state.syncStatus ?: ""),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onBackground,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
+                            Text("Allow Contacts Access")
                         }
                     }
                 }
+            } else if (state.contacts.isEmpty()) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f)
+                        .padding(horizontal = 16.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    val emptyTitle = when {
+                        state.query.isNotEmpty() -> "No Matching Contacts"
+                        state.source == ContactSource.CLOUD -> "No Cloud Contacts"
+                        else -> "No Phone Contacts"
+                    }
+                    val emptyDesc = when {
+                        state.query.isNotEmpty() -> "No contacts match '${state.query}'"
+                        state.source == ContactSource.CLOUD -> "No cloud contacts cached yet. Connect to Supabase and sync to load your CRM contacts."
+                        else -> "No phone contacts found on this device."
+                    }
 
-                // Check Device tab permissions state
-                if (state.source == ContactSource.DEVICE && !state.hasContactsPermission) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .weight(1f),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.Center,
-                            modifier = Modifier.padding(24.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Outlined.PermContactCalendar,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(56.dp)
-                            )
-                            Spacer(modifier = Modifier.height(16.dp))
-                            Text(
-                                text = "Phone Contacts Unavailable",
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onBackground
-                            )
-                            Spacer(modifier = Modifier.height(8.dp))
-                            Text(
-                                text = "Contacts on your phone aren't available yet. Allow contacts permission to browse your phone address book.",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                textAlign = androidx.compose.ui.text.style.TextAlign.Center
-                            )
-                            Spacer(modifier = Modifier.height(20.dp))
-                            Button(
+                    ExpressiveEmptyState(
+                        icon = if (state.source == ContactSource.CLOUD) Icons.Outlined.CloudOff else Icons.Outlined.PersonSearch,
+                        title = emptyTitle,
+                        description = emptyDesc,
+                        actionLabel = if (state.query.isNotEmpty()) "Clear Search" else if (state.source == ContactSource.CLOUD) "Add Contact" else null,
+                        actionIcon = if (state.query.isNotEmpty()) Icons.Default.Clear else if (state.source == ContactSource.CLOUD) Icons.Default.PersonAdd else null,
+                        onAction = {
+                            if (state.query.isNotEmpty()) {
+                                onEvent(ContactsEvent.SearchChanged(""))
+                            } else if (state.source == ContactSource.CLOUD) {
+                                showAddContactDialog = true
+                            }
+                        }
+                    )
+                }
+            } else {
+                LazyColumn(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                    contentPadding = PaddingValues(start = 16.dp, top = 8.dp, end = 16.dp, bottom = 80.dp)
+                ) {
+                    if (state.source == ContactSource.CLOUD) {
+                        items(
+                            items = cloudGroups,
+                            key = { "cloud_group_${it.key}" }
+                        ) { group ->
+                            CloudContactCard(
+                                item = group.primaryItem,
+                                duplicateCount = group.totalCount,
                                 onClick = {
-                                    permissionLauncher.launch(Manifest.permission.READ_CONTACTS)
+                                    if (group.isDuplicateGroup) {
+                                        duplicateGroupForSelection = group
+                                    } else {
+                                        onContactClick(group.primaryItem)
+                                    }
                                 },
-                                shape = CallogShapes.interactive,
-                                colors = ButtonDefaults.buttonColors(containerColor = AllSetBlue)
-                            ) {
-                                Text("Allow Contacts Access")
-                            }
+                                onCallClick = onCallClick
+                            )
                         }
-                    }
-                } else if (state.contacts.isEmpty()) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .weight(1f),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        val emptyTitle = when {
-                            state.query.isNotEmpty() -> "No Matching Contacts"
-                            state.source == ContactSource.CLOUD -> "No Cloud Contacts"
-                            else -> "No Phone Contacts"
-                        }
-                        val emptyDesc = when {
-                            state.query.isNotEmpty() -> "No contacts match '${state.query}'"
-                            state.source == ContactSource.CLOUD -> "No cloud contacts cached yet. Connect to Supabase and sync to load your CRM contacts."
-                            else -> "No phone contacts found on this device."
-                        }
-
-                        ExpressiveEmptyState(
-                            icon = if (state.source == ContactSource.CLOUD) Icons.Outlined.CloudOff else Icons.Outlined.PersonSearch,
-                            title = emptyTitle,
-                            description = emptyDesc,
-                            actionLabel = if (state.query.isNotEmpty()) "Clear Search" else if (state.source == ContactSource.CLOUD) "Add Contact" else null,
-                            actionIcon = if (state.query.isNotEmpty()) Icons.Default.Clear else if (state.source == ContactSource.CLOUD) Icons.Default.PersonAdd else null,
-                            onAction = {
-                                if (state.query.isNotEmpty()) {
-                                    onEvent(ContactsEvent.SearchChanged(""))
-                                } else if (state.source == ContactSource.CLOUD) {
-                                    showAddContactDialog = true
-                                }
-                            }
-                        )
-                    }
-                } else {
-                    LazyColumn(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .weight(1f),
-                        verticalArrangement = Arrangement.spacedBy(10.dp),
-                        contentPadding = PaddingValues(bottom = 80.dp)
-                    ) {
-                        if (state.source == ContactSource.CLOUD) {
-                            items(
-                                items = cloudGroups,
-                                key = { "cloud_group_${it.key}" }
-                            ) { group ->
-                                CloudContactCard(
-                                    item = group.primaryItem,
-                                    duplicateCount = group.totalCount,
-                                    onClick = {
-                                        if (group.isDuplicateGroup) {
-                                            duplicateGroupForSelection = group
-                                        } else {
-                                            onContactClick(group.primaryItem)
-                                        }
-                                    },
-                                    onCallClick = onCallClick
-                                )
-                            }
-                        } else {
-                            items(
-                                items = state.contacts,
-                                key = { item ->
-                                    when (item) {
-                                        is ContactDirectoryItem.Cloud -> "cloud_${item.person.id}"
-                                        is ContactDirectoryItem.Device -> "device_${item.contactId}"
-                                    }
-                                }
-                            ) { item ->
+                    } else {
+                        items(
+                            items = state.contacts,
+                            key = { item ->
                                 when (item) {
-                                    is ContactDirectoryItem.Cloud -> {
-                                        CloudContactCard(
-                                            item = item,
-                                            onClick = { onContactClick(item) },
-                                            onCallClick = onCallClick
-                                        )
-                                    }
-                                    is ContactDirectoryItem.Device -> {
-                                        DeviceContactCard(
-                                            item = item,
-                                            onClick = { onContactClick(item) },
-                                            onCallClick = onCallClick
-                                        )
-                                    }
+                                    is ContactDirectoryItem.Cloud -> "cloud_${item.person.id}"
+                                    is ContactDirectoryItem.Device -> "device_${item.contactId}"
+                                }
+                            }
+                        ) { item ->
+                            when (item) {
+                                is ContactDirectoryItem.Cloud -> {
+                                    CloudContactCard(
+                                        item = item,
+                                        onClick = { onContactClick(item) },
+                                        onCallClick = onCallClick
+                                    )
+                                }
+                                is ContactDirectoryItem.Device -> {
+                                    DeviceContactCard(
+                                        item = item,
+                                        onClick = { onContactClick(item) },
+                                        onCallClick = onCallClick
+                                    )
                                 }
                             }
                         }

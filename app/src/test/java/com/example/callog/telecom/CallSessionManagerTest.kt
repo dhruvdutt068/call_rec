@@ -776,12 +776,13 @@ class CallSessionManagerTest {
 
         override suspend fun canRecord(): Boolean = true
 
-        override suspend fun start(callId: String, phoneNumber: String?, personId: String?, simSlot: Int?, startedAt: Long): Result<com.example.callog.domain.call.RecordingSession> {
+        override suspend fun start(callId: String, phoneNumber: String?, contactName: String?, personId: String?, simSlot: Int?, startedAt: Long): Result<com.example.callog.domain.call.RecordingSession> {
             startCount++
             val session = com.example.callog.domain.call.RecordingSession(
                 recordingId = "rec_$callId",
                 callId = callId,
                 phoneNumber = phoneNumber,
+                contactName = contactName,
                 personId = personId,
                 simSlot = simSlot,
                 filePath = "/fake/rec_$callId.m4a",
