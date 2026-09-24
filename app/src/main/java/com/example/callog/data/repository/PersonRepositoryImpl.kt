@@ -14,6 +14,8 @@ import com.example.callog.domain.model.*
 import com.example.callog.domain.repository.PersonRepository
 import com.example.callog.domain.usecase.ResolveAndAttachContactUseCase
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
@@ -305,12 +307,12 @@ class PersonRepositoryImpl @Inject constructor(
     override suspend fun syncGlobalContactsFromSupabase(): Result<List<Person>> = withContext(Dispatchers.IO) {
         return@withContext try {
             // 1. Fetch remote resources concurrently
-            val (remotePeopleResult, remoteDevicesResult, remotePhonesResult, remoteAliasesResult, remoteLeadsResult) = kotlinx.coroutines.coroutineScope {
-                val peopleDeferred = kotlinx.coroutines.async { supabaseService.fetchGlobalPeople() }
-                val devicesDeferred = kotlinx.coroutines.async { supabaseService.fetchGlobalDevices() }
-                val phonesDeferred = kotlinx.coroutines.async { supabaseService.fetchGlobalPhoneNumbers() }
-                val aliasesDeferred = kotlinx.coroutines.async { supabaseService.fetchGlobalContactAliases() }
-                val leadsDeferred = kotlinx.coroutines.async { supabaseService.fetchGlobalLeads() }
+            val (remotePeopleResult, remoteDevicesResult, remotePhonesResult, remoteAliasesResult, remoteLeadsResult) = coroutineScope {
+                val peopleDeferred = async { supabaseService.fetchGlobalPeople() }
+                val devicesDeferred = async { supabaseService.fetchGlobalDevices() }
+                val phonesDeferred = async { supabaseService.fetchGlobalPhoneNumbers() }
+                val aliasesDeferred = async { supabaseService.fetchGlobalContactAliases() }
+                val leadsDeferred = async { supabaseService.fetchGlobalLeads() }
 
                 listOf(
                     peopleDeferred.await(),
