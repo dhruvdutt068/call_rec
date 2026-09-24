@@ -335,15 +335,12 @@ fun CrmNav3Container(
                         NavigationDrawerItem(
                             icon = { Icon(Icons.Default.Dialpad, contentDescription = null) },
                             label = { Text("Dialer & Keypad") },
-                            selected = multiStack.selectedTab == CrmBottomTab.DIALER,
+                            selected = false,
                             onClick = {
-                                multiStack.selectTab(CrmBottomTab.DIALER, popToRootIfSelected = true)
+                                multiStack.navigate(Nav3Key.CrmTab.Dialer)
                                 closeDrawer()
                             },
                             colors = NavigationDrawerItemDefaults.colors(
-                                selectedContainerColor = Teal500.copy(alpha = 0.2f),
-                                selectedIconColor = Teal300,
-                                selectedTextColor = Slate50,
                                 unselectedIconColor = Slate400,
                                 unselectedTextColor = Slate300
                             ),
@@ -353,15 +350,12 @@ fun CrmNav3Container(
                         NavigationDrawerItem(
                             icon = { Icon(Icons.Default.History, contentDescription = null) },
                             label = { Text("Call Logs & History") },
-                            selected = multiStack.selectedTab == CrmBottomTab.CALL_LOGS,
+                            selected = false,
                             onClick = {
-                                multiStack.selectTab(CrmBottomTab.CALL_LOGS, popToRootIfSelected = true)
+                                multiStack.navigate(Nav3Key.CrmTab.CallLogs)
                                 closeDrawer()
                             },
                             colors = NavigationDrawerItemDefaults.colors(
-                                selectedContainerColor = Teal500.copy(alpha = 0.2f),
-                                selectedIconColor = Teal300,
-                                selectedTextColor = Slate50,
                                 unselectedIconColor = Slate400,
                                 unselectedTextColor = Slate300
                             ),
@@ -413,7 +407,6 @@ fun CrmNav3Container(
                             fontWeight = FontWeight.SemiBold
                         )
 
-
                         NavigationDrawerItem(
                             icon = { Icon(Icons.Default.Analytics, contentDescription = null) },
                             label = { Text("Call Analytics & Reports") },
@@ -450,6 +443,22 @@ fun CrmNav3Container(
                             selected = false,
                             onClick = {
                                 multiStack.navigate(Nav3Key.Task.TaskList)
+                                closeDrawer()
+                            },
+                            colors = NavigationDrawerItemDefaults.colors(
+                                unselectedIconColor = Slate400,
+                                unselectedTextColor = Slate300
+                            ),
+                            shape = RoundedCornerShape(12.dp)
+                        )
+
+                        // Basic Settings screen accessible by anyone
+                        NavigationDrawerItem(
+                            icon = { Icon(Icons.Default.Settings, contentDescription = null) },
+                            label = { Text("Settings") },
+                            selected = false,
+                            onClick = {
+                                multiStack.navigate(Nav3Key.CrmTab.Settings)
                                 closeDrawer()
                             },
                             colors = NavigationDrawerItemDefaults.colors(
@@ -534,30 +543,6 @@ fun CrmNav3Container(
                             selected = false,
                             onClick = {
                                 navigateOrPromptPin(Nav3Key.CrmTab.RingtoneSettings, false)
-                            },
-                            colors = NavigationDrawerItemDefaults.colors(
-                                unselectedIconColor = Slate400,
-                                unselectedTextColor = Slate300
-                            ),
-                            shape = RoundedCornerShape(12.dp)
-                        )
-
-                        NavigationDrawerItem(
-                            icon = { Icon(Icons.Default.Settings, contentDescription = null) },
-                            label = { Text("Settings & Sync") },
-                            badge = {
-                                if (!isDeveloperModeActive) {
-                                    Icon(
-                                        imageVector = Icons.Default.Lock,
-                                        contentDescription = "Locked",
-                                        tint = Slate500,
-                                        modifier = Modifier.size(14.dp)
-                                    )
-                                }
-                            },
-                            selected = false,
-                            onClick = {
-                                navigateOrPromptPin(Nav3Key.CrmTab.Settings, false)
                             },
                             colors = NavigationDrawerItemDefaults.colors(
                                 unselectedIconColor = Slate400,

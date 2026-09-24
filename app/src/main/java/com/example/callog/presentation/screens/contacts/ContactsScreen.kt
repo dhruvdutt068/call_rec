@@ -122,6 +122,7 @@ fun ContactsContent(
 ) {
     val context = LocalContext.current
     var showAddContactDialog by remember { mutableStateOf(false) }
+    var duplicateGroupForSelection by remember { mutableStateOf<CloudContactGroup?>(null) }
 
     val permissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
@@ -136,6 +137,14 @@ fun ContactsContent(
         "Search cloud CRM, aliases..."
     } else {
         "Search phone contacts & numbers..."
+    }
+
+    val cloudGroups = remember(state.contacts, state.source) {
+        if (state.source == ContactSource.CLOUD) {
+            groupCloudContacts(state.contacts.filterIsInstance<ContactDirectoryItem.Cloud>())
+        } else {
+            emptyList()
+        }
     }
 
     Scaffold(
@@ -329,29 +338,49 @@ fun ContactsContent(
                         verticalArrangement = Arrangement.spacedBy(10.dp),
                         contentPadding = PaddingValues(bottom = 80.dp)
                     ) {
-                        items(
-                            items = state.contacts,
-                            key = { item ->
-                                when (item) {
-                                    is ContactDirectoryItem.Cloud -> "cloud_${item.person.id}"
-                                    is ContactDirectoryItem.Device -> "device_${item.contactId}"
-                                }
+                        if (state.source == ContactSource.CLOUD) {
+                            items(
+                                items = cloudGroups,
+                                key = { "cloud_group_${it.key}" }
+                            ) { group ->
+                                CloudContactCard(
+                                    item = group.primaryItem,
+                                    duplicateCount = group.totalCount,
+                                    onClick = {
+                                        if (group.isDuplicateGroup) {
+                                            duplicateGroupForSelection = group
+                                        } else {
+                                            onContactClick(group.primaryItem)
+                                        }
+                                    },
+                                    onCallClick = onCallClick
+                                )
                             }
-                        ) { item ->
-                            when (item) {
-                                is ContactDirectoryItem.Cloud -> {
-                                    CloudContactCard(
-                                        item = item,
-                                        onClick = { onContactClick(item) },
-                                        onCallClick = onCallClick
-                                    )
+                        } else {
+                            items(
+                                items = state.contacts,
+                                key = { item ->
+                                    when (item) {
+                                        is ContactDirectoryItem.Cloud -> "cloud_${item.person.id}"
+                                        is ContactDirectoryItem.Device -> "device_${item.contactId}"
+                                    }
                                 }
-                                is ContactDirectoryItem.Device -> {
-                                    DeviceContactCard(
-                                        item = item,
-                                        onClick = { onContactClick(item) },
-                                        onCallClick = onCallClick
-                                    )
+                            ) { item ->
+                                when (item) {
+                                    is ContactDirectoryItem.Cloud -> {
+                                        CloudContactCard(
+                                            item = item,
+                                            onClick = { onContactClick(item) },
+                                            onCallClick = onCallClick
+                                        )
+                                    }
+                                    is ContactDirectoryItem.Device -> {
+                                        DeviceContactCard(
+                                            item = item,
+                                            onClick = { onContactClick(item) },
+                                            onCallClick = onCallClick
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -375,6 +404,239 @@ fun ContactsContent(
             }
         )
     }
+
+    duplicateGroupForSelection?.let { group ->
+        DuplicateContactSelectionDialog(
+            group = group,
+            onDismiss = { duplicateGroupForSelection = null },
+            onSelectContact = { selectedItem ->
+                duplicateGroupForSelection = null
+                onContactClick(selectedItem)
+            }
+        )
+    }
+}
+
+/**
+ * Data holder representing a consolidated group of duplicate Cloud CRM contacts.
+ */
+data class CloudContactGroup(
+    val key: String,
+    val primaryItem: ContactDirectoryItem.Cloud,
+    val allProfiles: List<ContactDirectoryItem.Cloud>
+) {
+    val totalCount: Int get() = allProfiles.size
+    val isDuplicateGroup: Boolean get() = totalCount > 1
+    val displayName: String get() = primaryItem.displayName
+    val primaryPhone: String? get() = primaryItem.primaryPhone
+    val companyName: String? get() = primaryItem.companyName
+}
+
+/**
+ * Clusters Cloud contacts into groups based on matching normalized names or overlapping phone numbers.
+ */
+fun groupCloudContacts(items: List<ContactDirectoryItem.Cloud>): List<CloudContactGroup> {
+    if (items.isEmpty()) return emptyList()
+
+    val groups = mutableListOf<MutableList<ContactDirectoryItem.Cloud>>()
+
+    fun getNormalizedPhones(item: ContactDirectoryItem.Cloud): Set<String> {
+        val phones = mutableSetOf<String>()
+        item.primaryPhone?.let { p ->
+            val digits = p.filter { it.isDigit() }
+            if (digits.length >= 7) phones.add(digits.takeLast(10))
+            else if (digits.isNotEmpty()) phones.add(digits)
+        }
+        item.person.phoneNumbers.forEach { pn ->
+            val digits = pn.normalizedNumber.ifBlank { pn.phoneNumber }.filter { it.isDigit() }
+            if (digits.length >= 7) phones.add(digits.takeLast(10))
+            else if (digits.isNotEmpty()) phones.add(digits)
+        }
+        return phones
+    }
+
+    fun areDuplicates(a: ContactDirectoryItem.Cloud, b: ContactDirectoryItem.Cloud): Boolean {
+        if (a.person.id == b.person.id) return true
+
+        val nameA = a.displayName.trim().lowercase()
+        val nameB = b.displayName.trim().lowercase()
+        val nameMatch = nameA.isNotBlank() && nameA == nameB
+
+        val phonesA = getNormalizedPhones(a)
+        val phonesB = getNormalizedPhones(b)
+        val phoneMatch = phonesA.isNotEmpty() && phonesB.isNotEmpty() && phonesA.intersect(phonesB).isNotEmpty()
+
+        return nameMatch || phoneMatch
+    }
+
+    for (item in items) {
+        val matchingGroup = groups.firstOrNull { group ->
+            group.any { existing -> areDuplicates(existing, item) }
+        }
+        if (matchingGroup != null) {
+            matchingGroup.add(item)
+        } else {
+            groups.add(mutableListOf(item))
+        }
+    }
+
+    return groups.map { groupList ->
+        CloudContactGroup(
+            key = groupList.first().person.id,
+            primaryItem = groupList.first(),
+            allProfiles = groupList
+        )
+    }
+}
+
+/**
+ * Dialog popup prompting user to select the exact profile when multiple duplicate cloud contacts match.
+ */
+@Composable
+private fun DuplicateContactSelectionDialog(
+    group: CloudContactGroup,
+    onDismiss: () -> Unit,
+    onSelectContact: (ContactDirectoryItem.Cloud) -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Column {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.ContentCopy,
+                        contentDescription = null,
+                        tint = AllSetBlue,
+                        modifier = Modifier.size(24.dp)
+                    )
+                    Text(
+                        text = "Select Contact Profile",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = "${group.totalCount} matching profiles found for '${group.displayName}'. Select which one to view:",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        },
+        text = {
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 360.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                items(
+                    items = group.allProfiles,
+                    key = { it.person.id }
+                ) { profile ->
+                    Surface(
+                        shape = CallogShapes.interactive,
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                        tonalElevation = 1.dp,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                onSelectContact(profile)
+                            }
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            val initials = remember(profile.displayName) {
+                                val parts = profile.displayName.trim().split("\\s+".toRegex())
+                                if (parts.size >= 2) {
+                                    "${parts[0].take(1)}${parts[1].take(1)}".uppercase()
+                                } else {
+                                    profile.displayName.take(1).uppercase()
+                                }
+                            }
+                            ContactAvatar(
+                                name = profile.displayName,
+                                initials = initials,
+                                photoUri = null,
+                                modifier = Modifier.size(40.dp)
+                            )
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    Text(
+                                        text = profile.displayName,
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.onSurface,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                    Surface(
+                                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
+                                        shape = CallogShapes.subtle
+                                    ) {
+                                        Text(
+                                            text = "#${profile.person.id.take(6)}",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.primary,
+                                            modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
+                                        )
+                                    }
+                                }
+                                if (!profile.companyName.isNullOrBlank()) {
+                                    Text(
+                                        text = profile.companyName,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.primary,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                }
+                                val phone = profile.primaryPhone ?: profile.person.phoneNumbers.firstOrNull()?.phoneNumber ?: "No phone"
+                                Text(
+                                    text = phone,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                if (!profile.person.notes.isNullOrBlank()) {
+                                    Text(
+                                        text = "Note: ${profile.person.notes}",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.outline,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                }
+                            }
+                            Icon(
+                                imageVector = Icons.Default.ChevronRight,
+                                contentDescription = "Select profile",
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {},
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel")
+            }
+        },
+        shape = CallogShapes.dialog,
+        containerColor = MaterialTheme.colorScheme.surface
+    )
 }
 
 /**
@@ -427,6 +689,7 @@ private fun ContactSourceTabs(
 @Composable
 private fun CloudContactCard(
     item: ContactDirectoryItem.Cloud,
+    duplicateCount: Int = 1,
     onClick: () -> Unit,
     onCallClick: (String) -> Unit,
     modifier: Modifier = Modifier
@@ -472,16 +735,42 @@ private fun CloudContactCard(
                     )
 
                     Spacer(modifier = Modifier.width(6.dp))
-                    Surface(
-                        color = AllSetTeal.copy(alpha = 0.15f),
-                        shape = CallogShapes.subtle
-                    ) {
-                        Text(
-                            text = "Cloud CRM",
-                            style = CallogTypography.statusLabel,
-                            color = AllSetTeal,
-                            modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp)
-                        )
+
+                    if (duplicateCount > 1) {
+                        Surface(
+                            color = MaterialTheme.colorScheme.tertiaryContainer,
+                            shape = CallogShapes.subtle
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Outlined.ContentCopy,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.onTertiaryContainer,
+                                    modifier = Modifier.size(11.dp)
+                                )
+                                Spacer(modifier = Modifier.width(3.dp))
+                                Text(
+                                    text = "$duplicateCount profiles",
+                                    style = CallogTypography.statusLabel,
+                                    color = MaterialTheme.colorScheme.onTertiaryContainer
+                                )
+                            }
+                        }
+                    } else {
+                        Surface(
+                            color = AllSetTeal.copy(alpha = 0.15f),
+                            shape = CallogShapes.subtle
+                        ) {
+                            Text(
+                                text = "Cloud CRM",
+                                style = CallogTypography.statusLabel,
+                                color = AllSetTeal,
+                                modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp)
+                            )
+                        }
                     }
 
                     if (item.aliasCount > 1) {
