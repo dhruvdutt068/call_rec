@@ -57,10 +57,11 @@ enum class CrmBottomTab(
     val title: String,
     val icon: ImageVector
 ) {
+    CONTACTS("Contacts", Icons.Default.People),
     DIALER("Dialer", Icons.Default.Dialpad),
     CALL_LOGS("Call Logs", Icons.Default.History),
-    CONTACTS("Contacts", Icons.Default.People),
-    RECORDINGS("Recordings", Icons.Default.GraphicEq)
+    RECORDINGS("Recordings", Icons.Default.GraphicEq),
+    SETTINGS("Settings", Icons.Default.Settings)
 }
 
 /**
@@ -110,10 +111,11 @@ fun CrmNav3Container(
 
     val tabRoots = remember {
         mapOf<CrmBottomTab, Nav3Key>(
+            CrmBottomTab.CONTACTS to Nav3Key.Contacts.ContactList,
             CrmBottomTab.DIALER to Nav3Key.CrmTab.Dialer,
             CrmBottomTab.CALL_LOGS to Nav3Key.CrmTab.CallLogs,
-            CrmBottomTab.CONTACTS to Nav3Key.Contacts.ContactList,
-            CrmBottomTab.RECORDINGS to Nav3Key.CrmTab.Recordings
+            CrmBottomTab.RECORDINGS to Nav3Key.CrmTab.Recordings,
+            CrmBottomTab.SETTINGS to Nav3Key.CrmTab.Settings
         )
     }
 
@@ -551,29 +553,6 @@ fun CrmNav3Container(
                             shape = RoundedCornerShape(12.dp)
                         )
 
-                        NavigationDrawerItem(
-                            icon = { Icon(Icons.Default.PhoneCallback, contentDescription = null) },
-                            label = { Text("Call Simulation Studio") },
-                            badge = {
-                                if (!isDeveloperModeActive) {
-                                    Icon(
-                                        imageVector = Icons.Default.Lock,
-                                        contentDescription = "Locked",
-                                        tint = Slate500,
-                                        modifier = Modifier.size(14.dp)
-                                    )
-                                }
-                            },
-                            selected = false,
-                            onClick = {
-                                navigateOrPromptPin(Nav3Key.CrmTab.CallSimulator, false)
-                            },
-                            colors = NavigationDrawerItemDefaults.colors(
-                                unselectedIconColor = Slate400,
-                                unselectedTextColor = Slate300
-                            ),
-                            shape = RoundedCornerShape(12.dp)
-                        )
 
                         NavigationDrawerItem(
                             icon = { Icon(Icons.Default.Code, contentDescription = null) },
@@ -713,9 +692,6 @@ fun CrmNav3Container(
                             onNavigateToContact = { contactId ->
                                 multiStack.selectTab(CrmBottomTab.CONTACTS)
                                 multiStack.navigate(Nav3Key.Contacts.ContactDetails(contactId = contactId))
-                            },
-                            onNavigateToCallSimulator = {
-                                multiStack.navigate(Nav3Key.CrmTab.CallSimulator)
                             },
                             onMenuClick = openDrawer
                         )
@@ -868,12 +844,6 @@ fun CrmNav3Container(
                         )
                     }
 
-                    // --- Call Simulation Studio Flow ---
-                    is Nav3Key.CrmTab.CallSimulator -> {
-                        CallSimulatorScreen(
-                            onBackClick = { multiStack.pop() }
-                        )
-                    }
 
                     else -> {
                         Box(modifier = Modifier.padding(innerPadding)) {

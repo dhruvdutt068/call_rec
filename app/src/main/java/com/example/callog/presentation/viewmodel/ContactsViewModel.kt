@@ -40,11 +40,8 @@ class ContactsViewModel(
         SharingStarted.WhileSubscribed(5_000)
     )
 
-    init {
-        refresh()
-    }
 
-    private val _selectedSource = MutableStateFlow(ContactSource.CLOUD)
+    private val _selectedSource = MutableStateFlow(ContactSource.DEVICE)
     private val _searchQuery = MutableStateFlow("")
     private val _isRefreshing = MutableStateFlow(false)
     private val _hasContactsPermission = MutableStateFlow(true)
@@ -114,6 +111,11 @@ class ContactsViewModel(
         ContactsUiState()
     )
 
+    /** Called once by the screen via LaunchedEffect(Unit) — safe because all fields are initialized by this point. */
+    fun triggerInitialSync() {
+        refresh()
+    }
+
     fun onEvent(event: ContactsEvent) {
         when (event) {
             is ContactsEvent.SelectSource -> selectSource(event.source)
@@ -137,9 +139,9 @@ class ContactsViewModel(
 
     fun setContactsPermission(granted: Boolean) {
         _hasContactsPermission.value = granted
-        if (granted) {
-            refresh()
-        }
+        // Do NOT call refresh() here — initial sync is triggered by triggerInitialSync()
+        // from the screen's LaunchedEffect(Unit). Calling refresh() here would cause a
+        // duplicate sync race on startup (permission check + init sync overlapping).
     }
 
     fun refresh() {

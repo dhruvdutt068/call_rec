@@ -39,7 +39,6 @@ fun DeveloperDashboardScreen(
     onBackClick: () -> Unit,
     onNavigateToLogs: () -> Unit,
     onNavigateToRecordingDiagnostics: () -> Unit,
-    onNavigateToCallSimulator: () -> Unit = {},
     onNavigateToEnvironmentPresets: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
@@ -577,63 +576,6 @@ fun DeveloperDashboardScreen(
                 }
             }
 
-            // Section 4: Call Simulation Studio Card
-            DashboardSectionHeader(title = "Call Simulation Studio")
-            GlassyCard(modifier = Modifier.fillMaxWidth()) {
-                Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .size(40.dp)
-                                .clip(CircleShape)
-                                .background(Teal500.copy(alpha = 0.2f)),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.PhoneCallback,
-                                contentDescription = null,
-                                tint = Teal300,
-                                modifier = Modifier.size(22.dp)
-                            )
-                        }
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = "Live Call Simulator",
-                                fontWeight = FontWeight.Bold,
-                                color = Slate50,
-                                style = MaterialTheme.typography.titleMedium
-                            )
-                            Text(
-                                text = "Simulate incoming & outgoing calls with real ringtones, lock-screen in-call UI, dual-SIM, and CRM wrap-up.",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = Slate400
-                            )
-                        }
-                    }
-
-                    Button(
-                        onClick = onNavigateToCallSimulator,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(46.dp),
-                        shape = RoundedCornerShape(8.dp),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = Teal500,
-                            contentColor = Slate50
-                        )
-                    ) {
-                        Icon(Icons.Default.PlayCircle, contentDescription = null)
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("Open Call Simulation Studio", fontWeight = FontWeight.Bold)
-                    }
-                }
-            }
-
-            Spacer(modifier = Modifier.height(8.dp))
 
             // Action Buttons Panel
             Button(

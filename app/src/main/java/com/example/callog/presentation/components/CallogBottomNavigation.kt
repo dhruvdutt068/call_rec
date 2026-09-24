@@ -66,9 +66,13 @@ fun CallogBottomNavigation(
     modifier: Modifier = Modifier
 ) = CallogBottomNavigation(
     isContactsSelected = selectedTab == CrmBottomTab.CONTACTS,
+    isDialerSelected = selectedTab == CrmBottomTab.DIALER,
     isRecordingsSelected = selectedTab == CrmBottomTab.RECORDINGS,
+    isSettingsSelected = selectedTab == CrmBottomTab.SETTINGS,
     onContactsClick = { onTabSelected(CrmBottomTab.CONTACTS) },
+    onDialerClick = { onTabSelected(CrmBottomTab.DIALER) },
     onRecordingsClick = { onTabSelected(CrmBottomTab.RECORDINGS) },
+    onSettingsClick = { onTabSelected(CrmBottomTab.SETTINGS) },
     onAddContact = onAddContact,
     onCreateTask = onCreateTask,
     onScheduleMeeting = onScheduleMeeting,
@@ -88,9 +92,13 @@ fun CallogBottomNavigation(
     modifier: Modifier = Modifier
 ) = CallogBottomNavigation(
     isContactsSelected = currentDestination is AllSetNavKey.Contacts || currentDestination == AllSetNavKey.ContactsTab,
+    isDialerSelected = false,
     isRecordingsSelected = currentDestination == AllSetNavKey.CallLogs,
+    isSettingsSelected = false,
     onContactsClick = onContactsClick,
+    onDialerClick = {},
     onRecordingsClick = onRecordingsClick,
+    onSettingsClick = {},
     onAddContact = onAddContact,
     onCreateTask = onCreateTask,
     onScheduleMeeting = onScheduleMeeting,
@@ -101,9 +109,13 @@ fun CallogBottomNavigation(
 @Composable
 fun CallogBottomNavigation(
     isContactsSelected: Boolean,
+    isDialerSelected: Boolean,
     isRecordingsSelected: Boolean,
+    isSettingsSelected: Boolean,
     onContactsClick: () -> Unit,
+    onDialerClick: () -> Unit,
     onRecordingsClick: () -> Unit,
+    onSettingsClick: () -> Unit,
     onAddContact: () -> Unit,
     onCreateTask: () -> Unit,
     onScheduleMeeting: () -> Unit,
@@ -215,11 +227,11 @@ fun CallogBottomNavigation(
                 Row(
                     modifier = Modifier
                         .fillMaxSize()
-                        .padding(horizontal = 8.dp),
+                        .padding(horizontal = 4.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    // Left Tab: Contacts
+                    // Left side: Contacts + Dialer
                     CallogDockItem(
                         selected = isContactsSelected,
                         onClick = onContactsClick,
@@ -229,11 +241,20 @@ fun CallogBottomNavigation(
                         contentDescription = "Contacts",
                         modifier = Modifier.weight(1f)
                     )
+                    CallogDockItem(
+                        selected = isDialerSelected,
+                        onClick = onDialerClick,
+                        selectedIcon = Icons.Filled.Dialpad,
+                        unselectedIcon = Icons.Filled.Dialpad,
+                        label = "Dialer",
+                        contentDescription = "Dialer",
+                        modifier = Modifier.weight(1f)
+                    )
 
                     // Reserved center gap for FAB clearance
                     Spacer(modifier = Modifier.width(68.dp))
 
-                    // Right Tab: Recordings
+                    // Right side: Recordings + Settings
                     CallogDockItem(
                         selected = isRecordingsSelected,
                         onClick = onRecordingsClick,
@@ -241,6 +262,15 @@ fun CallogBottomNavigation(
                         unselectedIcon = Icons.Outlined.GraphicEq,
                         label = "Recordings",
                         contentDescription = "Recordings",
+                        modifier = Modifier.weight(1f)
+                    )
+                    CallogDockItem(
+                        selected = isSettingsSelected,
+                        onClick = onSettingsClick,
+                        selectedIcon = Icons.Filled.Settings,
+                        unselectedIcon = Icons.Filled.Settings,
+                        label = "Settings",
+                        contentDescription = "Settings",
                         modifier = Modifier.weight(1f)
                     )
                 }

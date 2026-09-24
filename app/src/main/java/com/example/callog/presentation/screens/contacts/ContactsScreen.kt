@@ -54,7 +54,12 @@ fun ContactsScreen(
     val context = LocalContext.current
     val uiState by contactsViewModel.uiState.collectAsState()
 
-    // Monitor Contacts Permission for Device Tab
+    // Trigger initial Supabase sync once, safely after the ViewModel is fully initialized.
+    LaunchedEffect(Unit) {
+        contactsViewModel.triggerInitialSync()
+    }
+
+    // Monitor Contacts Permission for Device Tab (separate effect — does not re-trigger sync)
     LaunchedEffect(Unit) {
         val granted = ContextCompat.checkSelfPermission(
             context,
