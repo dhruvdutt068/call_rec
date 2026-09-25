@@ -26,6 +26,7 @@ data class PresetConfiguration(
     val storageBucket: String? = null,
     val gcmSenderId: String? = null,
     val databaseUrl: String? = null,
+    val firebaseDatabaseId: String? = null,
     val apiBaseUrl: String? = null,
     val features: Map<String, Boolean> = defaultFeatureFlags()
 ) {

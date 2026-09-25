@@ -213,7 +213,8 @@ class PresetViewModel @Inject constructor(
                     appId = fbAppId,
                     storageBucket = preset.configuration.storageBucket?.ifBlank { null },
                     gcmSenderId = preset.configuration.gcmSenderId?.ifBlank { null },
-                    databaseUrl = preset.configuration.databaseUrl?.ifBlank { null }
+                    databaseUrl = preset.configuration.databaseUrl?.ifBlank { null },
+                    databaseId = preset.configuration.firebaseDatabaseId?.ifBlank { null }
                 )
                 val fbResult = firestoreService.testFirebaseConnection(fbConfig)
                 if (fbResult.isSuccess) {

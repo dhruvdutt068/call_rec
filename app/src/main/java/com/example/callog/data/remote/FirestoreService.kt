@@ -206,7 +206,12 @@ class FirestoreService @Inject constructor(
                 val savedConfig = getSavedConfig()
                 if (savedConfig != null) {
                     val customApp = getOrInitCustomApp(savedConfig)
-                    FirebaseFirestore.getInstance(customApp)
+                    val dbId = savedConfig.databaseId?.trim()?.ifBlank { null }
+                    if (dbId != null && dbId != "(default)") {
+                        FirebaseFirestore.getInstance(customApp, dbId)
+                    } else {
+                        FirebaseFirestore.getInstance(customApp)
+                    }
                 } else {
                     if (FirebaseApp.getApps(context).isEmpty()) {
                         FirebaseApp.initializeApp(context)
@@ -230,7 +235,13 @@ class FirestoreService @Inject constructor(
                 } else {
                     FirebaseStorage.getInstance(app)
                 }
-                Pair(FirebaseFirestore.getInstance(app), stor)
+                val dbId = config.databaseId?.trim()?.ifBlank { null }
+                val fs = if (dbId != null && dbId != "(default)") {
+                    FirebaseFirestore.getInstance(app, dbId)
+                } else {
+                    FirebaseFirestore.getInstance(app)
+                }
+                Pair(fs, stor)
             } else {
                 if (FirebaseApp.getApps(context).isEmpty()) {
                     FirebaseApp.initializeApp(context)

@@ -120,6 +120,7 @@ class EnvironmentConfigManager @Inject constructor(
         val storageBucket = prefs.getString("${prefix}_firebase_storage_bucket", null)
         val gcmSenderId = prefs.getString("${prefix}_firebase_gcm_sender_id", null)
         val databaseUrl = prefs.getString("${prefix}_firebase_database_url", null)
+        val databaseId = prefs.getString("${prefix}_firebase_database_id", null)
 
         return if (!projectId.isNullOrBlank() && !apiKey.isNullOrBlank() && !appId.isNullOrBlank()) {
             FirebaseConfig(
@@ -128,18 +129,20 @@ class EnvironmentConfigManager @Inject constructor(
                 appId = appId.trim(),
                 storageBucket = storageBucket?.trim()?.ifBlank { null },
                 gcmSenderId = gcmSenderId?.trim()?.ifBlank { null },
-                databaseUrl = databaseUrl?.trim()?.ifBlank { null }
+                databaseUrl = databaseUrl?.trim()?.ifBlank { null },
+                databaseId = databaseId?.trim()?.ifBlank { null }
             )
         } else {
             // Built-in defaults for Development and Production/Deployment
             if (env == AppEnvironment.DEVELOPMENT) {
                 FirebaseConfig(
-                    projectId = "allset-244ab",
-                    apiKey = "AIzaSyDLqHOgAdLBz9__Un_BI0ZMwz5l2ucJnKo",
-                    appId = "1:598633676290:android:e264397de748bf0371711b",
-                    storageBucket = "allset-244ab.firebasestorage.app",
-                    gcmSenderId = "598633676290",
-                    databaseUrl = null
+                    projectId = "allset-491218",
+                    apiKey = "AIzaSyBtlY7EoO6PgPUCMjNR55K88H2v665qQgQ",
+                    appId = "1:799427430422:android:e0f5737f12b8b9cbb20d37",
+                    storageBucket = "allset-491218.firebasestorage.app",
+                    gcmSenderId = "799427430422",
+                    databaseUrl = null,
+                    databaseId = "call-logs"
                 )
             } else {
                 FirebaseConfig(
@@ -148,7 +151,8 @@ class EnvironmentConfigManager @Inject constructor(
                     appId = "1:598633676290:android:e264397de748bf0371711b",
                     storageBucket = "allset-244ab.firebasestorage.app",
                     gcmSenderId = "598633676290",
-                    databaseUrl = null
+                    databaseUrl = null,
+                    databaseId = null
                 )
             }
         }
@@ -180,6 +184,11 @@ class EnvironmentConfigManager @Inject constructor(
                 } else {
                     remove("${prefix}_firebase_database_url")
                 }
+                if (!config.databaseId.isNullOrBlank()) {
+                    putString("${prefix}_firebase_database_id", config.databaseId.trim())
+                } else {
+                    remove("${prefix}_firebase_database_id")
+                }
             } else {
                 remove("${prefix}_firebase_project_id")
                 remove("${prefix}_firebase_api_key")
@@ -187,6 +196,7 @@ class EnvironmentConfigManager @Inject constructor(
                 remove("${prefix}_firebase_storage_bucket")
                 remove("${prefix}_firebase_gcm_sender_id")
                 remove("${prefix}_firebase_database_url")
+                remove("${prefix}_firebase_database_id")
             }
             apply()
         }
