@@ -80,17 +80,11 @@ class SupabaseService @Inject constructor(
     fun getClient(): SupabaseClient {
         return currentClient ?: synchronized(this) {
             currentClient ?: run {
-                val activePreset = runBlocking { activePresetProvider.getActivePreset() }
-                val secrets = runBlocking { activePresetProvider.getActiveSecrets() }
-                
-                val url = activePreset.configuration.supabaseUrl?.trim()?.ifBlank { null }
-                    ?: getActiveConfig().url
-                val key = secrets?.supabaseAnonKey?.trim()?.ifBlank { null }
-                    ?: getActiveConfig().apiKey
-
+                val config = getActiveConfig()
+                Log.d(TAG, "Initializing SupabaseClient for environment: ${environmentConfigManager.getActiveEnvironment()} -> ${config.url}")
                 createSupabaseClient(
-                    supabaseUrl = url,
-                    supabaseKey = key
+                    supabaseUrl = config.url,
+                    supabaseKey = config.apiKey
                 ) {
                     install(Postgrest)
                 }.also { currentClient = it }

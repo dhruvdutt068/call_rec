@@ -134,12 +134,12 @@ class EnvironmentConfigManager @Inject constructor(
             // Built-in defaults for Development and Production/Deployment
             if (env == AppEnvironment.DEVELOPMENT) {
                 FirebaseConfig(
-                    projectId = "allset-491218",
-                    apiKey = "AIzaSyBtlY7EoO6PgPUCMjNR55K88H2v665qQgQ",
-                    appId = "1:799427430422:android:e0f5737f12b8b9cbb20d37",
-                    storageBucket = "allset-491218.firebasestorage.app",
-                    gcmSenderId = "799427430422",
-                    databaseUrl = "https://allset-491218-default-rtdb.asia-southeast1.firebasedatabase.app"
+                    projectId = "allset-244ab",
+                    apiKey = "AIzaSyDLqHOgAdLBz9__Un_BI0ZMwz5l2ucJnKo",
+                    appId = "1:598633676290:android:e264397de748bf0371711b",
+                    storageBucket = "allset-244ab.firebasestorage.app",
+                    gcmSenderId = "598633676290",
+                    databaseUrl = null
                 )
             } else {
                 FirebaseConfig(

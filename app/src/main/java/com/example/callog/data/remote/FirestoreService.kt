@@ -66,48 +66,10 @@ class FirestoreService @Inject constructor(
     }
 
     fun getSavedConfig(): FirebaseConfig? {
-        // 1. Check Active Preset configuration first
-        val activePreset = runBlocking {
-            try {
-                activePresetProvider.getActivePreset()
-            } catch (e: Exception) {
-                null
-            }
-        }
-        val activeSecrets = runBlocking {
-            try {
-                activePresetProvider.getActiveSecrets()
-            } catch (e: Exception) {
-                null
-            }
-        }
-
-        if (activePreset != null) {
-            val projId = activePreset.configuration.firebaseProjectId?.trim()
-            val appId = activePreset.configuration.firebaseAppId?.trim()
-            val apiKey = activeSecrets?.firebaseApiKey?.trim()
-            val bucket = activePreset.configuration.storageBucket?.trim()
-
-            val isDummy = (projId?.startsWith("callog-dev") == true && apiKey?.startsWith("AIzaSyDevKeySample") == true)
-            if (!projId.isNullOrBlank() && !appId.isNullOrBlank() && !apiKey.isNullOrBlank() && !isDummy) {
-                return FirebaseConfig(
-                    projectId = projId,
-                    apiKey = apiKey,
-                    appId = appId,
-                    storageBucket = bucket?.ifBlank { null },
-                    gcmSenderId = activePreset.configuration.gcmSenderId?.trim()?.ifBlank { null },
-                    databaseUrl = activePreset.configuration.databaseUrl?.trim()?.ifBlank { null }
-                )
-            }
-        }
-
-        // 2. Fall back to EnvironmentConfigManager
         val envConfig = environmentConfigManager.getActiveFirebaseConfig()
         if (envConfig != null) {
             return envConfig
         }
-
-        // 3. Fallback: null means default FirebaseApp (from google-services.json)
         return null
     }
 

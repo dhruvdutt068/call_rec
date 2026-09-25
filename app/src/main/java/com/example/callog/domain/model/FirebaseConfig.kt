@@ -6,5 +6,6 @@ data class FirebaseConfig(
     val appId: String,
     val storageBucket: String? = null,
     val gcmSenderId: String? = null,
-    val databaseUrl: String? = null
+    val databaseUrl: String? = null,
+    val databaseId: String? = null
 )
