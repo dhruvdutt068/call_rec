@@ -9,9 +9,7 @@ enum class PresetEnvironment(
     val iconName: String
 ) {
     DEVELOPMENT("Development", "Testing sandbox with development backend", "Code"),
-    STAGING("Staging", "QA / pre-production validation", "Science"),
-    PRODUCTION("Production", "Live customer-facing backend", "RocketLaunch"),
-    CUSTOM("Custom", "User-defined custom endpoints & keys", "Settings");
+    PRODUCTION("Production", "Live customer-facing backend", "RocketLaunch");
 
     companion object {
         fun fromString(value: String?): PresetEnvironment {
