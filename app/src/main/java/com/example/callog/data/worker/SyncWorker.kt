@@ -197,8 +197,8 @@ class SyncWorker(
             }
             val salespersonPhone = FirestoreRepositoryImpl.normalizePhoneNumber(salespersonPhoneRaw)
             val salespersonName  = firestoreService.getDeviceOwnerName().ifBlank { "Sales Rep" }
-            val allCalls = callRepository.getAllCallsSnapshot()
-            DeveloperLogger.info("SALES_CALL_CREATION_STARTED", "Generating/updating SalesCallEntity cache. Found ${allCalls.size} calls.", network = network)
+            val allCalls = callRepository.getAllCallsSnapshot().take(100)
+            DeveloperLogger.info("SALES_CALL_CREATION_STARTED", "Generating/updating SalesCallEntity cache for last ${allCalls.size} calls.", network = network)
             var createdCount = 0
             var updatedCount = 0
             for (call in allCalls) {
@@ -242,7 +242,7 @@ class SyncWorker(
 
             // Step 2c: Sync pending sales_calls to Supabase AND Client CRM tables
             try {
-                val pendingSalesCalls = salesCallDao.getPendingSalesCalls()
+                val pendingSalesCalls = salesCallDao.getPendingSalesCalls().take(100)
                 if (pendingSalesCalls.isNotEmpty()) {
                     DeveloperLogger.info("SUPABASE_UPLOAD_STARTED", "Syncing ${pendingSalesCalls.size} pending sales calls to Supabase.", network = network)
                     val startTime = System.currentTimeMillis()
@@ -332,8 +332,8 @@ class SyncWorker(
                 DeveloperLogger.error("LEAD_SYNC_FAILED", "Exception during Lead sync: ${e.message}", exception = e, network = network)
             }
 
-            // Step 3: Fetch all pending items from local database for Firestore
-            val pendingCalls = syncRepository.getPendingCalls()
+            // Step 3: Fetch all pending items from local database for Firestore (limit to last 100)
+            val pendingCalls = syncRepository.getPendingCalls().take(100)
             if (pendingCalls.isEmpty()) {
                 DeveloperLogger.success("SYNC_COMPLETED", "No pending Firestore logs found. Sync completed successfully.", network = network)
                 runLogsMaintenance(syncLogDao)

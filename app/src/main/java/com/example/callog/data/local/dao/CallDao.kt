@@ -44,7 +44,7 @@ interface CallDao {
     @Query("DELETE FROM calls_research")
     suspend fun deleteAllCalls()
 
-    @Query("SELECT * FROM calls_research WHERE syncStatus != 'SYNCED'")
+    @Query("SELECT * FROM calls_research WHERE syncStatus != 'SYNCED' ORDER BY timestamp DESC")
     suspend fun getPendingCalls(): List<CallEntity>
 
     @Query("UPDATE calls_research SET syncStatus = :syncStatus WHERE id = :callId")

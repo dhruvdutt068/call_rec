@@ -134,10 +134,10 @@ class CallRepositoryImpl @Inject constructor(
                 return@withContext
             }
 
-            val systemCalls = callLogProvider.fetchCallLogs()
+            val systemCalls = callLogProvider.fetchCallLogs(100)
             if (systemCalls.isNotEmpty()) {
                 val existingCalls = callDao.getAllCalls()
-                val existingKeys = existingCalls.map { "${it.timestamp}_${it.number}" }.toSet()
+                val existingCallMap = existingCalls.associateBy { "${it.timestamp}_${it.number}" }
                 
                 val selectedSubId = simManager.getSelectedSubscriptionId()
                 if (selectedSubId == SubscriptionManager.INVALID_SUBSCRIPTION_ID) {
@@ -145,15 +145,13 @@ class CallRepositoryImpl @Inject constructor(
                     return@withContext
                 }
 
-                val newCalls = systemCalls.filter { call ->
-                    val key = "${call.timestamp}_${call.number}"
-                    if (existingKeys.contains(key)) {
-                        return@filter false
-                    }
+                val newCalls = mutableListOf<CallEntity>()
+                val updatedCalls = mutableListOf<CallEntity>()
 
+                for (call in systemCalls) {
                     // Perform strict SIM filtering (only allow selected SIM calls)
                     val callSubId = simManager.getSubscriptionIdFromHandle(call.phoneAccountId, call.phoneAccountComponentName)
-                    if (callSubId == selectedSubId) {
+                    val isSimMatch = if (callSubId == selectedSubId) {
                         DeveloperLogger.info(
                             "SIM_FILTER_MATCH",
                             "Call from ${call.number} matched Business SIM ($selectedSubId). Importing."
@@ -174,7 +172,9 @@ class CallRepositoryImpl @Inject constructor(
                         )
                         false
                     }
-                }.map { call ->
+
+                    if (!isSimMatch) continue
+
                     // Canonical Person identity resolution:
                     // Normalize phone number and look up personId in PersonDao
                     val norm = PhoneNumberNormalizer.normalize(call.number)
@@ -187,11 +187,42 @@ class CallRepositoryImpl @Inject constructor(
                             "Call from ${call.number} (norm: $norm) matched canonical Person $resolvedPersonId"
                         )
                     }
-                    call.copy(personId = resolvedPersonId)
+
+                    val key = "${call.timestamp}_${call.number}"
+                    val existing = existingCallMap[key]
+
+                    if (existing == null) {
+                        newCalls.add(call.copy(personId = resolvedPersonId))
+                    } else {
+                        // Check if existing call in the last 100 entries has changed and needs update
+                        val nameChanged = !call.name.isNullOrBlank() && call.name != existing.name
+                        val durationChanged = call.duration != existing.duration
+                        val personIdChanged = resolvedPersonId != null && resolvedPersonId != existing.personId
+                        val typeChanged = call.callType != existing.callType
+
+                        if (nameChanged || durationChanged || personIdChanged || typeChanged) {
+                            updatedCalls.add(
+                                existing.copy(
+                                    name = if (nameChanged) call.name else existing.name,
+                                    duration = if (durationChanged) call.duration else existing.duration,
+                                    personId = if (personIdChanged) resolvedPersonId else existing.personId,
+                                    callType = if (typeChanged) call.callType else existing.callType,
+                                    syncStatus = "PENDING"
+                                )
+                            )
+                        }
+                    }
                 }
 
                 if (newCalls.isNotEmpty()) {
                     callDao.insertCalls(newCalls)
+                    DeveloperLogger.info("CALLS_INSERTED", "Imported ${newCalls.size} new call logs (from last 100).")
+                }
+                if (updatedCalls.isNotEmpty()) {
+                    for (updated in updatedCalls) {
+                        callDao.updateCall(updated)
+                    }
+                    DeveloperLogger.info("CALLS_UPDATED", "Updated ${updatedCalls.size} existing call logs (from last 100).")
                 }
             }
 

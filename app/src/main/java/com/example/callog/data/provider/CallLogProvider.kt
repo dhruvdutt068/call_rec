@@ -14,7 +14,11 @@ import javax.inject.Singleton
 class CallLogProvider @Inject constructor(
     @ApplicationContext private val context: Context
 ) {
-    fun fetchCallLogs(): List<CallEntity> {
+    companion object {
+        const val MAX_CALL_LOGS = 100
+    }
+
+    fun fetchCallLogs(limit: Int = MAX_CALL_LOGS): List<CallEntity> {
         val callLogsList = mutableListOf<CallEntity>()
         
         if (ContextCompat.checkSelfPermission(
@@ -56,7 +60,7 @@ class CallLogProvider @Inject constructor(
             val phoneAccountComponentIdx = c.getColumnIndex(CallLog.Calls.PHONE_ACCOUNT_COMPONENT_NAME)
 
             var count = 0
-            while (c.moveToNext() && count < 10000) {
+            while (c.moveToNext() && count < limit) {
                 val id = if (idIdx != -1) c.getLong(idIdx) else 0L
                 val number = if (numberIdx != -1) c.getString(numberIdx) ?: "" else ""
                 val cachedName = if (nameIdx != -1) c.getString(nameIdx) else null

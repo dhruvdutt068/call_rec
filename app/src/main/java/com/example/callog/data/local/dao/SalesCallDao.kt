@@ -38,8 +38,8 @@ interface SalesCallDao {
     @Query("DELETE FROM sales_calls")
     suspend fun clearAll()
 
-    /** Fetch all pending sales call records. */
-    @Query("SELECT * FROM sales_calls WHERE syncStatus != 'SYNCED'")
+    /** Fetch all pending sales call records, newest first. */
+    @Query("SELECT * FROM sales_calls WHERE syncStatus != 'SYNCED' ORDER BY createdAt DESC")
     suspend fun getPendingSalesCalls(): List<SalesCallEntity>
 
     /** Update sync status and error message for a specific record. */

@@ -93,7 +93,7 @@ class FirestoreRepositoryImpl @Inject constructor(
 
     override suspend fun syncPendingCalls(): Unit = withContext(Dispatchers.IO) {
         try {
-            val pendingCalls = callDao.getPendingCalls()
+            val pendingCalls = callDao.getPendingCalls().take(100)
             if (pendingCalls.isEmpty()) {
                 Log.d(TAG, "No pending calls to synchronize.")
                 return@withContext
