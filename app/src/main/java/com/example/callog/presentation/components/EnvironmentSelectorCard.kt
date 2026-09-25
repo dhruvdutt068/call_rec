@@ -118,11 +118,11 @@ fun EnvironmentSelectorCard(
 
                 EnvironmentOptionButton(
                     modifier = Modifier.weight(1f),
-                    title = "Deployment",
+                    title = "Production",
                     icon = Icons.Outlined.RocketLaunch,
                     isSelected = !isDev,
                     selectedAccentColor = AllSetAmber,
-                    onClick = { onEnvironmentSelected(AppEnvironment.DEPLOYMENT) }
+                    onClick = { onEnvironmentSelected(AppEnvironment.PRODUCTION) }
                 )
             }
         }
@@ -246,14 +246,14 @@ fun EnvironmentSelectorCardDevDarkPreview() {
     }
 }
 
-@Preview(name = "3. Deployment - Light", showBackground = true)
+@Preview(name = "3. Production - Light", showBackground = true)
 @Composable
-fun EnvironmentSelectorCardDeployLightPreview() {
+fun EnvironmentSelectorCardProdLightPreview() {
     CallogTheme(darkTheme = false) {
         Surface(color = MaterialTheme.colorScheme.background) {
             Box(modifier = Modifier.padding(16.dp)) {
                 EnvironmentSelectorCard(
-                    currentEnvironment = AppEnvironment.DEPLOYMENT,
+                    currentEnvironment = AppEnvironment.PRODUCTION,
                     onEnvironmentSelected = {}
                 )
             }
@@ -261,14 +261,14 @@ fun EnvironmentSelectorCardDeployLightPreview() {
     }
 }
 
-@Preview(name = "4. Deployment - Dark", uiMode = Configuration.UI_MODE_NIGHT_YES, showBackground = true)
+@Preview(name = "4. Production - Dark", uiMode = Configuration.UI_MODE_NIGHT_YES, showBackground = true)
 @Composable
-fun EnvironmentSelectorCardDeployDarkPreview() {
+fun EnvironmentSelectorCardProdDarkPreview() {
     CallogTheme(darkTheme = true) {
         Surface(color = MaterialTheme.colorScheme.background) {
             Box(modifier = Modifier.padding(16.dp)) {
                 EnvironmentSelectorCard(
-                    currentEnvironment = AppEnvironment.DEPLOYMENT,
+                    currentEnvironment = AppEnvironment.PRODUCTION,
                     onEnvironmentSelected = {}
                 )
             }

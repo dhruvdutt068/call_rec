@@ -5,11 +5,15 @@ package com.example.callog.domain.model
  */
 enum class AppEnvironment(val label: String) {
     DEVELOPMENT("Development"),
-    DEPLOYMENT("Deployment");
+    PRODUCTION("Production");
 
     companion object {
         fun fromString(value: String?): AppEnvironment {
-            return entries.firstOrNull { it.name.equals(value, ignoreCase = true) } ?: DEVELOPMENT
+            return when (value?.trim()?.uppercase()) {
+                "PRODUCTION", "DEPLOYMENT" -> PRODUCTION
+                "DEVELOPMENT" -> DEVELOPMENT
+                else -> entries.firstOrNull { it.name.equals(value, ignoreCase = true) } ?: DEVELOPMENT
+            }
         }
     }
 }
