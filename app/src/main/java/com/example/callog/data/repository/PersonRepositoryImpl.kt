@@ -30,6 +30,8 @@ class PersonRepositoryImpl @Inject constructor(
     @ApplicationContext private val context: Context,
     private val personDao: PersonDao,
     private val leadDao: LeadDao,
+    private val callDao: com.example.callog.data.local.dao.CallDao,
+    private val salesCallDao: com.example.callog.data.local.dao.SalesCallDao,
     private val contactsProvider: ContactsProvider,
     private val firestoreService: FirestoreService,
     private val supabaseService: SupabaseService,
@@ -214,6 +216,45 @@ class PersonRepositoryImpl @Inject constructor(
 
         // Check local compound alias identity: (deviceId, androidContactId, normalizedNumber)
         val existingAlias = personDao.findAliasByDeviceContactAndPhone(deviceId, contact.contactId, normalizedNumber)
+        if (existingAlias != null && existingAlias.syncStatus == "SYNCED") {
+            val existingPerson = personDao.getPersonById(existingAlias.personId)
+            if (existingPerson != null && existingPerson.syncStatus == "SYNCED") {
+                // Already resolved and synced to Supabase - skip redundant remote RPC
+                return@withContext PersonResolutionResult(
+                    personId = existingAlias.personId,
+                    aliasId = existingAlias.id,
+                    isFromRemote = false
+                )
+            }
+        }
+
+        // Check if phone number is already canonical and synced locally
+        val existingPhone = personDao.findPhoneNumberByNormalized(normalizedNumber)
+        if (existingPhone != null && existingPhone.syncStatus == "SYNCED") {
+            val existingPerson = personDao.getPersonById(existingPhone.personId)
+            if (existingPerson != null && existingPerson.syncStatus == "SYNCED") {
+                val aliasId = existingAlias?.id ?: ("ALIAS_" + UUID.randomUUID().toString().replace("-", "").take(8).uppercase())
+                if (existingAlias == null) {
+                    val aliasEntity = ContactAliasEntity(
+                        id = aliasId,
+                        personId = existingPerson.id,
+                        deviceId = deviceId,
+                        androidContactId = contact.contactId,
+                        aliasName = contact.name.ifBlank { "Unknown Contact" },
+                        phoneNumber = primaryPhone,
+                        normalizedNumber = normalizedNumber,
+                        syncStatus = "PENDING"
+                    )
+                    personDao.insertAlias(aliasEntity)
+                }
+                return@withContext PersonResolutionResult(
+                    personId = existingPerson.id,
+                    phoneNumberId = existingPhone.id,
+                    aliasId = aliasId,
+                    isFromRemote = false
+                )
+            }
+        }
 
         val device = getOrCreateCurrentDevice()
         val request = PersonResolutionRequest(
@@ -239,23 +280,23 @@ class PersonRepositoryImpl @Inject constructor(
                 updatedAt = System.currentTimeMillis(),
                 syncStatus = "SYNCED"
             )).copy(updatedAt = System.currentTimeMillis(), syncStatus = "SYNCED")
-            personDao.insertPerson(personEntity)
 
             // 2. Attach phone numbers
+            val phoneEntities = mutableListOf<PhoneNumberEntity>()
             contact.phoneNumbers.forEachIndexed { index, rawPhone ->
                 val norm = PhoneNumberNormalizer.normalize(rawPhone)
                 if (norm.isNotEmpty()) {
-                    val existingPhone = personDao.findPhoneNumberByNormalized(norm)
+                    val existingPhoneRecord = personDao.findPhoneNumberByNormalized(norm)
                     val phoneEntity = PhoneNumberEntity(
-                        id = if (index == 0 && res.phoneNumberId != null) res.phoneNumberId else (existingPhone?.id ?: UUID.randomUUID().toString()),
+                        id = if (index == 0 && res.phoneNumberId != null) res.phoneNumberId else (existingPhoneRecord?.id ?: UUID.randomUUID().toString()),
                         personId = res.personId,
                         phoneNumber = rawPhone,
                         normalizedNumber = norm,
-                        phoneType = if (index == 0) "PRIMARY" else (existingPhone?.phoneType ?: "OTHER"),
+                        phoneType = if (index == 0) "PRIMARY" else (existingPhoneRecord?.phoneType ?: "OTHER"),
                         isPrimary = index == 0,
                         syncStatus = "SYNCED"
                     )
-                    personDao.insertPhoneNumber(phoneEntity)
+                    phoneEntities.add(phoneEntity)
                 }
             }
 
@@ -271,7 +312,15 @@ class PersonRepositoryImpl @Inject constructor(
                 normalizedNumber = normalizedNumber,
                 syncStatus = "SYNCED"
             )
-            personDao.insertAlias(aliasEntity)
+
+            // Atomic insert within a single database transaction to prevent UI invalidation storms
+            personDao.insertPersonWithDetails(personEntity, phoneEntities, aliasEntity)
+
+            // If alias was previously linked to a temporary local offline personId, merge & delete the stale person
+            val oldPersonId = existingAlias?.personId
+            if (oldPersonId != null && oldPersonId != res.personId) {
+                mergeAndCleanupStalePerson(oldPersonId, res.personId)
+            }
 
             PersonResolutionResult(
                 personId = res.personId,
@@ -292,16 +341,16 @@ class PersonRepositoryImpl @Inject constructor(
     override suspend fun syncContactsFromDevice(): List<Person> = withContext(Dispatchers.IO) {
         val device = getOrCreateCurrentDevice()
         val contacts = contactsProvider.fetchContacts()
-        val resolvedPeople = mutableListOf<Person>()
+        val resolvedPersonIds = mutableSetOf<String>()
 
         for (contact in contacts) {
             val res = resolveAndAttachContact(device.id, contact)
-            val fullPerson = personDao.getPersonWithDetailsById(res.personId)
-            if (fullPerson != null) {
-                resolvedPeople.add(fullPerson.toDomain())
-            }
+            resolvedPersonIds.add(res.personId)
         }
-        resolvedPeople
+
+        resolvedPersonIds.mapNotNull { personId ->
+            personDao.getPersonWithDetailsById(personId)?.toDomain()
+        }
     }
 
     override suspend fun syncGlobalContactsFromSupabase(): Result<List<Person>> = withContext(Dispatchers.IO) {
@@ -596,6 +645,19 @@ class PersonRepositoryImpl @Inject constructor(
         val sdf = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", java.util.Locale.US)
         sdf.timeZone = java.util.TimeZone.getTimeZone("UTC")
         return sdf.format(java.util.Date(epochMillis))
+    }
+
+    private suspend fun mergeAndCleanupStalePerson(oldPersonId: String, newPersonId: String) {
+        try {
+            android.util.Log.i("PersonRepository", "Merging stale offline Person $oldPersonId into canonical Person $newPersonId")
+            callDao.reassignCallsPersonId(oldPersonId, newPersonId)
+            salesCallDao.reassignSalesCallsPersonId(oldPersonId, newPersonId)
+            personDao.reassignAliasesPersonId(oldPersonId, newPersonId)
+            personDao.deletePhoneNumbersForPerson(oldPersonId)
+            personDao.deletePersonById(oldPersonId)
+        } catch (e: Exception) {
+            android.util.Log.w("PersonRepository", "Error during local person merge/cleanup: ${e.message}")
+        }
     }
 }
 

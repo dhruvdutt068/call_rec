@@ -10,6 +10,7 @@ import com.example.callog.domain.usecase.GetCloudContactsUseCase
 import com.example.callog.domain.usecase.GetDeviceContactsUseCase
 import com.example.callog.domain.usecase.RefreshDeviceContactsUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import javax.inject.Inject

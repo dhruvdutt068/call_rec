@@ -49,4 +49,8 @@ interface SalesCallDao {
     /** Reset all sales calls sync status to PENDING. */
     @Query("UPDATE sales_calls SET syncStatus = 'PENDING'")
     suspend fun resetSyncStatus()
+
+    /** Reassign calls from old person ID to new person ID. */
+    @Query("UPDATE sales_calls SET personId = :newPersonId WHERE personId = :oldPersonId")
+    suspend fun reassignSalesCallsPersonId(oldPersonId: String, newPersonId: String)
 }

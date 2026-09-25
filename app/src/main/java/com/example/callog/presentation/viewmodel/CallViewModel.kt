@@ -210,9 +210,9 @@ class CallViewModel @Inject constructor(
 
     fun forceLogsCleanup() {
         viewModelScope.launch {
-            val cutoff = System.currentTimeMillis() - (30L * 24 * 60 * 60 * 1000)
+            val cutoff = System.currentTimeMillis() - (7L * 24 * 60 * 60 * 1000)
             syncLogDao.deleteLogsOlderThan(cutoff)
-            syncLogDao.trimLogs(5000)
+            syncLogDao.trimLogs(300)
         }
     }
 

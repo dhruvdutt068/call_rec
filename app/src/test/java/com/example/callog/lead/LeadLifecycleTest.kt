@@ -327,6 +327,10 @@ class LeadLifecycleTest {
             if (idx != -1) people[idx] = people[idx].copy(syncStatus = status, updatedAt = updatedAt)
         }
 
+        override suspend fun updatePeopleSyncStatus(ids: List<String>, status: String, updatedAt: Long) {
+            ids.forEach { updatePersonSyncStatus(it, status, updatedAt) }
+        }
+
         override suspend fun insertPhoneNumber(phoneNumber: PhoneNumberEntity) {
             phoneNumbers.removeAll { it.id == phoneNumber.id || it.normalizedNumber == phoneNumber.normalizedNumber }
             phoneNumbers.add(phoneNumber)
@@ -343,6 +347,10 @@ class LeadLifecycleTest {
         override suspend fun updatePhoneNumberSyncStatus(id: String, status: String) {
             val idx = phoneNumbers.indexOfFirst { it.id == id }
             if (idx != -1) phoneNumbers[idx] = phoneNumbers[idx].copy(syncStatus = status)
+        }
+
+        override suspend fun updatePhoneNumbersSyncStatus(ids: List<String>, status: String) {
+            ids.forEach { updatePhoneNumberSyncStatus(it, status) }
         }
 
         override suspend fun insertAlias(alias: ContactAliasEntity) {
@@ -366,9 +374,17 @@ class LeadLifecycleTest {
             if (idx != -1) aliases[idx] = aliases[idx].copy(syncStatus = status)
         }
 
+        override suspend fun updateAliasesSyncStatus(ids: List<String>, status: String) {
+            ids.forEach { updateAliasSyncStatus(it, status) }
+        }
+
         override suspend fun insertDevice(device: DeviceEntity) {
             devices.removeAll { it.id == device.id }
             devices.add(device)
+        }
+
+        override suspend fun insertDevices(devicesList: List<DeviceEntity>) {
+            devicesList.forEach { insertDevice(it) }
         }
 
         override suspend fun getDeviceById(id: String): DeviceEntity? = devices.find { it.id == id }

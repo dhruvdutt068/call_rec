@@ -11,10 +11,13 @@ interface SyncLogDao {
     @Insert
     suspend fun insertLog(log: SyncLogEntity)
 
-    @Query("SELECT * FROM sync_logs ORDER BY timestamp DESC")
+    @Query("SELECT * FROM sync_logs ORDER BY timestamp DESC LIMIT 300")
     fun getAllLogsFlow(): Flow<List<SyncLogEntity>>
 
-    @Query("SELECT * FROM sync_logs ORDER BY timestamp DESC")
+    @Query("SELECT * FROM sync_logs ORDER BY timestamp DESC LIMIT :limit")
+    fun getLogsFlow(limit: Int): Flow<List<SyncLogEntity>>
+
+    @Query("SELECT * FROM sync_logs ORDER BY timestamp DESC LIMIT 300")
     suspend fun getAllLogs(): List<SyncLogEntity>
 
     @Query("DELETE FROM sync_logs")
@@ -24,5 +27,5 @@ interface SyncLogDao {
     suspend fun deleteLogsOlderThan(cutoffTime: Long)
 
     @Query("DELETE FROM sync_logs WHERE id NOT IN (SELECT id FROM sync_logs ORDER BY timestamp DESC LIMIT :keepCount)")
-    suspend fun trimLogs(keepCount: Int)
+    suspend fun trimLogs(keepCount: Int = 300)
 }

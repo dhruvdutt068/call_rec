@@ -81,10 +81,10 @@ class CallReceiver : BroadcastReceiver() {
                 .setInitialDelay(5, TimeUnit.SECONDS)
                 .build()
 
-            // Enqueue work to run immediately in background (after the delay)
+            // Enqueue work to run in background (avoids duplicate concurrent sync workers)
             workManager.enqueueUniqueWork(
-                "one_time_sync_work_receiver",
-                ExistingWorkPolicy.REPLACE,
+                com.example.callog.data.service.SyncManagerImpl.ONE_TIME_SYNC_WORK_NAME,
+                ExistingWorkPolicy.KEEP,
                 workRequest
             )
         } catch (e: Exception) {

@@ -45,9 +45,7 @@ fun ActiveEnvironmentBanner(
     val env = activePreset.environment
     val (badgeColor, icon, label) = when (env) {
         PresetEnvironment.DEVELOPMENT -> Triple(Teal400, Icons.Default.Code, "DEVELOPMENT")
-        PresetEnvironment.STAGING -> Triple(AllSetTeal, Icons.Default.Science, "STAGING")
         PresetEnvironment.PRODUCTION -> Triple(Amber500, Icons.Default.RocketLaunch, "PRODUCTION")
-        PresetEnvironment.CUSTOM -> Triple(AllSetLavender, Icons.Default.Settings, "CUSTOM")
     }
 
     if (showDetailedBanner && env == PresetEnvironment.PRODUCTION) {

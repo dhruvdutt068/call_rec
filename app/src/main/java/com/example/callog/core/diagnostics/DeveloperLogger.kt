@@ -15,6 +15,7 @@ object DeveloperLogger {
     private var syncLogDao: SyncLogDao? = null
     private var appVersion: String = "1.0.0"
     private var currentSyncId: String = ""
+    private var logCountSinceLastTrim = 0
 
     fun init(dao: SyncLogDao, context: Context) {
         this.syncLogDao = dao
@@ -23,6 +24,15 @@ object DeveloperLogger {
             appVersion = packageInfo.versionName ?: "1.0.0"
         } catch (e: Exception) {
             // ignore
+        }
+
+        // Auto-prune old bloated logs in background on app start to prevent CursorWindow overflow
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                dao.trimLogs(300)
+            } catch (e: Exception) {
+                Log.e("DevLogger", "Failed to auto-trim sync logs on init", e)
+            }
         }
     }
 
@@ -58,6 +68,10 @@ object DeveloperLogger {
         }
 
         val dao = syncLogDao ?: return
+        val safeMessage = message.take(1000)
+        val safeException = exception?.take(1000)
+        val safeStacktrace = stacktrace?.take(4000)
+
         CoroutineScope(Dispatchers.IO).launch {
             try {
                 dao.insertLog(
@@ -67,9 +81,9 @@ object DeveloperLogger {
                         level = level,
                         event = event,
                         status = status,
-                        message = message,
-                        exception = exception,
-                        stacktrace = stacktrace,
+                        message = safeMessage,
+                        exception = safeException,
+                        stacktrace = safeStacktrace,
                         network = network,
                         durationMs = durationMs,
                         appVersion = appVersion,
@@ -77,6 +91,12 @@ object DeveloperLogger {
                         androidVersion = "Android ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})"
                     )
                 )
+
+                logCountSinceLastTrim++
+                if (logCountSinceLastTrim >= 50) {
+                    logCountSinceLastTrim = 0
+                    dao.trimLogs(300)
+                }
             } catch (e: Exception) {
                 Log.e("DevLogger", "Failed to write log to local database", e)
             }

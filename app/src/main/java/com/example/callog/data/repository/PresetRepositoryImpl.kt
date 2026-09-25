@@ -177,11 +177,11 @@ class PresetRepositoryImpl @Inject constructor(
                 environment = PresetEnvironment.DEVELOPMENT,
                 description = "Default local sandbox with debug tools and test backend",
                 configuration = PresetConfiguration(
-                    supabaseUrl = SupabaseDefaults.DEFAULT_URL,
-                    firebaseProjectId = "callog-dev",
-                    firebaseAppId = "1:100000000001:android:devappcallog001",
-                    storageBucket = "callog-dev-recordings.appspot.com",
-                    gcmSenderId = "100000000001",
+                    supabaseUrl = SupabaseDefaults.DEV_URL,
+                    firebaseProjectId = "allset-491218",
+                    firebaseAppId = "1:799427430422:android:e0f5737f12b8b9cbb20d37",
+                    storageBucket = "allset-491218.firebasestorage.app",
+                    gcmSenderId = "799427430422",
                     apiBaseUrl = "https://dev-api.callog.internal",
                     features = mapOf(
                         PresetConfiguration.FEATURE_DEV_DIAGNOSTICS to true,
@@ -195,39 +195,9 @@ class PresetRepositoryImpl @Inject constructor(
                 isActive = true
             )
             val devSecrets = PresetSecrets(
-                supabaseAnonKey = SupabaseDefaults.DEFAULT_ANON_KEY,
-                firebaseApiKey = "AIzaSyDevKeySample00000000000000000000",
+                supabaseAnonKey = SupabaseDefaults.DEV_ANON_KEY,
+                firebaseApiKey = "AIzaSyBtlY7EoO6PgPUCMjNR55K88H2v665qQgQ",
                 apiKey = "dev_api_key_sample"
-            )
-
-            val stagingId = "preset_staging_default"
-            val stagingPreset = AppPreset(
-                id = stagingId,
-                name = "Staging",
-                environment = PresetEnvironment.STAGING,
-                description = "QA & staging verification environment",
-                configuration = PresetConfiguration(
-                    supabaseUrl = "https://staging-callog.supabase.co",
-                    firebaseProjectId = "callog-staging",
-                    firebaseAppId = "1:200000000002:android:stagingcallog02",
-                    storageBucket = "callog-staging-recordings.appspot.com",
-                    gcmSenderId = "200000000002",
-                    apiBaseUrl = "https://staging-api.callog.internal",
-                    features = mapOf(
-                        PresetConfiguration.FEATURE_DEV_DIAGNOSTICS to true,
-                        PresetConfiguration.FEATURE_CALL_SIMULATOR to true,
-                        PresetConfiguration.FEATURE_DEBUG_LOGGING to true,
-                        PresetConfiguration.FEATURE_EXPERIMENTAL_CALL_UI to false,
-                        PresetConfiguration.FEATURE_FAKE_RECORDINGS to false,
-                        PresetConfiguration.FEATURE_NETWORK_INSPECTOR to true
-                    )
-                ),
-                isActive = false
-            )
-            val stagingSecrets = PresetSecrets(
-                supabaseAnonKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.staging",
-                firebaseApiKey = "AIzaSyStagingKeySample00000000000000000",
-                apiKey = "staging_api_key_sample"
             )
 
             val prodId = "preset_prod_default"
@@ -237,11 +207,11 @@ class PresetRepositoryImpl @Inject constructor(
                 environment = PresetEnvironment.PRODUCTION,
                 description = "Live customer environment with strict security",
                 configuration = PresetConfiguration(
-                    supabaseUrl = "https://prod-callog.supabase.co",
-                    firebaseProjectId = "callog-prod",
-                    firebaseAppId = "",
-                    storageBucket = "callog-prod-recordings.appspot.com",
-                    gcmSenderId = "",
+                    supabaseUrl = SupabaseDefaults.PROD_URL,
+                    firebaseProjectId = "allset-244ab",
+                    firebaseAppId = "1:598633676290:android:e264397de748bf0371711b",
+                    storageBucket = "allset-244ab.firebasestorage.app",
+                    gcmSenderId = "598633676290",
                     apiBaseUrl = "https://api.callog.com",
                     features = mapOf(
                         PresetConfiguration.FEATURE_DEV_DIAGNOSTICS to false,
@@ -255,21 +225,19 @@ class PresetRepositoryImpl @Inject constructor(
                 isActive = false
             )
             val prodSecrets = PresetSecrets(
-                supabaseAnonKey = "",
-                firebaseApiKey = "",
+                supabaseAnonKey = SupabaseDefaults.PROD_ANON_KEY,
+                firebaseApiKey = "AIzaSyDLqHOgAdLBz9__Un_BI0ZMwz5l2ucJnKo",
                 apiKey = ""
             )
 
             presetDao.insertAll(
                 listOf(
                     PresetEntity.fromDomain(devPreset, json),
-                    PresetEntity.fromDomain(stagingPreset, json),
                     PresetEntity.fromDomain(prodPreset, json)
                 )
             )
 
             secretStore.saveSecrets(devId, devSecrets)
-            secretStore.saveSecrets(stagingId, stagingSecrets)
             secretStore.saveSecrets(prodId, prodSecrets)
 
             Log.i(TAG, "Default environment presets seeded successfully.")

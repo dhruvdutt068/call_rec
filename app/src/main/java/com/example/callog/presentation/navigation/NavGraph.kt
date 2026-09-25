@@ -198,7 +198,6 @@ fun NavGraph(
                 },
                 onNavigateToLogs = { navController.navigate(Screen.DeveloperLogs.route) },
                 onNavigateToRecordingDiagnostics = { navController.navigate(Screen.RecordingDiagnostics.route) },
-                onNavigateToCallSimulator = { navController.navigate(Screen.CallSimulator.route) },
                 onNavigateToEnvironmentPresets = { navController.navigate(Screen.EnvironmentPresets.route) }
             )
         }

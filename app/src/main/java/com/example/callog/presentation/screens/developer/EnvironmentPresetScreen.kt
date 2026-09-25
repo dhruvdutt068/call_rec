@@ -371,9 +371,7 @@ private fun ActiveEnvironmentShowcaseCard(
     val env = preset?.environment ?: PresetEnvironment.DEVELOPMENT
     val accentColor = when (env) {
         PresetEnvironment.DEVELOPMENT -> Teal400
-        PresetEnvironment.STAGING -> Teal300
         PresetEnvironment.PRODUCTION -> Amber500
-        PresetEnvironment.CUSTOM -> AllSetLavender
     }
 
     GlassyCard(
@@ -403,9 +401,7 @@ private fun ActiveEnvironmentShowcaseCard(
                         Icon(
                             imageVector = when (env) {
                                 PresetEnvironment.DEVELOPMENT -> Icons.Default.Code
-                                PresetEnvironment.STAGING -> Icons.Default.Science
                                 PresetEnvironment.PRODUCTION -> Icons.Default.RocketLaunch
-                                PresetEnvironment.CUSTOM -> Icons.Default.Settings
                             },
                             contentDescription = null,
                             tint = accentColor,
@@ -584,9 +580,7 @@ private fun PresetCard(
     val env = preset.environment
     val (accentColor, icon) = when (env) {
         PresetEnvironment.DEVELOPMENT -> Pair(Teal400, Icons.Default.Code)
-        PresetEnvironment.STAGING -> Pair(Teal300, Icons.Default.Science)
         PresetEnvironment.PRODUCTION -> Pair(Amber500, Icons.Default.RocketLaunch)
-        PresetEnvironment.CUSTOM -> Pair(AllSetLavender, Icons.Default.Settings)
     }
 
     var showMenu by remember { mutableStateOf(false) }
@@ -782,9 +776,7 @@ private fun TemplateOptionCard(
 ) {
     val (accentColor, icon) = when (env) {
         PresetEnvironment.DEVELOPMENT -> Pair(Teal400, Icons.Default.Code)
-        PresetEnvironment.STAGING -> Pair(Teal300, Icons.Default.Science)
         PresetEnvironment.PRODUCTION -> Pair(Amber500, Icons.Default.RocketLaunch)
-        PresetEnvironment.CUSTOM -> Pair(AllSetLavender, Icons.Default.Settings)
     }
 
     Surface(
@@ -918,9 +910,7 @@ private fun EditPresetBottomSheet(
                         val isSelected = selectedEnv == env
                         val envColor = when (env) {
                             PresetEnvironment.DEVELOPMENT -> Teal400
-                            PresetEnvironment.STAGING -> Teal300
                             PresetEnvironment.PRODUCTION -> Amber500
-                            PresetEnvironment.CUSTOM -> AllSetLavender
                         }
                         Surface(
                             modifier = Modifier

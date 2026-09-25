@@ -48,10 +48,12 @@ import com.example.callog.presentation.theme.CallogMotion
 /**
  * Custom Material 3 Expressive Floating Bottom Navigation Dock with Center-Docked Action FAB.
  *
- * Contains ONLY:
- * 1. Contacts (Left destination -> ContactsScreen)
- * 2. Center Floating Action Button (Primary action -> Quick Actions Menu)
- * 3. Recordings (Right destination -> RecordingManagerScreen)
+ * Contains:
+ * 1. Dialer (Left destination -> DialerScreen with Recent Call Logs & Keypad)
+ * 2. Contacts (CRM & Phonebook directory)
+ * 3. Center Floating Action Button (Quick Actions Menu)
+ * 4. Recordings (Audio vault)
+ * 5. Settings (Preferences & tools)
  *
  * Stateless component adhering to Clean Architecture & M3 Expressive design tokens.
  */
@@ -231,16 +233,7 @@ fun CallogBottomNavigation(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    // Left side: Contacts + Dialer
-                    CallogDockItem(
-                        selected = isContactsSelected,
-                        onClick = onContactsClick,
-                        selectedIcon = Icons.Filled.Contacts,
-                        unselectedIcon = Icons.Outlined.Contacts,
-                        label = "Contacts",
-                        contentDescription = "Contacts",
-                        modifier = Modifier.weight(1f)
-                    )
+                    // Left side: Dialer + Contacts
                     CallogDockItem(
                         selected = isDialerSelected,
                         onClick = onDialerClick,
@@ -248,6 +241,15 @@ fun CallogBottomNavigation(
                         unselectedIcon = Icons.Filled.Dialpad,
                         label = "Dialer",
                         contentDescription = "Dialer",
+                        modifier = Modifier.weight(1f)
+                    )
+                    CallogDockItem(
+                        selected = isContactsSelected,
+                        onClick = onContactsClick,
+                        selectedIcon = Icons.Filled.Contacts,
+                        unselectedIcon = Icons.Outlined.Contacts,
+                        label = "Contacts",
+                        contentDescription = "Contacts",
                         modifier = Modifier.weight(1f)
                     )
 

@@ -12,7 +12,7 @@ interface RecordingLogDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertLog(log: RecordingLogEntity): Long
 
-    @Query("SELECT * FROM recording_logs ORDER BY createdAt DESC")
+    @Query("SELECT * FROM recording_logs ORDER BY createdAt DESC LIMIT 300")
     fun getAllLogsFlow(): Flow<List<RecordingLogEntity>>
 
     @Query("DELETE FROM recording_logs")

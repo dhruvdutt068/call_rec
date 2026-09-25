@@ -66,8 +66,10 @@ enum class CrmBottomTab(
 
 /**
  * Top-level Client Navigation container with multi-backstack state and slide-out Menu Drawer:
- * 1. Contacts (Global CRM & local phonebook)
- * 2. Recordings (Audio vault with inline player)
+ * 1. Dialer (Default screen: unified Recent Call Logs & Dialpad workspace)
+ * 2. Contacts (Global CRM & local phonebook)
+ * 3. Recordings (Audio vault with inline player)
+ * 4. Settings (Preferences & tools)
  * + Center Action FAB with Quick Actions menu (Add Contact, Create Task, Schedule Meeting, Log Call)
  */
 @Composable
@@ -120,7 +122,7 @@ fun CrmNav3Container(
     }
 
     val multiStack = rememberNav3MultiBackStack(
-        initialTab = CrmBottomTab.CONTACTS,
+        initialTab = CrmBottomTab.DIALER,
         tabRoots = tabRoots
     )
 
@@ -176,13 +178,13 @@ fun CrmNav3Container(
         }
     }
 
-    // BackHandler: If drawer is open, close it; otherwise pop active tab stack; fallback to CONTACTS.
+    // BackHandler: If drawer is open, close it; otherwise pop active tab stack; fallback to DIALER.
     BackHandler(enabled = true) {
         if (drawerState.isOpen) {
             closeDrawer()
         } else if (!multiStack.pop()) {
-            if (multiStack.selectedTab != CrmBottomTab.CONTACTS) {
-                multiStack.selectTab(CrmBottomTab.CONTACTS)
+            if (multiStack.selectedTab != CrmBottomTab.DIALER) {
+                multiStack.selectTab(CrmBottomTab.DIALER)
             }
         }
     }
@@ -337,12 +339,15 @@ fun CrmNav3Container(
                         NavigationDrawerItem(
                             icon = { Icon(Icons.Default.Dialpad, contentDescription = null) },
                             label = { Text("Dialer & Keypad") },
-                            selected = false,
+                            selected = multiStack.selectedTab == CrmBottomTab.DIALER,
                             onClick = {
-                                multiStack.navigate(Nav3Key.CrmTab.Dialer)
+                                multiStack.selectTab(CrmBottomTab.DIALER, popToRootIfSelected = true)
                                 closeDrawer()
                             },
                             colors = NavigationDrawerItemDefaults.colors(
+                                selectedContainerColor = Teal500.copy(alpha = 0.2f),
+                                selectedIconColor = Teal300,
+                                selectedTextColor = Slate50,
                                 unselectedIconColor = Slate400,
                                 unselectedTextColor = Slate300
                             ),
@@ -352,12 +357,15 @@ fun CrmNav3Container(
                         NavigationDrawerItem(
                             icon = { Icon(Icons.Default.History, contentDescription = null) },
                             label = { Text("Call Logs & History") },
-                            selected = false,
+                            selected = multiStack.selectedTab == CrmBottomTab.DIALER,
                             onClick = {
-                                multiStack.navigate(Nav3Key.CrmTab.CallLogs)
+                                multiStack.selectTab(CrmBottomTab.DIALER, popToRootIfSelected = true)
                                 closeDrawer()
                             },
                             colors = NavigationDrawerItemDefaults.colors(
+                                selectedContainerColor = Teal500.copy(alpha = 0.2f),
+                                selectedIconColor = Teal300,
+                                selectedTextColor = Slate50,
                                 unselectedIconColor = Slate400,
                                 unselectedTextColor = Slate300
                             ),
@@ -671,7 +679,7 @@ fun CrmNav3Container(
                         multiStack.navigate(Nav3Key.Meeting.ScheduleMeeting())
                     },
                     onLogCall = {
-                        multiStack.navigate(Nav3Key.CrmTab.Dialer)
+                        multiStack.selectTab(CrmBottomTab.DIALER, popToRootIfSelected = true)
                     }
                 )
             },

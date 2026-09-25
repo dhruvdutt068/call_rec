@@ -8,7 +8,7 @@ enum class PresetEnvironment(
     val description: String,
     val iconName: String
 ) {
-    DEVELOPMENT("Development", "Local development & testing sandbox", "Code"),
+    DEVELOPMENT("Development", "Testing sandbox with development backend", "Code"),
     STAGING("Staging", "QA / pre-production validation", "Science"),
     PRODUCTION("Production", "Live customer-facing backend", "RocketLaunch"),
     CUSTOM("Custom", "User-defined custom endpoints & keys", "Settings");

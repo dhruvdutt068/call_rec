@@ -63,12 +63,10 @@ fun DialerScreen(
     onCallClick: ((Long) -> Unit)? = null,
     onNavigateToContact: ((String) -> Unit)? = null,
     onMenuClick: (() -> Unit)? = null,
-    onNavigateToCallSimulator: (() -> Unit)? = null,
     viewModel: DialerViewModel = hiltViewModel(),
     modifier: Modifier = Modifier
 ) {
     val uiState by viewModel.uiState.collectAsState()
-    var showSimulatorSheet by remember { mutableStateOf(false) }
     val callLogsListState = rememberLazyListState()
 
     // Intercept Back button when dialpad is open
@@ -115,8 +113,7 @@ fun DialerScreen(
                         listState = callLogsListState,
                         onAction = viewModel::onAction,
                         onCallClick = onCallClick,
-                        onMenuClick = onMenuClick,
-                        onOpenSimulator = { showSimulatorSheet = true }
+                        onMenuClick = onMenuClick
                     )
                 }
                 DialerMode.Dialpad -> {
@@ -124,25 +121,12 @@ fun DialerScreen(
                         uiState = uiState,
                         onAction = viewModel::onAction,
                         onMenuClick = onMenuClick,
-                        onOpenSimulator = { showSimulatorSheet = true },
                         onNavigateToContact = onNavigateToContact
                     )
                 }
             }
         }
 
-        if (showSimulatorSheet) {
-            SimulateCallBottomSheet(
-                initialNumber = uiState.inputNumber,
-                activeSims = uiState.activeSims,
-                simulatorManager = viewModel.simulatorManager,
-                onDismiss = { showSimulatorSheet = false },
-                onNavigateToStudio = {
-                    showSimulatorSheet = false
-                    onNavigateToCallSimulator?.invoke()
-                }
-            )
-        }
     }
 }
 
@@ -203,8 +187,7 @@ private fun CallLogsModeView(
     listState: LazyListState,
     onAction: (DialerUiAction) -> Unit,
     onCallClick: ((Long) -> Unit)?,
-    onMenuClick: (() -> Unit)?,
-    onOpenSimulator: () -> Unit
+    onMenuClick: (() -> Unit)?
 ) {
     var showSortMenu by remember { mutableStateOf(false) }
 
@@ -248,24 +231,6 @@ private fun CallLogsModeView(
                     }
                 },
                 actions = {
-                    // Call Simulator Quick Button
-                    IconButton(
-                        onClick = onOpenSimulator,
-                        modifier = Modifier
-                            .size(34.dp)
-                            .clip(CircleShape)
-                            .background(Teal500.copy(alpha = 0.2f))
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.PhoneCallback,
-                            contentDescription = "Simulate Call",
-                            tint = Teal300,
-                            modifier = Modifier.size(18.dp)
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.width(4.dp))
-
                     // Sync Button
                     IconButton(
                         onClick = { onAction(DialerUiAction.SyncLogs) },
@@ -440,7 +405,6 @@ private fun DialpadModeView(
     uiState: DialerUiState,
     onAction: (DialerUiAction) -> Unit,
     onMenuClick: (() -> Unit)?,
-    onOpenSimulator: () -> Unit,
     onNavigateToContact: ((String) -> Unit)?
 ) {
     Column(
@@ -484,22 +448,6 @@ private fun DialpadModeView(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                // Call Simulator Quick Button
-                IconButton(
-                    onClick = onOpenSimulator,
-                    modifier = Modifier
-                        .size(34.dp)
-                        .clip(CircleShape)
-                        .background(Teal500.copy(alpha = 0.2f))
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.PhoneCallback,
-                        contentDescription = "Simulate Call",
-                        tint = Teal300,
-                        modifier = Modifier.size(18.dp)
-                    )
-                }
-
                 Surface(
                     shape = RoundedCornerShape(12.dp),
                     color = if (uiState.isDefaultDialer) Green500.copy(alpha = 0.15f) else Amber500.copy(alpha = 0.15f),
@@ -1037,8 +985,7 @@ fun DialerScreenCallLogsPreview() {
             listState = rememberLazyListState(),
             onAction = {},
             onCallClick = {},
-            onMenuClick = {},
-            onOpenSimulator = {}
+            onMenuClick = {}
         )
     }
 }
@@ -1058,7 +1005,6 @@ fun DialerScreenKeypadPreview() {
             ),
             onAction = {},
             onMenuClick = {},
-            onOpenSimulator = {},
             onNavigateToContact = {}
         )
     }

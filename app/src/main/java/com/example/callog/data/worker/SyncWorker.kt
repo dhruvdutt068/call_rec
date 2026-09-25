@@ -106,31 +106,41 @@ class SyncWorker(
             // This ensures People, PhoneNumbers, Devices, Aliases exist and call.personId can be resolved properly
             try {
                 DeveloperLogger.info("IDENTITY_SYNC_STARTED", "Resolving contacts to Person canonical identity and syncing to Supabase", network = network)
+
+                // 1. FIRST: Download latest global contacts from Supabase into local Room database
+                // This ensures this device knows all canonical Person IDs and phone numbers registered by other devices
+                DeveloperLogger.info("GLOBAL_CONTACTS_SYNC", "Downloading latest global contacts from Supabase into local Room database", network = network)
+                personRepository.syncGlobalContactsFromSupabase()
+
+                // 2. Scan and resolve local device contacts against refreshed Room cache and Supabase RPC
                 personRepository.syncContactsFromDevice()
 
-                // 1. Sync all Devices first to guarantee contact_aliases foreign key
+                // 3. Sync all Devices to guarantee contact_aliases foreign key
                 val devices = personDao.getAllDevices().distinctBy { it.id }
                 if (devices.isNotEmpty()) {
                     supabaseService.syncDevices(devices)
                 }
 
-                // 2. Collect all pending records
+                // 4. Collect all pending records
                 val pendingPhoneNumbers = personDao.getPendingPhoneNumbers()
                 val pendingAliases = personDao.getPendingAliases()
                 val pendingPeople = personDao.getPendingPeople()
 
-                // Guarantee that ALL People referenced by pending phone numbers or aliases are upserted first
+                // Guarantee that only valid People referenced by active pending phone numbers or aliases are upserted
                 val allReferencedPersonIds = (pendingPeople.map { it.id } +
                         pendingPhoneNumbers.map { it.personId } +
                         pendingAliases.map { it.personId }).distinct()
 
-                val peopleToUpsert = allReferencedPersonIds.mapNotNull { personDao.getPersonById(it) }.distinctBy { it.id }
+                val peopleToUpsert = allReferencedPersonIds.mapNotNull { personDao.getPersonById(it) }
+                    .filter { p ->
+                        // Root-level fix: never push an orphaned person record without phone numbers or aliases
+                        personDao.getPhoneNumbersForPerson(p.id).isNotEmpty() || personDao.getAliasesForPerson(p.id).isNotEmpty()
+                    }
+                    .distinctBy { it.id }
                 if (peopleToUpsert.isNotEmpty()) {
                     val res = supabaseService.syncPeople(peopleToUpsert)
                     if (res.isSuccess) {
-                        for (p in peopleToUpsert) {
-                            personDao.updatePersonSyncStatus(p.id, "SYNCED")
-                        }
+                        personDao.updatePeopleSyncStatus(peopleToUpsert.map { it.id }, "SYNCED")
                         DeveloperLogger.success("IDENTITY_PEOPLE_SYNCED", "Synced ${peopleToUpsert.size} people to Supabase.", network = network)
                     } else {
                         val errMsg = res.exceptionOrNull()?.message ?: "Unknown error"
@@ -147,9 +157,7 @@ class SyncWorker(
                     if (validPhoneNumbers.isNotEmpty()) {
                         val res = supabaseService.syncPhoneNumbers(validPhoneNumbers)
                         if (res.isSuccess) {
-                            for (pn in validPhoneNumbers) {
-                                personDao.updatePhoneNumberSyncStatus(pn.id, "SYNCED")
-                            }
+                            personDao.updatePhoneNumbersSyncStatus(validPhoneNumbers.map { it.id }, "SYNCED")
                             DeveloperLogger.success("IDENTITY_PHONES_SYNCED", "Synced ${validPhoneNumbers.size} phone numbers to Supabase.", network = network)
                         } else {
                             val errMsg = res.exceptionOrNull()?.message ?: "Unknown error"
@@ -167,9 +175,7 @@ class SyncWorker(
                     if (validAliases.isNotEmpty()) {
                         val res = supabaseService.syncContactAliases(validAliases)
                         if (res.isSuccess) {
-                            for (ca in validAliases) {
-                                personDao.updateAliasSyncStatus(ca.id, "SYNCED")
-                            }
+                            personDao.updateAliasesSyncStatus(validAliases.map { it.id }, "SYNCED")
                             DeveloperLogger.success("IDENTITY_ALIASES_SYNCED", "Synced ${validAliases.size} aliases to Supabase.", network = network)
                         } else {
                             val errMsg = res.exceptionOrNull()?.message ?: "Unknown error"
@@ -452,9 +458,9 @@ class SyncWorker(
 
     private suspend fun runLogsMaintenance(syncLogDao: SyncLogDao) {
         try {
-            val cutoff = System.currentTimeMillis() - (30L * 24 * 60 * 60 * 1000) // 30 days
+            val cutoff = System.currentTimeMillis() - (7L * 24 * 60 * 60 * 1000) // 7 days
             syncLogDao.deleteLogsOlderThan(cutoff)
-            syncLogDao.trimLogs(5000)
+            syncLogDao.trimLogs(300)
         } catch (e: Exception) {
             Log.e(TAG, "Failed running log cleanup maintenance", e)
         }

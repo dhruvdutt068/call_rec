@@ -257,14 +257,6 @@ class PresetViewModel @Inject constructor(
                 PresetConfiguration.FEATURE_FAKE_RECORDINGS to true,
                 PresetConfiguration.FEATURE_NETWORK_INSPECTOR to true
             )
-            PresetEnvironment.STAGING -> mapOf(
-                PresetConfiguration.FEATURE_DEV_DIAGNOSTICS to true,
-                PresetConfiguration.FEATURE_CALL_SIMULATOR to true,
-                PresetConfiguration.FEATURE_DEBUG_LOGGING to true,
-                PresetConfiguration.FEATURE_EXPERIMENTAL_CALL_UI to false,
-                PresetConfiguration.FEATURE_FAKE_RECORDINGS to false,
-                PresetConfiguration.FEATURE_NETWORK_INSPECTOR to true
-            )
             PresetEnvironment.PRODUCTION -> mapOf(
                 PresetConfiguration.FEATURE_DEV_DIAGNOSTICS to false,
                 PresetConfiguration.FEATURE_CALL_SIMULATOR to false,
@@ -273,28 +265,23 @@ class PresetViewModel @Inject constructor(
                 PresetConfiguration.FEATURE_FAKE_RECORDINGS to false,
                 PresetConfiguration.FEATURE_NETWORK_INSPECTOR to false
             )
-            PresetEnvironment.CUSTOM -> PresetConfiguration.defaultFeatureFlags()
         }
 
         return AppPreset(
             id = newId,
             name = when (env) {
                 PresetEnvironment.DEVELOPMENT -> "Development Sandbox"
-                PresetEnvironment.STAGING -> "Staging QA"
                 PresetEnvironment.PRODUCTION -> "Production Backend"
-                PresetEnvironment.CUSTOM -> "Custom Environment"
             },
             environment = env,
             description = when (env) {
                 PresetEnvironment.DEVELOPMENT -> "Local testing and debugging sandbox"
-                PresetEnvironment.STAGING -> "Pre-release QA environment"
                 PresetEnvironment.PRODUCTION -> "Live production database"
-                PresetEnvironment.CUSTOM -> "User-configured custom endpoints"
             },
             configuration = PresetConfiguration(
-                supabaseUrl = if (env == PresetEnvironment.DEVELOPMENT) "https://dev-supabase.callog.co" else "",
-                firebaseProjectId = if (env == PresetEnvironment.DEVELOPMENT) "callog-dev" else "",
-                storageBucket = if (env == PresetEnvironment.DEVELOPMENT) "callog-dev-recordings" else "",
+                supabaseUrl = if (env == PresetEnvironment.DEVELOPMENT) com.example.callog.core.config.SupabaseDefaults.DEV_URL else com.example.callog.core.config.SupabaseDefaults.PROD_URL,
+                firebaseProjectId = if (env == PresetEnvironment.DEVELOPMENT) "allset-491218" else "allset-244ab",
+                storageBucket = if (env == PresetEnvironment.DEVELOPMENT) "allset-491218.firebasestorage.app" else "allset-244ab.firebasestorage.app",
                 apiBaseUrl = "",
                 features = defaultFeatures
             ),

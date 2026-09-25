@@ -77,25 +77,17 @@ class EnvironmentConfigManager @Inject constructor(
         return if (!url.isNullOrBlank() && !key.isNullOrBlank()) {
             SupabaseConfig(url.trim(), key.trim())
         } else {
-            // Default: Development points to SupabaseDefaults, Deployment starts empty unless configured
             if (env == AppEnvironment.DEVELOPMENT) {
-                SupabaseConfig(SupabaseDefaults.DEFAULT_URL, SupabaseDefaults.DEFAULT_ANON_KEY)
+                SupabaseConfig(SupabaseDefaults.DEV_URL, SupabaseDefaults.DEV_ANON_KEY)
             } else {
-                // If Deployment has no custom config yet, fallback to empty or dev defaults until configured
-                SupabaseConfig("", "")
+                SupabaseConfig(SupabaseDefaults.PROD_URL, SupabaseDefaults.PROD_ANON_KEY)
             }
         }
     }
 
     fun getActiveSupabaseConfig(): SupabaseConfig {
         val env = getActiveEnvironment()
-        val config = getSupabaseConfig(env)
-        // If deployment config is empty, fallback gracefully to SupabaseDefaults
-        return if (config.url.isNotBlank() && config.apiKey.isNotBlank()) {
-            config
-        } else {
-            SupabaseConfig(SupabaseDefaults.DEFAULT_URL, SupabaseDefaults.DEFAULT_ANON_KEY)
-        }
+        return getSupabaseConfig(env)
     }
 
     fun saveSupabaseConfig(env: AppEnvironment, config: SupabaseConfig?) {
@@ -139,7 +131,26 @@ class EnvironmentConfigManager @Inject constructor(
                 databaseUrl = databaseUrl?.trim()?.ifBlank { null }
             )
         } else {
-            null
+            // Built-in defaults for Development and Production/Deployment
+            if (env == AppEnvironment.DEVELOPMENT) {
+                FirebaseConfig(
+                    projectId = "allset-491218",
+                    apiKey = "AIzaSyBtlY7EoO6PgPUCMjNR55K88H2v665qQgQ",
+                    appId = "1:799427430422:android:e0f5737f12b8b9cbb20d37",
+                    storageBucket = "allset-491218.firebasestorage.app",
+                    gcmSenderId = "799427430422",
+                    databaseUrl = "https://allset-491218-default-rtdb.asia-southeast1.firebasedatabase.app"
+                )
+            } else {
+                FirebaseConfig(
+                    projectId = "allset-244ab",
+                    apiKey = "AIzaSyDLqHOgAdLBz9__Un_BI0ZMwz5l2ucJnKo",
+                    appId = "1:598633676290:android:e264397de748bf0371711b",
+                    storageBucket = "allset-244ab.firebasestorage.app",
+                    gcmSenderId = "598633676290",
+                    databaseUrl = null
+                )
+            }
         }
     }
 

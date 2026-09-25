@@ -28,8 +28,8 @@ class SyncManagerImpl @Inject constructor(
     private val workManager = WorkManager.getInstance(context)
 
     companion object {
-        private const val ONE_TIME_SYNC_WORK_NAME = "one_time_sync_work"
-        private const val PERIODIC_SYNC_WORK_NAME = "periodic_sync_work"
+        const val ONE_TIME_SYNC_WORK_NAME = "one_time_sync_work"
+        const val PERIODIC_SYNC_WORK_NAME = "periodic_sync_work"
     }
 
     override val isSyncing: Flow<Boolean> = workManager.getWorkInfosForUniqueWorkFlow(ONE_TIME_SYNC_WORK_NAME)

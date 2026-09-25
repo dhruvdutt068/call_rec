@@ -383,6 +383,10 @@ class FakePersonDaoForCallTest : PersonDao {
         }
     }
 
+    override suspend fun updatePeopleSyncStatus(ids: List<String>, status: String, updatedAt: Long) {
+        ids.forEach { updatePersonSyncStatus(it, status, updatedAt) }
+    }
+
     override suspend fun insertPhoneNumber(phoneNumber: PhoneNumberEntity) {
         phoneNumbers.removeAll { it.id == phoneNumber.id }
         phoneNumbers.add(phoneNumber)
@@ -411,6 +415,10 @@ class FakePersonDaoForCallTest : PersonDao {
         if (pn != null) {
             insertPhoneNumber(pn.copy(syncStatus = status))
         }
+    }
+
+    override suspend fun updatePhoneNumbersSyncStatus(ids: List<String>, status: String) {
+        ids.forEach { updatePhoneNumberSyncStatus(it, status) }
     }
 
     override suspend fun insertAlias(alias: ContactAliasEntity) {
@@ -447,9 +455,17 @@ class FakePersonDaoForCallTest : PersonDao {
         }
     }
 
+    override suspend fun updateAliasesSyncStatus(ids: List<String>, status: String) {
+        ids.forEach { updateAliasSyncStatus(it, status) }
+    }
+
     override suspend fun insertDevice(device: DeviceEntity) {
         devices.removeAll { it.id == device.id }
         devices.add(device)
+    }
+
+    override suspend fun insertDevices(devicesList: List<DeviceEntity>) {
+        devicesList.forEach { insertDevice(it) }
     }
 
     override suspend fun getDeviceById(id: String): DeviceEntity? = devices.find { it.id == id }

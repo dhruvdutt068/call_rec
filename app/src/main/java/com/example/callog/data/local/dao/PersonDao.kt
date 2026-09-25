@@ -50,10 +50,21 @@ interface PersonDao {
     @Query("SELECT * FROM people WHERE syncStatus != 'SYNCED'")
     suspend fun getPendingPeople(): List<PersonEntity>
 
+    @Query("DELETE FROM people WHERE id = :id")
+    suspend fun deletePersonById(id: String)
+
     @Query("UPDATE people SET syncStatus = :status, updatedAt = :updatedAt WHERE id = :id")
     suspend fun updatePersonSyncStatus(id: String, status: String, updatedAt: Long = System.currentTimeMillis())
 
+    @Query("UPDATE people SET syncStatus = :status, updatedAt = :updatedAt WHERE id IN (:ids)")
+    suspend fun updatePeopleSyncStatus(ids: List<String>, status: String, updatedAt: Long = System.currentTimeMillis())
+
     // --- Phone Numbers ---
+    @Query("DELETE FROM phone_numbers WHERE personId = :personId")
+    suspend fun deletePhoneNumbersForPerson(personId: String)
+
+    @Query("UPDATE contact_aliases SET personId = :newPersonId WHERE personId = :oldPersonId")
+    suspend fun reassignAliasesPersonId(oldPersonId: String, newPersonId: String)
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertPhoneNumber(phoneNumber: PhoneNumberEntity)
 
@@ -74,6 +85,9 @@ interface PersonDao {
 
     @Query("UPDATE phone_numbers SET syncStatus = :status WHERE id = :id")
     suspend fun updatePhoneNumberSyncStatus(id: String, status: String)
+
+    @Query("UPDATE phone_numbers SET syncStatus = :status WHERE id IN (:ids)")
+    suspend fun updatePhoneNumbersSyncStatus(ids: List<String>, status: String)
 
     // --- Contact Aliases ---
     @Insert(onConflict = OnConflictStrategy.REPLACE)
@@ -99,6 +113,24 @@ interface PersonDao {
 
     @Query("UPDATE contact_aliases SET syncStatus = :status WHERE id = :id")
     suspend fun updateAliasSyncStatus(id: String, status: String)
+
+    @Query("UPDATE contact_aliases SET syncStatus = :status WHERE id IN (:ids)")
+    suspend fun updateAliasesSyncStatus(ids: List<String>, status: String)
+
+    @Transaction
+    suspend fun insertPersonWithDetails(
+        person: PersonEntity,
+        phoneNumbers: List<PhoneNumberEntity>,
+        alias: ContactAliasEntity?
+    ) {
+        insertPerson(person)
+        if (phoneNumbers.isNotEmpty()) {
+            insertPhoneNumbers(phoneNumbers)
+        }
+        if (alias != null) {
+            insertAlias(alias)
+        }
+    }
 
     // --- Devices ---
     @Insert(onConflict = OnConflictStrategy.REPLACE)
