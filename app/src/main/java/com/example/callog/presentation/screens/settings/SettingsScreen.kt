@@ -618,7 +618,7 @@ fun SettingsScreen(
             GlassyCard(modifier = Modifier.fillMaxWidth()) {
                 Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
                     Text(
-                        text = "Select a folder from your device's storage to scan for call recordings.",
+                        text = "In-call recordings are saved directly into a dedicated directory on your phone storage so you can easily access and manage audio files.",
                         color = Slate400,
                         style = MaterialTheme.typography.bodySmall
                     )
@@ -630,31 +630,42 @@ fun SettingsScreen(
                     ) {
                         Column(modifier = Modifier.weight(1f).padding(end = 8.dp)) {
                             Text(
-                                text = if (customPathState.isNotEmpty()) "Selected Folder Path:" else "No folder selected",
+                                text = if (customPathState.isNotEmpty()) "Custom Storage Directory:" else "Dedicated Storage Directory (Default):",
                                 color = Slate400,
                                 style = MaterialTheme.typography.bodySmall
                             )
-                            if (customPathState.isNotEmpty()) {
-                                Text(
-                                    text = customPathState,
-                                    color = Slate50,
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    fontWeight = FontWeight.SemiBold
-                                )
-                            }
+                            Text(
+                                text = if (customPathState.isNotEmpty()) customPathState else "Internal Storage / Recordings / Callog",
+                                color = if (customPathState.isNotEmpty()) Slate50 else Teal300,
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.SemiBold
+                            )
                         }
 
-                        Button(
-                            onClick = { folderPickerLauncher.launch(null) },
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = Teal500,
-                                contentColor = Slate50
-                            )
-                        ) {
-                            Text(
-                                text = if (customPathState.isNotEmpty()) "Change" else "Choose",
-                                fontWeight = FontWeight.Bold
-                            )
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            if (customPathState.isNotEmpty()) {
+                                OutlinedButton(
+                                    onClick = { viewModel.saveCustomRecordingPath("") },
+                                    colors = ButtonDefaults.outlinedButtonColors(
+                                        contentColor = Slate400
+                                    )
+                                ) {
+                                    Text("Reset", fontWeight = FontWeight.Bold)
+                                }
+                            }
+
+                            Button(
+                                onClick = { folderPickerLauncher.launch(null) },
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = Teal500,
+                                    contentColor = Slate50
+                                )
+                            ) {
+                                Text(
+                                    text = if (customPathState.isNotEmpty()) "Change" else "Customize",
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
                         }
                     }
                 }

@@ -240,7 +240,7 @@ class SyncWorker(
                 DeveloperLogger.success("SALES_CALL_CREATED", "Populated $createdCount new, updated $updatedCount sales call logs locally.", network = network)
             }
 
-            // Step 2c: Sync pending sales_calls to Supabase AND Client CRM tables
+            // Step 2c: Sync pending sales_calls to Supabase
             try {
                 val pendingSalesCalls = salesCallDao.getPendingSalesCalls().take(100)
                 if (pendingSalesCalls.isNotEmpty()) {
@@ -249,36 +249,7 @@ class SyncWorker(
                     val syncResult = supabaseService.syncSalesCalls(pendingSalesCalls)
                     val duration = System.currentTimeMillis() - startTime
 
-                    // Also publish integration events to Client CRM (calls_log, lead_communications) using the pending sales calls list
-                    try {
-                        DeveloperLogger.info("CRM_INTEGRATION_STARTED", "Publishing ${pendingSalesCalls.size} call events to Client CRM", network = network)
-                        val crmEvents = pendingSalesCalls.map { sc ->
-                            val epochMs = try {
-                                val sdf = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", java.util.Locale.US).apply {
-                                    timeZone = java.util.TimeZone.getTimeZone("UTC")
-                                }
-                                sdf.parse(sc.createdAt)?.time ?: System.currentTimeMillis()
-                            } catch (_: Exception) {
-                                System.currentTimeMillis()
-                            }
-                            com.example.callog.domain.crm.model.CrmCallEvent(
-                                callId = sc.callId,
-                                personId = sc.personId,
-                                rawPhoneNumber = sc.buyerPhone,
-                                contactName = sc.buyerName,
-                                salespersonPhone = sc.salespersonPhone,
-                                salespersonName = sc.salespersonName,
-                                callType = sc.callType,
-                                durationSeconds = sc.duration,
-                                timestampEpochMs = epochMs,
-                                recordingCloudUrl = null,
-                                notes = null
-                            )
-                        }
-                        crmRepository.publishBatchCallEvents(crmEvents)
-                    } catch (e: Exception) {
-                        DeveloperLogger.warning("CRM_INTEGRATION_FAILED", "Exception publishing events to Client CRM: ${e.message}", network = network)
-                    }
+                    // CRM tables (calls_log, lead_communications) syncing disabled per configuration
 
                     if (syncResult.isSuccess) {
                         for (salesCall in pendingSalesCalls) {
@@ -298,39 +269,7 @@ class SyncWorker(
                 DeveloperLogger.error("SUPABASE_UPLOAD_FAILED", "Exception occurred during Supabase sync execution", exception = e, network = network)
             }
 
-            // Step 2d: Sync pending CRM Leads to Supabase
-            try {
-                val pendingLeads = leadDao.getPendingLeads()
-                if (pendingLeads.isNotEmpty()) {
-                    DeveloperLogger.info("LEAD_SYNC_STARTED", "Syncing ${pendingLeads.size} pending CRM leads to Supabase", network = network)
-                    
-                    // Guarantee foreign key constraint is satisfied by syncing referenced people first
-                    val referencedPersonIds = pendingLeads.map { it.personId }.distinct()
-                    val peopleToUpsert = referencedPersonIds.mapNotNull { personDao.getPersonById(it) }
-                    if (peopleToUpsert.isNotEmpty()) {
-                        supabaseService.syncPeople(peopleToUpsert)
-                    }
-
-                    val startTime = System.currentTimeMillis()
-                    val res = supabaseService.syncLeads(pendingLeads)
-                    val duration = System.currentTimeMillis() - startTime
-                    if (res.isSuccess) {
-                        for (lead in pendingLeads) {
-                            leadDao.updateSyncStatus(lead.id, "SYNCED")
-                        }
-                        DeveloperLogger.success("LEAD_SYNC_SUCCESS", "Successfully synced ${pendingLeads.size} CRM leads to Supabase.", durationMs = duration, network = network)
-                    } else {
-                        val exception = res.exceptionOrNull()
-                        val errMsg = exception?.message ?: "Unknown lead sync error"
-                        for (lead in pendingLeads) {
-                            leadDao.updateSyncStatus(lead.id, "FAILED")
-                        }
-                        DeveloperLogger.error("LEAD_SYNC_FAILED", "Failed syncing CRM leads: $errMsg", exception = exception, network = network)
-                    }
-                }
-            } catch (e: Exception) {
-                DeveloperLogger.error("LEAD_SYNC_FAILED", "Exception during Lead sync: ${e.message}", exception = e, network = network)
-            }
+            // Step 2d: Sync pending CRM Leads to Supabase (Disabled - leads table sync turned off)
 
             // Step 3: Fetch all pending items from local database for Firestore (limit to last 100)
             val pendingCalls = syncRepository.getPendingCalls().take(100)

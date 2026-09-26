@@ -58,7 +58,7 @@ object CrmPayloadMapper {
         val agentPhone = toCrmPhoneNumber(event.salespersonPhone)
         val isoTimestamp = formatTimestampUtc(event.timestampEpochMs)
         return ClientLeadCommunicationDto(
-            id = "COMM_${event.callId}_${event.timestampEpochMs}",
+            id = null,
             phoneNumber = crmPhone,
             leadName = event.contactName,
             communicationType = "CALL",

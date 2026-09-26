@@ -5,6 +5,8 @@ object Constants {
     
     // Standard directories for scanned recordings
     val RECORDING_DIRECTORIES = listOf(
+        "Recordings/Callog",
+        "Recordings/Call Vault",
         "Recordings",
         "Recordings/Call",
         "Recordings/Record/Call",

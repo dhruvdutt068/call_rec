@@ -397,6 +397,20 @@ class LeadLifecycleTest {
 
         override fun searchPeopleWithDetailsFlow(query: String): Flow<List<PersonWithDetails>> = flowOf(emptyList())
         override suspend fun searchPeopleWithDetails(query: String): List<PersonWithDetails> = emptyList()
+
+        override suspend fun deletePersonById(id: String) {
+            people.removeAll { it.id == id }
+        }
+
+        override suspend fun deletePhoneNumbersForPerson(personId: String) {
+            phoneNumbers.removeAll { it.personId == personId }
+        }
+
+        override suspend fun reassignAliasesPersonId(oldPersonId: String, newPersonId: String) {
+            val updated = aliases.map { if (it.personId == oldPersonId) it.copy(personId = newPersonId) else it }
+            aliases.clear()
+            aliases.addAll(updated)
+        }
     }
 
     private class FakeLeadDao : LeadDao {

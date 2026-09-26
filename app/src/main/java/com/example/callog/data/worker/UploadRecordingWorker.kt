@@ -10,6 +10,9 @@ import dagger.hilt.InstallIn
 import dagger.hilt.android.EntryPointAccessors
 import dagger.hilt.components.SingletonComponent
 
+import com.example.callog.domain.service.StorageErrorCategory
+import com.example.callog.domain.service.StorageUploadException
+
 class UploadRecordingWorker(
     context: Context,
     params: WorkerParameters
@@ -40,9 +43,19 @@ class UploadRecordingWorker(
                     Log.i(TAG, "Background upload successful for call: $callId")
                     Result.success()
                 } else {
-                    val error = outcome.exceptionOrNull()?.message ?: "Unknown error"
-                    Log.e(TAG, "Background upload failed for call: $callId - $error")
-                    Result.retry()
+                    val ex = outcome.exceptionOrNull()
+                    val category = (ex as? StorageUploadException)?.category
+                        ?: StorageErrorCategory.fromException(ex ?: Exception("Unknown error"))
+                    val error = ex?.message ?: "Unknown error"
+                    Log.e(TAG, "Background upload failed for call: $callId [$category] (retryable=${category.isRetryable}) - $error")
+
+                    if (category.isRetryable) {
+                        Log.w(TAG, "Failure for call $callId is retryable ($category). Returning Result.retry().")
+                        Result.retry()
+                    } else {
+                        Log.e(TAG, "Deterministic failure for call $callId ($category). Halting retries and returning Result.failure(). Local recording remains safely stored.")
+                        Result.failure()
+                    }
                 }
             } else {
                 Log.w(TAG, "No call_id provided, checking for general retry of failed uploads")
@@ -50,8 +63,13 @@ class UploadRecordingWorker(
                 Result.success()
             }
         } catch (e: Exception) {
-            Log.e(TAG, "Exception in background worker execution", e)
-            Result.retry()
+            val category = (e as? StorageUploadException)?.category ?: StorageErrorCategory.fromException(e)
+            Log.e(TAG, "Exception in background worker execution [$category] (retryable=${category.isRetryable})", e)
+            if (category.isRetryable) {
+                Result.retry()
+            } else {
+                Result.failure()
+            }
         }
     }
 }

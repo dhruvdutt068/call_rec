@@ -209,10 +209,10 @@ class PresetRepositoryImpl @Inject constructor(
                 description = "Live customer environment with strict security",
                 configuration = PresetConfiguration(
                     supabaseUrl = SupabaseDefaults.PROD_URL,
-                    firebaseProjectId = "allset-244ab",
-                    firebaseAppId = "1:598633676290:android:e264397de748bf0371711b",
-                    storageBucket = "allset-244ab.firebasestorage.app",
-                    gcmSenderId = "598633676290",
+                    firebaseProjectId = "allset-491218",
+                    firebaseAppId = "1:799427430422:android:e0f5737f12b8b9cbb20d37",
+                    storageBucket = "allset-491218.firebasestorage.app",
+                    gcmSenderId = "799427430422",
                     apiBaseUrl = "https://api.callog.com",
                     features = mapOf(
                         PresetConfiguration.FEATURE_DEV_DIAGNOSTICS to false,

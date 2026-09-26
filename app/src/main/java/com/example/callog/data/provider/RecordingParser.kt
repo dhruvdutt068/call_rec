@@ -266,19 +266,33 @@ class CallogRecordingParser : BaseRecordingParser() {
     private val epochMsRegex = Regex("(?i)^Callog(?:_Rec)?_([+_a-zA-Z0-9\\s()-]+?)_(1[6-9]\\d{11})(?:_.*)?$")
     private val epochSecRegex = Regex("(?i)^Callog(?:_Rec)?_([+_a-zA-Z0-9\\s()-]+?)_(1[6-9]\\d{8})(?:_.*)?$")
 
+    private fun cleanIdentifier(raw: String): Pair<String?, String?> {
+        val identifier = raw.trim().trim { it == '_' || it == '-' || it.isWhitespace() }
+        val digitsOnly = identifier.replace(Regex("[^0-9]"), "")
+        val isPhone = isPhoneNumber(identifier) || digitsOnly.length in 7..15
+        val phone = if (isPhone) {
+            if (!identifier.startsWith("+") && digitsOnly.length >= 10 && (digitsOnly.startsWith("91") || digitsOnly.length == 10)) {
+                if (digitsOnly.startsWith("91")) "+$digitsOnly" else "+91$digitsOnly"
+            } else {
+                identifier
+            }
+        } else null
+        val name = if (!isPhone) identifier else null
+        return Pair(phone, name)
+    }
+
     override fun parse(fileName: String): RecordingMetadata? {
         val nameWithoutExt = fileName.substringBeforeLast(".")
 
         val dtMatch = dateTimeRegex.find(nameWithoutExt)
         if (dtMatch != null) {
-            val identifier = dtMatch.groupValues[1].trim().removeSuffix("-").removeSuffix("_").trim()
+            val (phone, name) = cleanIdentifier(dtMatch.groupValues[1])
             val dateStr = dtMatch.groupValues[2]
             val timeStr = dtMatch.groupValues[3]
             val timestamp = parseDateTime("${dateStr}${timeStr}", "yyyyMMddHHmmss")
-            val isPhone = isPhoneNumber(identifier)
             return RecordingMetadata(
-                phoneNumber = if (isPhone) identifier else null,
-                contactName = if (!isPhone) identifier else null,
+                phoneNumber = phone,
+                contactName = name,
                 timestamp = timestamp,
                 originalFileName = fileName,
                 parserName = "CallogRecordingParser"
@@ -287,12 +301,11 @@ class CallogRecordingParser : BaseRecordingParser() {
 
         val msMatch = epochMsRegex.find(nameWithoutExt)
         if (msMatch != null) {
-            val identifier = msMatch.groupValues[1].trim().removeSuffix("-").removeSuffix("_").trim()
+            val (phone, name) = cleanIdentifier(msMatch.groupValues[1])
             val epochMs = msMatch.groupValues[2].toLongOrNull()
-            val isPhone = isPhoneNumber(identifier)
             return RecordingMetadata(
-                phoneNumber = if (isPhone) identifier else null,
-                contactName = if (!isPhone) identifier else null,
+                phoneNumber = phone,
+                contactName = name,
                 timestamp = epochMs,
                 originalFileName = fileName,
                 parserName = "CallogRecordingParser"
@@ -301,12 +314,11 @@ class CallogRecordingParser : BaseRecordingParser() {
 
         val secMatch = epochSecRegex.find(nameWithoutExt)
         if (secMatch != null) {
-            val identifier = secMatch.groupValues[1].trim().removeSuffix("-").removeSuffix("_").trim()
+            val (phone, name) = cleanIdentifier(secMatch.groupValues[1])
             val epochSec = secMatch.groupValues[2].toLongOrNull()
-            val isPhone = isPhoneNumber(identifier)
             return RecordingMetadata(
-                phoneNumber = if (isPhone) identifier else null,
-                contactName = if (!isPhone) identifier else null,
+                phoneNumber = phone,
+                contactName = name,
                 timestamp = if (epochSec != null) epochSec * 1000L else null,
                 originalFileName = fileName,
                 parserName = "CallogRecordingParser"

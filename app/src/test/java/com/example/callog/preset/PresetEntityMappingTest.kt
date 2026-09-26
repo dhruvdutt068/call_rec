@@ -11,8 +11,8 @@ class PresetEntityMappingTest {
     fun testDomainToEntityAndBack() {
         val preset = AppPreset(
             id = "test_preset_1",
-            name = "Test Staging",
-            environment = PresetEnvironment.STAGING,
+            name = "Test Development",
+            environment = PresetEnvironment.DEVELOPMENT,
             description = "Test description",
             configuration = PresetConfiguration(
                 supabaseUrl = "https://staging.supabase.co",
@@ -32,8 +32,8 @@ class PresetEntityMappingTest {
 
         val entity = PresetEntity.fromDomain(preset)
         assertEquals("test_preset_1", entity.id)
-        assertEquals("Test Staging", entity.name)
-        assertEquals("STAGING", entity.environment)
+        assertEquals("Test Development", entity.name)
+        assertEquals("DEVELOPMENT", entity.environment)
         assertEquals("1:123456789012:android:staging123", entity.firebaseAppId)
         assertEquals("callog-bucket.appspot.com", entity.storageBucket)
         assertEquals("123456789012", entity.gcmSenderId)
@@ -60,7 +60,6 @@ class PresetEntityMappingTest {
         assertEquals(PresetEnvironment.DEVELOPMENT, PresetEnvironment.fromString(null))
         assertEquals(PresetEnvironment.DEVELOPMENT, PresetEnvironment.fromString("INVALID_ENV"))
         assertEquals(PresetEnvironment.PRODUCTION, PresetEnvironment.fromString("production"))
-        assertEquals(PresetEnvironment.STAGING, PresetEnvironment.fromString("STAGING"))
-        assertEquals(PresetEnvironment.CUSTOM, PresetEnvironment.fromString("custom"))
+        assertEquals(PresetEnvironment.DEVELOPMENT, PresetEnvironment.fromString("DEVELOPMENT"))
     }
 }

@@ -38,7 +38,8 @@ class RecordingRepositoryImpl @Inject constructor(
     private val recordingScanner: RecordingScanner,
     private val contactsProvider: com.example.callog.data.provider.ContactsProvider,
     private val recordingLogDao: com.example.callog.data.local.dao.RecordingLogDao,
-    private val recordingDao: com.example.callog.data.local.dao.RecordingDao
+    private val recordingDao: com.example.callog.data.local.dao.RecordingDao,
+    private val uploadService: com.example.callog.domain.service.UploadService
 ) : RecordingRepository {
     private val TAG = "RecordingRepository"
 
@@ -96,12 +97,62 @@ class RecordingRepositoryImpl @Inject constructor(
                 // 1. Calculate time candidates for this recording
 
                 // 2. Find call logs within window (start time or end time with tolerance)
-                val candidates = dbCalls.filter { call ->
+                var candidates = dbCalls.filter { call ->
                     val callStart = call.timestamp
                     val callEnd = call.timestamp + (call.duration * 1000L)
                     val toleranceMs = 120_000L
                     (rec.timestamp >= (callStart - toleranceMs) && rec.timestamp <= (callEnd + toleranceMs)) ||
                     (rec.lastModified >= (callStart - toleranceMs) && rec.lastModified <= (callEnd + toleranceMs))
+                }
+
+                var matchedViaFallback = false
+                // Fallback: If no candidate within ±120s, search by extracted phone number or contact name
+                if (candidates.isEmpty() && (rec.phoneNumber != null || rec.contactName != null)) {
+                    val phoneCalls = if (rec.phoneNumber != null) {
+                        val normRecNum = normalizePhoneNumber(rec.phoneNumber)
+                        dbCalls.filter { call ->
+                            val normCallNum = normalizePhoneNumber(call.number)
+                            normCallNum.isNotEmpty() && normRecNum.isNotEmpty() && (
+                                normCallNum == normRecNum ||
+                                (normCallNum.length >= 7 && normRecNum.endsWith(normCallNum.takeLast(7))) ||
+                                (normRecNum.length >= 7 && normCallNum.endsWith(normRecNum.takeLast(7)))
+                            )
+                        }
+                    } else emptyList()
+
+                    val targetCalls = if (phoneCalls.isNotEmpty()) phoneCalls else {
+                        val recNameClean = rec.contactName?.trim()?.lowercase() ?: ""
+                        if (recNameClean.isNotEmpty()) {
+                            dbCalls.filter { call ->
+                                val callName = call.name?.trim()?.lowercase() ?: ""
+                                callName.isNotEmpty() && (
+                                    callName == recNameClean ||
+                                    callName.contains(recNameClean) ||
+                                    recNameClean.contains(callName)
+                                )
+                            }
+                        } else emptyList()
+                    }
+
+                    if (targetCalls.isNotEmpty()) {
+                        val nearbyCalls = targetCalls.filter { call ->
+                            Math.abs(call.timestamp - rec.timestamp) <= 14_400_000L ||
+                            Math.abs(call.timestamp - rec.lastModified) <= 14_400_000L
+                        }
+                        if (nearbyCalls.isNotEmpty()) {
+                            candidates = nearbyCalls
+                            matchedViaFallback = true
+                        } else {
+                            val sameDayCalls = targetCalls.filter { call ->
+                                Math.abs(call.timestamp - rec.timestamp) <= 86_400_000L ||
+                                Math.abs(call.timestamp - rec.lastModified) <= 86_400_000L
+                            }
+                            if (sameDayCalls.isNotEmpty()) {
+                                candidates = sameDayCalls
+                                matchedViaFallback = true
+                            }
+                        }
+                    }
                 }
 
                 if (candidates.isEmpty()) {
@@ -119,7 +170,7 @@ class RecordingRepositoryImpl @Inject constructor(
                         matchStatus = MatchStatus.UNMATCHED,
                         uploadStatus = UploadStatus.PENDING,
                         parser = rec.parserName,
-                        reason = "No call log within ±60 seconds"
+                        reason = "No call log found for extracted info (${rec.phoneNumber ?: rec.contactName ?: "none"})"
                     )
                     recordingDao.insertRecording(recordingEntity)
                     recordingLogDao.insertLog(
@@ -133,7 +184,7 @@ class RecordingRepositoryImpl @Inject constructor(
                             candidateCount = 0,
                             matchedCallId = null,
                             status = "UNMATCHED",
-                            reason = "No call log within ±60 seconds"
+                            reason = "No call log found for extracted info (${rec.phoneNumber ?: rec.contactName ?: "none"})"
                         )
                     )
                     return@forEach
@@ -156,7 +207,7 @@ class RecordingRepositoryImpl @Inject constructor(
                         matchStatus = MatchStatus.MATCHED,
                         uploadStatus = UploadStatus.PENDING,
                         parser = rec.parserName,
-                        reason = "Matched to unique call within ±60 seconds"
+                        reason = if (matchedViaFallback) "Matched via phone/contact fallback (${rec.phoneNumber ?: rec.contactName})" else "Matched to unique call within ±120 seconds"
                     )
                     recordingDao.insertRecording(recordingEntity)
                     callDao.updateCall(
@@ -166,7 +217,7 @@ class RecordingRepositoryImpl @Inject constructor(
                             recordingUploadStatus = "PENDING"
                         )
                     )
-                    Log.i(TAG, "Matched unique candidate: ${rec.filePath} -> Call ID ${bestCall.id}")
+                    Log.i(TAG, "Matched candidate: ${rec.filePath} -> Call ID ${bestCall.id}")
                     enqueueUploadWork(bestCall.id)
 
                     recordingLogDao.insertLog(
@@ -409,64 +460,57 @@ class RecordingRepositoryImpl @Inject constructor(
         val file = File(localPath)
         if (!file.exists()) {
             callDao.updateCall(call.copy(recordingUploadStatus = "FAILED"))
+            updateRecordingUploadStatus(callId, UploadStatus.FAILED, reason = "Local recording file does not exist")
             return@withContext Result.failure(Exception("Local recording file does not exist: $localPath"))
         }
 
-        val storageInstance = getStorage()
-            ?: return@withContext Result.failure(Exception("Firebase Storage not initialized"))
+        callDao.updateCall(call.copy(recordingUploadStatus = "UPLOADING"))
+        updateRecordingUploadStatus(callId, UploadStatus.UPLOADING)
 
+        var finalResult: Result<String>? = null
         try {
-            callDao.updateCall(call.copy(recordingUploadStatus = "UPLOADING"))
-
-            val date = Date(call.timestamp)
-            val year = SimpleDateFormat("yyyy", Locale.US).format(date)
-            val month = SimpleDateFormat("MM", Locale.US).format(date)
-            val day = SimpleDateFormat("dd", Locale.US).format(date)
-
-            val devicePhone = firestoreService.getDevicePhoneNumber().ifEmpty { "unknown_device" }
-            val normalizedDevicePhone = FirestoreRepositoryImpl.normalizePhoneNumber(devicePhone)
-
-            val extension = file.extension.ifEmpty { "mp3" }
-            val remotePath = "users/$normalizedDevicePhone/recordings/$year/$month/$day/call_$callId.$extension"
-
-            Log.i(TAG, "Starting GCS upload to path: $remotePath")
-            val ref = storageInstance.reference.child(remotePath)
-            
-            val fileUri = android.net.Uri.fromFile(file)
-            ref.putFile(fileUri).await()
-
-            Log.i(TAG, "GCS upload successful: $remotePath")
-            
-            val downloadUrl = try {
-                ref.downloadUrl.await().toString()
-            } catch (e: Exception) {
-                Log.e(TAG, "Failed to get GCS download URL: ${e.message}", e)
-                ""
-            }
-
-            val firestoreSuccess = updateFirestore(callId, remotePath, downloadUrl)
-            if (firestoreSuccess) {
-                callDao.updateCall(
-                    call.copy(
-                        recordingCloudPath = remotePath,
-                        recordingUrl = downloadUrl,
-                        recordingUploadStatus = "SUCCESS",
-                        recordingUploadedAt = System.currentTimeMillis()
-                    )
-                )
-                updateRecordingUploadStatus(callId, UploadStatus.UPLOADED, downloadUrl)
-                Result.success(remotePath)
-            } else {
-                callDao.updateCall(call.copy(recordingUploadStatus = "FAILED"))
-                updateRecordingUploadStatus(callId, UploadStatus.FAILED, reason = "Failed to update Firestore metadata")
-                Result.failure(Exception("Failed to update Firestore metadata after upload"))
+            uploadService.uploadRecording(call).collect { state ->
+                when (state) {
+                    is com.example.callog.domain.service.UploadProgressState.Success -> {
+                        val cloudPath = state.cloudPath
+                        val downloadUrl = state.downloadUrl
+                        val firestoreSuccess = updateFirestore(callId, cloudPath, downloadUrl)
+                        if (firestoreSuccess) {
+                            callDao.updateCall(
+                                call.copy(
+                                    recordingCloudPath = cloudPath,
+                                    recordingUrl = downloadUrl,
+                                    recordingUploadStatus = "SUCCESS",
+                                    recordingUploadedAt = System.currentTimeMillis()
+                                )
+                            )
+                            updateRecordingUploadStatus(callId, UploadStatus.UPLOADED, downloadUrl)
+                            finalResult = Result.success(cloudPath)
+                        } else {
+                            callDao.updateCall(call.copy(recordingUploadStatus = "FAILED"))
+                            updateRecordingUploadStatus(callId, UploadStatus.FAILED, reason = "Failed to update Firestore metadata")
+                            finalResult = Result.failure(Exception("Failed to update Firestore metadata after upload"))
+                        }
+                    }
+                    is com.example.callog.domain.service.UploadProgressState.Error -> {
+                        Log.e(TAG, "Error uploading call recording $callId to GCS", state.exception)
+                        callDao.updateCall(call.copy(recordingUploadStatus = "FAILED"))
+                        updateRecordingUploadStatus(callId, UploadStatus.FAILED, reason = state.exception.message)
+                        finalResult = Result.failure(state.exception)
+                    }
+                    is com.example.callog.domain.service.UploadProgressState.Progress -> {
+                        // In-progress update
+                    }
+                }
             }
         } catch (e: Exception) {
-            Log.e(TAG, "Error uploading call recording $callId to GCS", e)
+            Log.e(TAG, "Error in uploadRecording stream for call $callId", e)
             callDao.updateCall(call.copy(recordingUploadStatus = "FAILED"))
             updateRecordingUploadStatus(callId, UploadStatus.FAILED, reason = e.message)
-            Result.failure(e)
+            finalResult = Result.failure(e)
         }
+
+        return@withContext finalResult ?: Result.failure(Exception("Upload completed without terminal state"))
     }
 
     override suspend fun updateRecordingUploadStatus(callId: Long, status: UploadStatus, cloudUrl: String?, reason: String?) {
@@ -676,7 +720,7 @@ class RecordingRepositoryImpl @Inject constructor(
                         callNorm == normNum ||
                         (callNorm.length >= 7 && normNum.endsWith(callNorm.takeLast(7))) ||
                         (normNum.length >= 7 && callNorm.endsWith(normNum.takeLast(7)))
-                    ) && Math.abs(call.timestamp - session.startedAt) <= 300_000L
+                    ) && Math.abs(call.timestamp - session.startedAt) <= 1_800_000L
                 }
                 matchedCall = recentCalls.minByOrNull { Math.abs(it.timestamp - session.startedAt) }
             }
@@ -686,7 +730,7 @@ class RecordingRepositoryImpl @Inject constructor(
                 val recentCalls = callDao.getAllCalls().filter { call ->
                     val callName = call.name?.trim()?.lowercase() ?: ""
                     (callName == contactClean || (callName.isNotEmpty() && (callName.contains(contactClean) || contactClean.contains(callName)))) &&
-                    Math.abs(call.timestamp - session.startedAt) <= 300_000L
+                    Math.abs(call.timestamp - session.startedAt) <= 1_800_000L
                 }
                 matchedCall = recentCalls.minByOrNull { Math.abs(it.timestamp - session.startedAt) }
             }

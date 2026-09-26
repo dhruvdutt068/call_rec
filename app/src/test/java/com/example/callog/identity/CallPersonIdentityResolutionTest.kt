@@ -494,6 +494,20 @@ class FakePersonDaoForCallTest : PersonDao {
     override fun searchPeopleWithDetailsFlow(query: String): Flow<List<PersonWithDetails>> = flowOf(executeSearchPeopleWithDetails(query))
 
     override suspend fun searchPeopleWithDetails(query: String): List<PersonWithDetails> = executeSearchPeopleWithDetails(query)
+
+    override suspend fun deletePersonById(id: String) {
+        people.removeAll { it.id == id }
+    }
+
+    override suspend fun deletePhoneNumbersForPerson(personId: String) {
+        phoneNumbers.removeAll { it.personId == personId }
+    }
+
+    override suspend fun reassignAliasesPersonId(oldPersonId: String, newPersonId: String) {
+        val updated = aliases.map { if (it.personId == oldPersonId) it.copy(personId = newPersonId) else it }
+        aliases.clear()
+        aliases.addAll(updated)
+    }
 }
 
 class FakeCallDaoForTest : CallDao {
@@ -551,6 +565,14 @@ class FakeCallDaoForTest : CallDao {
     override suspend fun updatePersonIdForNumber(number: String, personId: String) {
         val updated = calls.map {
             if (it.number == number) it.copy(personId = personId) else it
+        }
+        calls.clear()
+        calls.addAll(updated)
+    }
+
+    override suspend fun reassignCallsPersonId(oldPersonId: String, newPersonId: String) {
+        val updated = calls.map {
+            if (it.personId == oldPersonId) it.copy(personId = newPersonId) else it
         }
         calls.clear()
         calls.addAll(updated)

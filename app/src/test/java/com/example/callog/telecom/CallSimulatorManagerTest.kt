@@ -257,6 +257,7 @@ class CallSimulatorManagerTest {
         override suspend fun getCallCountForPerson(personId: String): Int = 0
         override suspend fun getLatestCallsForPerson(personId: String, limit: Int): List<CallEntity> = emptyList()
         override suspend fun updatePersonIdForNumber(number: String, personId: String) {}
+        override suspend fun reassignCallsPersonId(oldPersonId: String, newPersonId: String) {}
     }
 
     class FakeSalesCallDao : SalesCallDao {
@@ -273,6 +274,8 @@ class CallSimulatorManagerTest {
 
         override fun getSalesCallsBySalesperson(phone: String): Flow<List<SalesCallEntity>> =
             flowOf(insertedSalesCalls.filter { it.salespersonPhone == phone })
+
+        override suspend fun reassignSalesCallsPersonId(oldPersonId: String, newPersonId: String) {}
 
         override fun getSalesCallsByBuyer(phone: String): Flow<List<SalesCallEntity>> =
             flowOf(insertedSalesCalls.filter { it.buyerPhone == phone })

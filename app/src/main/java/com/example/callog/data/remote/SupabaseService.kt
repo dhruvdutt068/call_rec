@@ -279,33 +279,9 @@ class SupabaseService @Inject constructor(
     }
 
     suspend fun syncLeads(leads: List<com.example.callog.data.local.entity.LeadEntity>): Result<Unit> = withContext(Dispatchers.IO) {
-        return@withContext try {
-            val supabaseLeads = leads.map {
-                com.example.callog.data.remote.model.SupabaseLead(
-                    id = it.id,
-                    personId = it.personId,
-                    status = it.status,
-                    priority = it.priority,
-                    feedback = it.feedback,
-                    feedbackRating = it.feedbackRating,
-                    notes = it.notes,
-                    ownerId = it.ownerId,
-                    source = it.source,
-                    nextFollowUpAt = it.nextFollowUpAt?.let { ts -> formatTimestamp(ts) },
-                    isArchived = it.isArchived,
-                    archivedAt = it.archivedAt?.let { ts -> formatTimestamp(ts) },
-                    createdAt = formatTimestamp(it.createdAt),
-                    updatedAt = formatTimestamp(it.updatedAt)
-                )
-            }
-            getClient().from(SupabaseDefaults.TABLE_LEADS).upsert(supabaseLeads) {
-                onConflict = "person_id"
-            }
-            Result.success(Unit)
-        } catch (e: Exception) {
-            Log.e(TAG, "Error syncing leads to Supabase", e)
-            Result.failure(e)
-        }
+        // Disabled: leads table syncing is turned off per configuration
+        Log.d(TAG, "syncLeads skipped - leads table sync is disabled (${leads.size} leads)")
+        return@withContext Result.success(Unit)
     }
 
     suspend fun fetchGlobalPeople(): Result<List<com.example.callog.data.remote.model.SupabasePerson>> = withContext(Dispatchers.IO) {
@@ -357,32 +333,13 @@ class SupabaseService @Inject constructor(
     }
 
     suspend fun fetchGlobalLeads(): Result<List<com.example.callog.data.remote.model.SupabaseLead>> = withContext(Dispatchers.IO) {
-        return@withContext try {
-            val leads = getClient().from(SupabaseDefaults.TABLE_LEADS)
-                .select()
-                .decodeList<com.example.callog.data.remote.model.SupabaseLead>()
-            Result.success(leads)
-        } catch (e: Exception) {
-            Log.e(TAG, "Error fetching global leads from Supabase", e)
-            Result.failure(e)
-        }
+        // Disabled: leads table sync turned off per configuration
+        return@withContext Result.success(emptyList())
     }
 
     suspend fun fetchLeadByPersonId(personId: String): Result<com.example.callog.data.remote.model.SupabaseLead?> = withContext(Dispatchers.IO) {
-        return@withContext try {
-            val leads = getClient().from(SupabaseDefaults.TABLE_LEADS)
-                .select {
-                    filter {
-                        eq("person_id", personId)
-                    }
-                    limit(1)
-                }
-                .decodeList<com.example.callog.data.remote.model.SupabaseLead>()
-            Result.success(leads.firstOrNull())
-        } catch (e: Exception) {
-            Log.e(TAG, "Error fetching lead by personId from Supabase", e)
-            Result.failure(e)
-        }
+        // Disabled: leads table sync turned off per configuration
+        return@withContext Result.success(null)
     }
 
     suspend fun fetchDeviceByIdentifier(identifier: String): Result<com.example.callog.data.remote.model.SupabaseDevice?> = withContext(Dispatchers.IO) {

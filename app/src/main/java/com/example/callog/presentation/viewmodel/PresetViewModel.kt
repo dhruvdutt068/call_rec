@@ -281,8 +281,8 @@ class PresetViewModel @Inject constructor(
             },
             configuration = PresetConfiguration(
                 supabaseUrl = if (env == PresetEnvironment.DEVELOPMENT) com.example.callog.core.config.SupabaseDefaults.DEV_URL else com.example.callog.core.config.SupabaseDefaults.PROD_URL,
-                firebaseProjectId = "allset-244ab",
-                storageBucket = "allset-244ab.firebasestorage.app",
+                firebaseProjectId = "allset-491218",
+                storageBucket = "allset-491218.firebasestorage.app",
                 apiBaseUrl = "",
                 features = defaultFeatures
             ),

@@ -16,10 +16,12 @@ import com.google.firebase.FirebaseOptions
 import com.google.firebase.storage.FirebaseStorage
 import com.google.firebase.storage.UploadTask
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 import com.example.callog.data.local.dao.TracebackDao
@@ -30,6 +32,12 @@ import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
 import javax.inject.Singleton
+
+import com.example.callog.core.diagnostics.DeveloperLogger
+import com.example.callog.domain.service.StorageErrorCategory
+import com.example.callog.domain.service.StorageUploadException
+import com.google.firebase.auth.FirebaseAuth
+import kotlinx.coroutines.tasks.await
 
 @Singleton
 class UploadServiceImpl @Inject constructor(
@@ -46,23 +54,92 @@ class UploadServiceImpl @Inject constructor(
         return firestoreService.getStorageInstance()
     }
 
+    private fun buildStorageUploadException(
+        raw: Throwable,
+        remotePath: String,
+        bucketName: String,
+        hasAuth: Boolean,
+        callId: Long
+    ): StorageUploadException {
+        val category = StorageErrorCategory.fromException(raw)
+        val storageEx = raw as? com.google.firebase.storage.StorageException
+        val errorCode = storageEx?.errorCode
+        val httpResultCode = storageEx?.httpResultCode
+
+        val diagnosticMsg = "Firebase Storage upload error [$category] for call $callId: HTTP $httpResultCode, ErrorCode $errorCode, Path: $remotePath, Bucket: $bucketName, Authenticated: $hasAuth - ${raw.message}"
+        Log.e(TAG, diagnosticMsg, raw)
+
+        // Persist structured failure information through DeveloperLogger (sync_logs) and TracebackDao
+        DeveloperLogger.error(
+            "STORAGE_UPLOAD_${category.name}",
+            diagnosticMsg,
+            exception = raw
+        )
+
+        kotlinx.coroutines.CoroutineScope(Dispatchers.IO).launch {
+            try {
+                val ownerPhone = firestoreService.getDevicePhoneNumber()
+                val ownerName = firestoreService.getDeviceOwnerName()
+                tracebackDao.insertTraceback(
+                    TracebackEntity(
+                        id = 0,
+                        ownerPhone = ownerPhone,
+                        ownerName = ownerName,
+                        callerType = "STORAGE_ERROR",
+                        phoneNumber = "",
+                        callerName = "Category: ${category.name}, HTTP: $httpResultCode, Code: $errorCode",
+                        hasRecording = true,
+                        callLogId = callId,
+                        recordingUrl = "Bucket: $bucketName, Path: $remotePath",
+                        timestamp = System.currentTimeMillis()
+                    )
+                )
+            } catch (tbEx: Exception) {
+                Log.w(TAG, "Failed to insert error traceback", tbEx)
+            }
+        }
+
+        return StorageUploadException(
+            category = category,
+            errorCode = errorCode,
+            httpResultCode = httpResultCode,
+            uploadPath = remotePath,
+            bucketName = bucketName,
+            hasFirebaseAuth = hasAuth,
+            message = diagnosticMsg,
+            cause = raw
+        )
+    }
+
     override fun uploadRecording(call: CallEntity): Flow<UploadProgressState> = callbackFlow {
         val localPath = call.recordingLocalPath ?: call.recordingPath
         if (localPath.isNullOrEmpty()) {
-            trySend(UploadProgressState.Error(Exception("No local recording path found")))
+            val ex = StorageUploadException(
+                category = StorageErrorCategory.UNKNOWN_ERROR,
+                message = "No local recording path found for call ${call.id}"
+            )
+            trySend(UploadProgressState.Error(ex))
             close()
             return@callbackFlow
         }
         val file = File(localPath)
         if (!file.exists()) {
-            trySend(UploadProgressState.Error(Exception("Local recording file does not exist: $localPath")))
+            val ex = StorageUploadException(
+                category = StorageErrorCategory.UNKNOWN_ERROR,
+                message = "Local recording file does not exist: $localPath"
+            )
+            trySend(UploadProgressState.Error(ex))
             close()
             return@callbackFlow
         }
 
         val storageInstance = getStorage()
         if (storageInstance == null) {
-            trySend(UploadProgressState.Error(Exception("Firebase Storage not initialized")))
+            val ex = StorageUploadException(
+                category = StorageErrorCategory.UNKNOWN_ERROR,
+                message = "Firebase Storage not initialized"
+            )
+            trySend(UploadProgressState.Error(ex))
             close()
             return@callbackFlow
         }
@@ -99,7 +176,35 @@ class UploadServiceImpl @Inject constructor(
         val extension = file.extension.ifEmpty { "mp3" }
         val remotePath = "users/$normalizedDevicePhone/recordings/$year/$month/$day/call_${call.id}.$extension"
 
-        Log.i(TAG, "Starting Cloud Storage upload to path: $remotePath")
+        // Inspect and ensure Firebase Authentication state before upload
+        var hasAuth = false
+        try {
+            val app = storageInstance.app
+            val auth = FirebaseAuth.getInstance(app)
+            val initialUser = auth.currentUser
+            Log.i(TAG, "FirebaseAuth currentUser presence before upload: ${initialUser != null} (uid: ${initialUser?.uid})")
+            if (initialUser == null) {
+                Log.i(TAG, "No Firebase user authenticated. Attempting anonymous authentication...")
+                try {
+                    val authResult = auth.signInAnonymously().await()
+                    val user = authResult.user
+                    Log.i(TAG, "Firebase anonymous authentication completed. User present: ${user != null} (uid: ${user?.uid})")
+                    hasAuth = (user != null)
+                } catch (authEx: Exception) {
+                    Log.w(TAG, "Firebase anonymous authentication failed: ${authEx.message}. Proceeding with unauthenticated request.", authEx)
+                    hasAuth = false
+                }
+            } else {
+                hasAuth = true
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed checking Firebase auth state: ${e.message}", e)
+            hasAuth = false
+        }
+
+        val bucketName = try { storageInstance.reference.bucket } catch (e: Exception) { "unknown" }
+        Log.i(TAG, "Starting Cloud Storage upload to bucket: $bucketName, path: $remotePath, hasAuth: $hasAuth")
+
         val ref = storageInstance.reference.child(remotePath)
         val fileUri = Uri.fromFile(file)
         
@@ -110,8 +215,16 @@ class UploadServiceImpl @Inject constructor(
             .setCustomMetadata("timestamp", call.timestamp.toString())
             .build()
 
-        val uploadTask = ref.putFile(fileUri, metadataBuilder)
-        activeTasks[call.id] = uploadTask
+        val uploadTask: UploadTask
+        try {
+            uploadTask = ref.putFile(fileUri, metadataBuilder)
+            activeTasks[call.id] = uploadTask
+        } catch (e: Throwable) {
+            val storageEx = buildStorageUploadException(e, remotePath, bucketName, hasAuth, call.id)
+            trySend(UploadProgressState.Error(storageEx))
+            close()
+            return@callbackFlow
+        }
 
         val progressListener = { snapshot: UploadTask.TaskSnapshot ->
             trySend(UploadProgressState.Progress(snapshot.bytesTransferred, snapshot.totalByteCount))
@@ -129,13 +242,13 @@ class UploadServiceImpl @Inject constructor(
             activeTasks.remove(call.id)
             if (task.isSuccessful) {
                 val downloadUrl = task.result.toString()
-                Log.i(TAG, "Cloud Storage upload successful: $remotePath")
+                Log.i(TAG, "Cloud Storage upload successful: $remotePath (bucket: $bucketName)")
                 trySend(UploadProgressState.Success(downloadUrl, remotePath))
                 close()
             } else {
-                val exception = task.exception ?: Exception("Upload failed with unknown error")
-                Log.e(TAG, "Cloud Storage upload failed for call ${call.id}", exception)
-                trySend(UploadProgressState.Error(exception))
+                val rawException = task.exception ?: Exception("Upload failed with unknown error")
+                val storageEx = buildStorageUploadException(rawException, remotePath, bucketName, hasAuth, call.id)
+                trySend(UploadProgressState.Error(storageEx))
                 close()
             }
         }

@@ -30,7 +30,8 @@ import javax.inject.Singleton
 
 @Singleton
 class AndroidCallRecordingController @Inject constructor(
-    @param:ApplicationContext private val context: Context
+    @param:ApplicationContext private val context: Context,
+    private val recordingStorageManager: RecordingStorageManager
 ) : CallRecordingController {
 
     companion object {
@@ -45,6 +46,8 @@ class AndroidCallRecordingController @Inject constructor(
 
     private var mediaRecorder: MediaRecorder? = null
     private var currentSession: RecordingSession? = null
+    private var currentTempFile: File? = null
+    private var currentTargetFileName: String? = null
     private var recordingStartTimeRealtime: Long = 0L
     private var tickerJob: Job? = null
 
@@ -88,9 +91,12 @@ class AndroidCallRecordingController @Inject constructor(
             _recordingState.value = CallRecordingState.Starting
 
             try {
-                val outputDir = getRecordingDirectory()
-                if (!outputDir.exists()) {
-                    outputDir.mkdirs()
+                val outputDir = recordingStorageManager.getDedicatedRecordingDirectory()
+                if (!recordingStorageManager.hasAvailableStorage(outputDir)) {
+                    val err = "Insufficient device storage space for call recording"
+                    DeveloperLogger.warning(TAG, err)
+                    _recordingState.value = CallRecordingState.Error(err)
+                    return@withContext Result.failure(IllegalStateException(err))
                 }
 
                 val dateFormat = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US)
@@ -98,24 +104,27 @@ class AndroidCallRecordingController @Inject constructor(
 
                 val safeIdentifier = when {
                     !contactName.isNullOrBlank() && !contactName.equals("Unknown Caller", ignoreCase = true) -> {
-                        contactName.trim().replace(Regex("[^a-zA-Z0-9 _-]"), "_")
+                        contactName.trim().replace(Regex("[^a-zA-Z0-9 _-]"), "_").trim { it == '_' || it == '-' || it.isWhitespace() }
                     }
                     !phoneNumber.isNullOrBlank() -> {
-                        phoneNumber.trim().replace(Regex("[^a-zA-Z0-9+_-]"), "_")
+                        phoneNumber.trim().replace(Regex("[^a-zA-Z0-9+_-]"), "_").trim { it == '_' || it == '-' || it.isWhitespace() }
                     }
-                    else -> "Call_${callId.replace(Regex("[^a-zA-Z0-9_-]"), "_")}"
-                }
+                    else -> "Call_${callId.replace(Regex("[^a-zA-Z0-9_-]"), "_").trim { it == '_' || it == '-' }}"
+                }.ifEmpty { "Call_$callId" }
 
                 val recordingId = "rec_${UUID.randomUUID()}"
-                val outputFile = File(outputDir, "Callog_${safeIdentifier}_${formattedDate}.m4a")
+                val targetFileName = "Callog_${safeIdentifier}_${formattedDate}.m4a"
 
-                val recorder = createMediaRecorder()
-                setupRecorder(recorder, outputFile)
+                // Use app-controlled storage for low-level MediaRecorder capture to prevent Scoped Storage EACCES
+                val tempFile = recordingStorageManager.getTemporaryRecordingFile(recordingId)
+                if (tempFile.exists()) {
+                    try { tempFile.delete() } catch (_: Exception) {}
+                }
 
-                recorder.prepare()
-                recorder.start()
+                val recorder = startMediaRecorderWithFallback(tempFile)
                 mediaRecorder = recorder
-
+                currentTempFile = tempFile
+                currentTargetFileName = targetFileName
                 recordingStartTimeRealtime = SystemClock.elapsedRealtime()
 
                 val session = RecordingSession(
@@ -125,20 +134,24 @@ class AndroidCallRecordingController @Inject constructor(
                     contactName = contactName,
                     personId = personId,
                     simSlot = simSlot,
-                    filePath = outputFile.absolutePath,
+                    filePath = tempFile.absolutePath,
                     startedAt = startedAt,
                     mimeType = "audio/mp4"
                 )
                 currentSession = session
                 _recordingState.value = CallRecordingState.Recording(0L, session)
 
-                DeveloperLogger.info(TAG, "Recording started successfully: path=${outputFile.absolutePath}, session=$recordingId")
+                DeveloperLogger.info(TAG, "Recording started successfully: tempPath=${tempFile.absolutePath}, targetName=$targetFileName, session=$recordingId")
                 startTicker(session)
 
                 Result.success(session)
             } catch (e: Exception) {
                 DeveloperLogger.error(TAG, "Failed to initialize/start call recorder: ${e.message}", e)
                 releaseRecorderInternal()
+                currentTempFile?.let { try { it.delete() } catch (_: Exception) {} }
+                currentTempFile = null
+                currentTargetFileName = null
+                currentSession = null
                 _recordingState.value = CallRecordingState.Error("Failed to start recorder: ${e.message}")
                 Result.failure(e)
             }
@@ -149,20 +162,28 @@ class AndroidCallRecordingController @Inject constructor(
         withContext(Dispatchers.IO) {
             val session = currentSession
             val recorder = mediaRecorder
+            val tempFile = currentTempFile ?: session?.filePath?.let { File(it) }
 
-            if (session == null && recorder == null) {
+            if (session == null) {
                 DeveloperLogger.info(TAG, "Stop called but no active recording session found.")
+                releaseRecorderInternal()
                 _recordingState.value = CallRecordingState.Idle
                 return@withContext Result.failure(IllegalStateException("No active recording session"))
             }
 
             _recordingState.value = CallRecordingState.Stopping
-            DeveloperLogger.info(TAG, "Stopping call recording session: ${session?.recordingId}")
+            DeveloperLogger.info(TAG, "Stopping call recording session: ${session.recordingId}")
 
             tickerJob?.cancel()
             tickerJob = null
 
             try {
+                // Ensure at least 800ms of recording to prevent MediaRecorder stop failed (-1007)
+                val elapsedMs = SystemClock.elapsedRealtime() - recordingStartTimeRealtime
+                if (elapsedMs in 1..800) {
+                    delay(800 - elapsedMs)
+                }
+
                 try {
                     recorder?.stop()
                 } catch (e: RuntimeException) {
@@ -170,13 +191,40 @@ class AndroidCallRecordingController @Inject constructor(
                 }
                 releaseRecorderInternal()
 
-                val file = session?.filePath?.let { File(it) }
-                if (file != null && file.exists() && file.length() > 0) {
+                if (tempFile != null && tempFile.exists() && tempFile.length() > 0) {
                     val endedAt = System.currentTimeMillis()
-                    val actualDurationMs = getActualAudioDuration(file.absolutePath).takeIf { it > 0 }
+                    val actualDurationMs = getActualAudioDuration(tempFile.absolutePath).takeIf { it > 0 }
                         ?: (endedAt - session.startedAt).coerceAtLeast(1000L)
 
+                    val targetFileName = currentTargetFileName ?: run {
+                        val dateFormat = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US)
+                        val formattedDate = dateFormat.format(Date(session.startedAt))
+                        val safeId = when {
+                            !session.contactName.isNullOrBlank() && !session.contactName.equals("Unknown Caller", ignoreCase = true) -> {
+                                session.contactName.trim().replace(Regex("[^a-zA-Z0-9 _-]"), "_").trim { it == '_' || it == '-' || it.isWhitespace() }
+                            }
+                            !session.phoneNumber.isNullOrBlank() -> {
+                                session.phoneNumber.trim().replace(Regex("[^a-zA-Z0-9+_-]"), "_").trim { it == '_' || it == '-' || it.isWhitespace() }
+                            }
+                            else -> "Call_${session.callId.replace(Regex("[^a-zA-Z0-9_-]"), "_").trim { it == '_' || it == '-' }}"
+                        }.ifEmpty { "Call_${session.callId}" }
+                        "Callog_${safeId}_${formattedDate}.m4a"
+                    }
+
+                    val callerIdForTitle = session.contactName?.takeIf { it.isNotBlank() } ?: session.phoneNumber ?: session.callId
+
+                    // Finalize: copies/publishes tempFile to dedicated folder (e.g. Recordings/Callog),
+                    // indexes in MediaStore, notifies MediaScanner, and deletes tempFile
+                    val finalizedFile = recordingStorageManager.finalizeRecordingFile(
+                        tempFile = tempFile,
+                        targetFileName = targetFileName,
+                        callerIdentifier = callerIdForTitle,
+                        startedAt = session.startedAt,
+                        durationMillis = actualDurationMs
+                    )
+
                     val finalizedSession = session.copy(
+                        filePath = finalizedFile.absolutePath,
                         endedAt = endedAt,
                         durationMillis = actualDurationMs
                     )
@@ -189,15 +237,19 @@ class AndroidCallRecordingController @Inject constructor(
 
                     DeveloperLogger.info(
                         TAG,
-                        "Recording finalized: file=${finalizedSession.filePath}, size=${file.length()} bytes, duration=${finalizedSession.durationMillis} ms"
+                        "Recording finalized and saved to dedicated folder: file=${finalizedSession.filePath}, size=${finalizedFile.length()} bytes, duration=${finalizedSession.durationMillis} ms"
                     )
 
                     currentSession = null
+                    currentTempFile = null
+                    currentTargetFileName = null
                     Result.success(finalizedSession)
                 } else {
-                    DeveloperLogger.warning(TAG, "Recording file empty or not found: ${session?.filePath}")
+                    DeveloperLogger.warning(TAG, "Recording file empty or not found: ${tempFile?.absolutePath}")
                     _recordingState.value = CallRecordingState.Error("Recording file was empty or not generated")
                     currentSession = null
+                    currentTempFile = null
+                    currentTargetFileName = null
                     Result.failure(IllegalStateException("Recording file missing or empty"))
                 }
             } catch (e: Exception) {
@@ -205,6 +257,8 @@ class AndroidCallRecordingController @Inject constructor(
                 releaseRecorderInternal()
                 _recordingState.value = CallRecordingState.Error("Error finalizing recording: ${e.message}")
                 currentSession = null
+                currentTempFile = null
+                currentTargetFileName = null
                 Result.failure(e)
             }
         }
@@ -220,15 +274,17 @@ class AndroidCallRecordingController @Inject constructor(
             } catch (_: Exception) {}
             releaseRecorderInternal()
 
-            currentSession?.filePath?.let { path ->
+            val tempFile = currentTempFile ?: currentSession?.filePath?.let { File(it) }
+            tempFile?.let { file ->
                 try {
-                    val file = File(path)
                     if (file.exists()) {
                         file.delete()
                     }
                 } catch (_: Exception) {}
             }
             currentSession = null
+            currentTempFile = null
+            currentTargetFileName = null
             _recordingState.value = CallRecordingState.Idle
         }
     }
@@ -246,18 +302,6 @@ class AndroidCallRecordingController @Inject constructor(
         }
     }
 
-    private fun getRecordingDirectory(): File {
-        val externalDir = context.getExternalFilesDir(Environment.DIRECTORY_RECORDINGS)
-        if (externalDir != null && (externalDir.exists() || externalDir.mkdirs())) {
-            return externalDir
-        }
-        val internalDir = File(context.filesDir, "recordings")
-        if (!internalDir.exists()) {
-            internalDir.mkdirs()
-        }
-        return internalDir
-    }
-
     private fun createMediaRecorder(): MediaRecorder {
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             MediaRecorder(context)
@@ -267,21 +311,52 @@ class AndroidCallRecordingController @Inject constructor(
         }
     }
 
-    private fun setupRecorder(recorder: MediaRecorder, outputFile: File) {
-        try {
-            // VOICE_COMMUNICATION enables acoustic echo cancellation and is optimized for two-way VoIP / call capture on modern Android
-            recorder.setAudioSource(MediaRecorder.AudioSource.VOICE_COMMUNICATION)
-        } catch (e: Exception) {
-            DeveloperLogger.warning(TAG, "VOICE_COMMUNICATION audio source failed, falling back to MIC: ${e.message}")
-            recorder.setAudioSource(MediaRecorder.AudioSource.MIC)
-        }
+    /**
+     * Tries starting MediaRecorder with candidate audio sources in order of compatibility:
+     * 1. MIC (Most reliable during cellular phone calls across all Android OEMs)
+     * 2. VOICE_COMMUNICATION (AEC VoIP audio route)
+     * 3. VOICE_RECOGNITION
+     * 4. DEFAULT
+     */
+    private fun startMediaRecorderWithFallback(tempFile: File): MediaRecorder {
+        val candidateSources = listOf(
+            MediaRecorder.AudioSource.MIC,
+            MediaRecorder.AudioSource.VOICE_COMMUNICATION,
+            MediaRecorder.AudioSource.VOICE_RECOGNITION,
+            MediaRecorder.AudioSource.DEFAULT
+        )
 
-        recorder.setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
-        recorder.setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
-        recorder.setAudioEncodingBitRate(96000)
-        recorder.setAudioSamplingRate(44100)
-        recorder.setAudioChannels(1)
-        recorder.setOutputFile(outputFile.absolutePath)
+        var lastException: Exception? = null
+        for (source in candidateSources) {
+            var recorder: MediaRecorder? = null
+            try {
+                DeveloperLogger.info(TAG, "Attempting to initialize MediaRecorder with audio source: $source")
+                recorder = createMediaRecorder()
+                recorder.setAudioSource(source)
+                recorder.setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
+                recorder.setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
+                recorder.setAudioEncodingBitRate(96000)
+                recorder.setAudioSamplingRate(44100)
+                recorder.setAudioChannels(1)
+                recorder.setOutputFile(tempFile.absolutePath)
+
+                recorder.prepare()
+                recorder.start()
+                DeveloperLogger.info(TAG, "MediaRecorder successfully started with audio source: $source")
+                return recorder
+            } catch (e: Exception) {
+                DeveloperLogger.warning(TAG, "AudioSource $source failed to start: ${e.message}")
+                lastException = e
+                try {
+                    recorder?.reset()
+                    recorder?.release()
+                } catch (_: Exception) {}
+                if (tempFile.exists()) {
+                    try { tempFile.delete() } catch (_: Exception) {}
+                }
+            }
+        }
+        throw lastException ?: IllegalStateException("All candidate MediaRecorder audio sources failed to start")
     }
 
     private fun getActualAudioDuration(filePath: String): Long {

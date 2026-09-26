@@ -895,6 +895,7 @@ class CallSessionManagerTest {
         override suspend fun getCallCountForPerson(personId: String): Int = 0
         override suspend fun getLatestCallsForPerson(personId: String, limit: Int): List<com.example.callog.data.local.entity.CallEntity> = emptyList()
         override suspend fun updatePersonIdForNumber(number: String, personId: String) {}
+        override suspend fun reassignCallsPersonId(oldPersonId: String, newPersonId: String) {}
     }
 
     class FakeSalesCallDao : com.example.callog.data.local.dao.SalesCallDao {
@@ -929,5 +930,7 @@ class CallSessionManagerTest {
         override suspend fun updateSyncStatus(id: Long, status: String, error: String?) {}
 
         override suspend fun resetSyncStatus() {}
+
+        override suspend fun reassignSalesCallsPersonId(oldPersonId: String, newPersonId: String) {}
     }
 }

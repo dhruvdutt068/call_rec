@@ -196,27 +196,7 @@ class LeadRepositoryImpl @Inject constructor(
     }
 
     private suspend fun syncLeadToSupabase(personId: String) {
-        val service = supabaseService ?: return
-        try {
-            val lead = leadDao.getLeadByPersonId(personId) ?: return
-            
-            // Ensure Person exists in Supabase to avoid FK constraint error
-            val person = personDao?.getPersonById(personId)
-            if (person != null) {
-                service.syncPeople(listOf(person))
-            }
-            
-            val res = service.syncLeads(listOf(lead))
-            if (res.isSuccess) {
-                leadDao.updateSyncStatus(lead.id, "SYNCED")
-                DeveloperLogger.success("LEAD_STATUS_SYNCED", "Uploaded updated lead status (${lead.status}) for person $personId to Supabase.")
-            } else {
-                val err = res.exceptionOrNull()?.message ?: "Unknown error"
-                DeveloperLogger.warning("LEAD_STATUS_SYNC_DEFERRED", "Failed uploading lead to Supabase immediately: $err. Will retry via background sync.")
-            }
-        } catch (e: Exception) {
-            DeveloperLogger.warning("LEAD_STATUS_SYNC_DEFERRED", "Exception syncing lead to Supabase: ${e.message}. Will retry via background sync.")
-        }
+        // Disabled: leads table sync turned off per configuration
     }
 
     private fun parseTimestamp(isoString: String?): Long {

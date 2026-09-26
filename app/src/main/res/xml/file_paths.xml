@@ -1,4 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <paths>
     <cache-path name="shared_logs" path="." />
+    <external-path name="external_storage" path="." />
+    <external-files-path name="recordings_external" path="Recordings" />
 </paths>

@@ -26,7 +26,8 @@ data class DiscoveredRecording(
 
 @Singleton
 class RecordingScanner @Inject constructor(
-    @ApplicationContext private val context: Context
+    @ApplicationContext private val context: Context,
+    private val recordingStorageManager: com.example.callog.data.telecom.RecordingStorageManager
 ) {
     fun scanRecordings(): List<DiscoveredRecording> {
         val permission = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
@@ -42,48 +43,30 @@ class RecordingScanner @Inject constructor(
 
         val list = mutableListOf<DiscoveredRecording>()
 
-        // 1. Scan custom directory if configured
-        val prefs = context.getSharedPreferences("firebase_config_prefs", Context.MODE_PRIVATE)
-        val customPath = prefs.getString("custom_recording_path", "") ?: ""
+        // 1. Scan dedicated Callog directory
+        try {
+            val dedicatedDir = recordingStorageManager.getDedicatedRecordingDirectory()
+            if (dedicatedDir.exists() && dedicatedDir.isDirectory) {
+                scanFolder(dedicatedDir, list)
+            }
+        } catch (e: Exception) {
+            Log.e("RecordingScanner", "Error scanning dedicated recording directory", e)
+        }
+
+        // 2. Scan custom directory if configured and distinct from dedicatedDir
+        val customPath = recordingStorageManager.getCustomRecordingPath()
         if (customPath.isNotEmpty()) {
             try {
                 val directory = File(customPath)
                 if (directory.exists() && directory.isDirectory) {
-                    val files = directory.listFiles()
-                    Log.d("RecordingScanner", "Scanning custom directory: $customPath, found ${files?.size ?: 0} files")
-                    files?.forEach { file ->
-                        if (file.isFile) {
-                            val ext = file.extension.lowercase()
-                            if (ext in Constants.SUPPORTED_RECORDING_EXTENSIONS) {
-                                val displayName = file.name
-                                Log.d("RecordingScanner", "Scanning file: $displayName")
-                                val metadata = RecordingParserChain.parse(displayName, file.lastModified())
-                                Log.d("RecordingScanner", "Parsed successfully: Phone = ${metadata.phoneNumber}, ContactName = ${metadata.contactName}, Timestamp = ${metadata.timestamp}, Parser = ${metadata.parserName}")
-                                
-                                val duration = getRecordingDuration(file.absolutePath)
-                                list.add(
-                                    DiscoveredRecording(
-                                        filePath = file.absolutePath,
-                                        phoneNumber = metadata.phoneNumber,
-                                        contactName = metadata.contactName,
-                                        timestamp = metadata.timestamp ?: file.lastModified(),
-                                        durationMs = duration,
-                                        fileSize = file.length(),
-                                        lastModified = file.lastModified(),
-                                        parserName = metadata.parserName
-                                    )
-                                )
-                                Log.d("RecordingScanner", "Manually discovered recording: ${file.absolutePath}")
-                            }
-                        }
-                    }
+                    scanFolder(directory, list)
                 }
             } catch (e: Exception) {
                 Log.e("RecordingScanner", "Error scanning custom directory: $customPath", e)
             }
         }
 
-        // 2. Query all audio files via MediaStore
+        // 3. Query all audio files via MediaStore
         val projection = arrayOf(
             MediaStore.Audio.Media.DATA,
             MediaStore.Audio.Media.DISPLAY_NAME,
@@ -187,6 +170,37 @@ class RecordingScanner @Inject constructor(
                 retriever?.release()
             } catch (e: Exception) {
                 // Ignore
+            }
+        }
+    }
+
+    private fun scanFolder(directory: File, list: MutableList<DiscoveredRecording>) {
+        val files = directory.listFiles() ?: return
+        Log.d("RecordingScanner", "Scanning directory: ${directory.absolutePath}, found ${files.size} files")
+        files.forEach { file ->
+            if (file.isFile) {
+                val ext = file.extension.lowercase()
+                if (ext in Constants.SUPPORTED_RECORDING_EXTENSIONS) {
+                    val displayName = file.name
+                    Log.d("RecordingScanner", "Scanning file: $displayName")
+                    val metadata = RecordingParserChain.parse(displayName, file.lastModified())
+                    Log.d("RecordingScanner", "Parsed successfully: Phone = ${metadata.phoneNumber}, ContactName = ${metadata.contactName}, Timestamp = ${metadata.timestamp}, Parser = ${metadata.parserName}")
+
+                    val duration = getRecordingDuration(file.absolutePath)
+                    list.add(
+                        DiscoveredRecording(
+                            filePath = file.absolutePath,
+                            phoneNumber = metadata.phoneNumber,
+                            contactName = metadata.contactName,
+                            timestamp = metadata.timestamp ?: file.lastModified(),
+                            durationMs = duration,
+                            fileSize = file.length(),
+                            lastModified = file.lastModified(),
+                            parserName = metadata.parserName
+                        )
+                    )
+                    Log.d("RecordingScanner", "Discovered recording: ${file.absolutePath}")
+                }
             }
         }
     }

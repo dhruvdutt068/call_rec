@@ -60,6 +60,7 @@ fun RecordingManagerScreen(
         callLogs = callLogs,
         onRescan = { viewModel.rescanRecordings() },
         onReUpload = { recordingId -> viewModel.uploadRecordingDirect(recordingId) {} },
+        onManualMatch = { recordingId, callId -> viewModel.manualMatchRecording(recordingId, callId) },
         onCallClick = onCallClick,
         onMenuClick = onMenuClick,
         modifier = modifier
@@ -73,6 +74,7 @@ fun RecordingManagerContent(
     callLogs: List<CallLogEntry>,
     onRescan: () -> Unit,
     onReUpload: (Long) -> Unit,
+    onManualMatch: (Long, Long) -> Unit = { _, _ -> },
     modifier: Modifier = Modifier,
     onCallClick: ((Long) -> Unit)? = null,
     onMenuClick: (() -> Unit)? = null
@@ -232,9 +234,14 @@ fun RecordingManagerContent(
         RecordingDetailDialog(
             recording = rec,
             matchedCall = call,
+            availableCalls = callLogs,
             onDismiss = { selectedRecordingForDetail = null },
             onReUploadClick = {
                 onReUpload(rec.id)
+            },
+            onManualMatch = { callId ->
+                onManualMatch(rec.id, callId)
+                selectedRecordingForDetail = null
             }
         )
     }
@@ -387,11 +394,13 @@ fun RecordingChildItem(
                     if (isMatched) {
                         val uploadText = when (recording.uploadStatus) {
                             UploadStatus.UPLOADED -> "Uploaded"
+                            UploadStatus.UPLOADING -> "Uploading"
                             UploadStatus.PENDING -> "Pending"
                             UploadStatus.FAILED -> "Failed"
                         }
                         val uploadColor = when (recording.uploadStatus) {
                             UploadStatus.UPLOADED -> CallogSemanticColors.SyncColors.Synced
+                            UploadStatus.UPLOADING -> CallogSemanticColors.SyncColors.Pending
                             UploadStatus.PENDING -> CallogSemanticColors.SyncColors.Pending
                             UploadStatus.FAILED -> CallogSemanticColors.SyncColors.Failed
                         }
@@ -439,13 +448,16 @@ fun StatusBadge(
 fun RecordingDetailDialog(
     recording: RecordingEntity,
     matchedCall: CallLogEntry?,
+    availableCalls: List<CallLogEntry> = emptyList(),
     onDismiss: () -> Unit,
-    onReUploadClick: () -> Unit
+    onReUploadClick: () -> Unit,
+    onManualMatch: ((Long) -> Unit)? = null
 ) {
     val context = LocalContext.current
     var isPlaying by remember { mutableStateOf(false) }
     var playProgress by remember { mutableStateOf(0f) }
     var mediaPlayer by remember { mutableStateOf<MediaPlayer?>(null) }
+    var showCallPicker by remember { mutableStateOf(false) }
 
     val file = remember(recording.filePath) { File(recording.filePath) }
     val fileExists = remember(file) { file.exists() }
@@ -586,6 +598,7 @@ fun RecordingDetailDialog(
                     if (isMatched && fileExists) {
                         SimpleDetailRow("Sync State", when (recording.uploadStatus) {
                             UploadStatus.UPLOADED -> "Uploaded"
+                            UploadStatus.UPLOADING -> "Uploading"
                             UploadStatus.PENDING -> "Pending Upload"
                             UploadStatus.FAILED -> "Failed"
                         })
@@ -610,6 +623,20 @@ fun RecordingDetailDialog(
                     ) {
                         Text("Re-upload", style = CallogTypography.sectionTitle)
                     }
+                } else if (!isMatched && fileExists) {
+                    Button(
+                        onClick = { showCallPicker = true },
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.primary,
+                            contentColor = MaterialTheme.colorScheme.onPrimary
+                        ),
+                        shape = CallogShapes.buttonShape,
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Icon(Icons.Default.Link, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Match Call", style = CallogTypography.sectionTitle)
+                    }
                 }
                 Button(
                     onClick = onDismiss,
@@ -622,6 +649,169 @@ fun RecordingDetailDialog(
                 ) {
                     Text("Close", style = CallogTypography.sectionTitle)
                 }
+            }
+        },
+        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+        shape = CallogShapes.modalShape
+    )
+
+    if (showCallPicker) {
+        CallPickerDialog(
+            recording = recording,
+            calls = availableCalls,
+            onDismiss = { showCallPicker = false },
+            onCallSelected = { call ->
+                showCallPicker = false
+                onManualMatch?.invoke(call.id)
+            }
+        )
+    }
+}
+
+@Composable
+fun CallPickerDialog(
+    recording: RecordingEntity,
+    calls: List<CallLogEntry>,
+    onDismiss: () -> Unit,
+    onCallSelected: (CallLogEntry) -> Unit
+) {
+    var searchQuery by remember { mutableStateOf("") }
+    val normRecPhone = remember(recording.phoneExtracted) {
+        recording.phoneExtracted?.replace(Regex("[^0-9]"), "") ?: ""
+    }
+
+    val sortedCalls = remember(calls, searchQuery, normRecPhone) {
+        val filtered = if (searchQuery.isBlank()) {
+            calls
+        } else {
+            val q = searchQuery.trim().lowercase()
+            calls.filter {
+                (it.name?.lowercase()?.contains(q) == true) || it.number.contains(q)
+            }
+        }
+        filtered.sortedWith(
+            compareByDescending<CallLogEntry> { call ->
+                val callDigits = call.number.replace(Regex("[^0-9]"), "")
+                normRecPhone.isNotEmpty() && callDigits.isNotEmpty() && (
+                    callDigits == normRecPhone ||
+                    (callDigits.length >= 7 && normRecPhone.endsWith(callDigits.takeLast(7))) ||
+                    (normRecPhone.length >= 7 && callDigits.endsWith(normRecPhone.takeLast(7)))
+                )
+            }.thenBy { call ->
+                val recTime = if (recording.timestampExtracted != null && recording.timestampExtracted > 0L) {
+                    recording.timestampExtracted
+                } else {
+                    recording.lastModified
+                }
+                Math.abs(call.timestamp - recTime)
+            }
+        )
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text(
+                text = "Select Call to Link",
+                style = CallogTypography.heroTitle,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+        },
+        text = {
+            Column(
+                modifier = Modifier.fillMaxWidth().heightIn(max = 420.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                OutlinedTextField(
+                    value = searchQuery,
+                    onValueChange = { searchQuery = it },
+                    placeholder = { Text("Search by name or number...") },
+                    leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+                    singleLine = true,
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                if (sortedCalls.isEmpty()) {
+                    Box(modifier = Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) {
+                        Text("No call logs found", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                } else {
+                    LazyColumn(
+                        modifier = Modifier.fillMaxWidth().weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        items(sortedCalls, key = { it.id }) { call ->
+                            val callDigits = call.number.replace(Regex("[^0-9]"), "")
+                            val isPhoneMatch = normRecPhone.isNotEmpty() && callDigits.isNotEmpty() && (
+                                callDigits == normRecPhone ||
+                                (callDigits.length >= 7 && normRecPhone.endsWith(callDigits.takeLast(7))) ||
+                                (normRecPhone.length >= 7 && callDigits.endsWith(normRecPhone.takeLast(7)))
+                            )
+
+                            Surface(
+                                shape = RoundedCornerShape(12.dp),
+                                color = if (isPhoneMatch) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f) else MaterialTheme.colorScheme.surfaceContainerHighest,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable { onCallSelected(call) }
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(12.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                            Text(
+                                                text = call.name ?: call.number,
+                                                style = MaterialTheme.typography.titleMedium,
+                                                fontWeight = FontWeight.SemiBold,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis
+                                            )
+                                            if (isPhoneMatch) {
+                                                Surface(
+                                                    shape = RoundedCornerShape(6.dp),
+                                                    color = MaterialTheme.colorScheme.primary
+                                                ) {
+                                                    Text(
+                                                        text = "Match",
+                                                        style = MaterialTheme.typography.labelSmall,
+                                                        color = MaterialTheme.colorScheme.onPrimary,
+                                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                                    )
+                                                }
+                                            }
+                                        }
+                                        if (!call.name.isNullOrBlank()) {
+                                            Text(
+                                                text = call.number,
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
+                                        Text(
+                                            text = "${call.timestamp.toDateString()} • ${call.duration.toDurationString()} • ${call.callType}",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.outline
+                                        )
+                                    }
+                                    Icon(
+                                        imageVector = Icons.Default.Link,
+                                        contentDescription = "Link Call",
+                                        tint = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel", style = CallogTypography.sectionTitle)
             }
         },
         containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,

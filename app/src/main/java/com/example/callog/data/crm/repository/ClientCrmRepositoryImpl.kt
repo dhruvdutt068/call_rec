@@ -29,45 +29,16 @@ class ClientCrmRepositoryImpl @Inject constructor(
     }
 
     override suspend fun publishCallEvent(event: CrmCallEvent): Result<Unit> = withContext(Dispatchers.IO) {
-        try {
-            // 1. Upsert high-level aggregated status in client calls_log
-            val callsLogDto = CrmPayloadMapper.toClientCallsLogDto(event)
-            remoteDataSource.upsertCallsLog(callsLogDto)
-
-            // 2. Insert granular interaction event into lead_communications
-            val commDto = CrmPayloadMapper.toClientLeadCommunicationDto(event)
-            remoteDataSource.insertLeadCommunication(commDto)
-
-            DeveloperLogger.info("CRM_EVENT_PUBLISHED", "Published call event for callId=${event.callId}")
-            Result.success(Unit)
-        } catch (e: Exception) {
-            DeveloperLogger.error("CRM_PUBLISH_FAILED", "Failed publishing call event for callId=${event.callId}", exception = e)
-            Result.failure(e)
-        }
+        // Disabled: Client CRM tables (calls_log, lead_communications) syncing is turned off
+        DeveloperLogger.info("CRM_EVENT_SKIPPED", "External CRM publishing is disabled for callId=${event.callId}")
+        Result.success(Unit)
     }
 
     override suspend fun publishBatchCallEvents(events: List<CrmCallEvent>): Result<Unit> = withContext(Dispatchers.IO) {
         if (events.isEmpty()) return@withContext Result.success(Unit)
-        try {
-            // 1. Group events by phone number to upsert the latest state into calls_log
-            val latestByPhone = events.groupBy { CrmPayloadMapper.toCrmPhoneNumber(it.rawPhoneNumber) }
-                .mapValues { (_, callEvents) -> callEvents.maxByOrNull { it.timestampEpochMs }!! }
-
-            for ((_, latestEvent) in latestByPhone) {
-                val callsLogDto = CrmPayloadMapper.toClientCallsLogDto(latestEvent)
-                remoteDataSource.upsertCallsLog(callsLogDto)
-            }
-
-            // 2. Batch insert all communication interactions into lead_communications
-            val commDtos = events.map { CrmPayloadMapper.toClientLeadCommunicationDto(it) }
-            remoteDataSource.insertBatchLeadCommunications(commDtos)
-
-            DeveloperLogger.success("CRM_BATCH_SYNCED", "Successfully synced ${events.size} call events to Client CRM.")
-            Result.success(Unit)
-        } catch (e: Exception) {
-            DeveloperLogger.error("CRM_BATCH_FAILED", "Failed syncing batch call events to Client CRM", exception = e)
-            Result.failure(e)
-        }
+        // Disabled: Client CRM tables (calls_log, lead_communications) syncing is turned off
+        DeveloperLogger.info("CRM_BATCH_SKIPPED", "External CRM batch publishing is disabled (${events.size} events skipped)")
+        Result.success(Unit)
     }
 
     override fun observeLeadByPhone(rawPhoneNumber: String): Flow<CrmLeadSummary?> = flow {

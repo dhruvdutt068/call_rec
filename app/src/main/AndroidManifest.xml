@@ -90,7 +90,7 @@
         <service
             android:name=".core.telecom.CallService"
             android:permission="android.permission.BIND_INCALL_SERVICE"
-            android:foregroundServiceType="phoneCall"
+            android:foregroundServiceType="phoneCall|microphone"
             android:exported="true">
             <meta-data
                 android:name="android.telecom.IN_CALL_SERVICE_UI"
