@@ -36,7 +36,7 @@ abstract class BaseRecordingParser : RecordingParser {
  * Matches: Call recording <phone/name>_<YYMMDD>_<HHMMSS>
  */
 class SamsungCallRecordingParser : BaseRecordingParser() {
-    private val regex = Regex("(?i)^Call recording\\s+([+_a-zA-Z0-9\\s()-]+)_(\\d{6})_(\\d{6})$")
+    private val regex = Regex("(?i)^Call recording\\s+([+_a-zA-Z0-9\\s()-]+)_(\\d{6}|\\d{8})_(\\d{6})$")
 
     override fun parse(fileName: String): RecordingMetadata? {
         val nameWithoutExt = fileName.substringBeforeLast(".")
@@ -46,7 +46,8 @@ class SamsungCallRecordingParser : BaseRecordingParser() {
         val dateStr = match.groupValues[2]
         val timeStr = match.groupValues[3]
         
-        val timestamp = parseDateTime("${dateStr}${timeStr}", "yyMMddHHmmss")
+        val pattern = if (dateStr.length == 8) "yyyyMMddHHmmss" else "yyMMddHHmmss"
+        val timestamp = parseDateTime("${dateStr}${timeStr}", pattern)
         
         val isPhone = isPhoneNumber(identifier)
         return RecordingMetadata(
@@ -60,10 +61,10 @@ class SamsungCallRecordingParser : BaseRecordingParser() {
 }
 
 /**
- * Matches: Call <phone/name>_<YYMMDD>_<HHMMSS>
+ * Matches: Call <phone/name>_<YYMMDD>_<HHMMSS> or Call <phone/name>_<YYYYMMDD>_<HHMMSS>
  */
 class SamsungCallParser : BaseRecordingParser() {
-    private val regex = Regex("(?i)^Call\\s+([+_a-zA-Z0-9\\s()-]+)_(\\d{6})_(\\d{6})$")
+    private val regex = Regex("(?i)^Call\\s+([+_a-zA-Z0-9\\s()-]+)_(\\d{6}|\\d{8})_(\\d{6})$")
 
     override fun parse(fileName: String): RecordingMetadata? {
         val nameWithoutExt = fileName.substringBeforeLast(".")
@@ -73,7 +74,8 @@ class SamsungCallParser : BaseRecordingParser() {
         val dateStr = match.groupValues[2]
         val timeStr = match.groupValues[3]
         
-        val timestamp = parseDateTime("${dateStr}${timeStr}", "yyMMddHHmmss")
+        val pattern = if (dateStr.length == 8) "yyyyMMddHHmmss" else "yyMMddHHmmss"
+        val timestamp = parseDateTime("${dateStr}${timeStr}", pattern)
         
         val isPhone = isPhoneNumber(identifier)
         return RecordingMetadata(
@@ -83,6 +85,109 @@ class SamsungCallParser : BaseRecordingParser() {
             originalFileName = fileName,
             parserName = "SamsungCallParser"
         )
+    }
+}
+
+/**
+ * Matches Xiaomi/MIUI/HyperOS formats:
+ * 1. <phone>(<contact>)_<YYYYMMDDHHMMSS> or <contact>(<phone>)_<YYYYMMDDHHMMSS>
+ * 2. <phone/name>_<YYYYMMDDHHMMSS>
+ */
+class XiaomiCallParser : BaseRecordingParser() {
+    private val parenRegex = Regex("^([+_a-zA-Z0-9\\s-]+)\\(([^)]+)\\)_(\\d{8})(\\d{6})$")
+    private val simpleRegex = Regex("^(?:Call_)?([+_a-zA-Z0-9\\s()-]+)_(\\d{8})(\\d{6})$")
+
+    override fun parse(fileName: String): RecordingMetadata? {
+        val nameWithoutExt = fileName.substringBeforeLast(".")
+        val parenMatch = parenRegex.find(nameWithoutExt)
+        if (parenMatch != null) {
+            val part1 = parenMatch.groupValues[1].trim()
+            val part2 = parenMatch.groupValues[2].trim()
+            val dateStr = parenMatch.groupValues[3]
+            val timeStr = parenMatch.groupValues[4]
+            val timestamp = parseDateTime("${dateStr}${timeStr}", "yyyyMMddHHmmss")
+
+            val phone = if (isPhoneNumber(part1)) part1 else if (isPhoneNumber(part2)) part2 else null
+            val contact = if (phone != part1 && part1.isNotBlank()) part1 else if (phone != part2 && part2.isNotBlank()) part2 else null
+
+            return RecordingMetadata(
+                phoneNumber = phone,
+                contactName = contact,
+                timestamp = timestamp,
+                originalFileName = fileName,
+                parserName = "XiaomiCallParser"
+            )
+        }
+
+        val simpleMatch = simpleRegex.find(nameWithoutExt)
+        if (simpleMatch != null) {
+            val identifier = simpleMatch.groupValues[1].trim()
+            val dateStr = simpleMatch.groupValues[2]
+            val timeStr = simpleMatch.groupValues[3]
+            val timestamp = parseDateTime("${dateStr}${timeStr}", "yyyyMMddHHmmss")
+
+            val isPhone = isPhoneNumber(identifier)
+            return RecordingMetadata(
+                phoneNumber = if (isPhone) identifier else null,
+                contactName = if (!isPhone) identifier else null,
+                timestamp = timestamp,
+                originalFileName = fileName,
+                parserName = "XiaomiCallParser"
+            )
+        }
+
+        return null
+    }
+}
+
+/**
+ * Matches Vivo / Oppo / Realme / ColorOS formats:
+ * 1. REC_<YYYYMMDD_HHMMSS>_<phone/name>
+ * 2. <phone/name>_<YYYY-MM-DD-HH-MM-SS>
+ */
+class OppoVivoCallParser : BaseRecordingParser() {
+    private val recPrefixRegex = Regex("^(?i)REC_(\\d{8})_(\\d{6})_([+_a-zA-Z0-9\\s()-]+)$")
+    private val hyphenDateRegex = Regex("^([+_a-zA-Z0-9\\s()-]+)_(\\d{4})-(\\d{2})-(\\d{2})-(\\d{2})-(\\d{2})-(\\d{2})$")
+
+    override fun parse(fileName: String): RecordingMetadata? {
+        val nameWithoutExt = fileName.substringBeforeLast(".")
+        val recMatch = recPrefixRegex.find(nameWithoutExt)
+        if (recMatch != null) {
+            val dateStr = recMatch.groupValues[1]
+            val timeStr = recMatch.groupValues[2]
+            val identifier = recMatch.groupValues[3].trim()
+            val timestamp = parseDateTime("${dateStr}${timeStr}", "yyyyMMddHHmmss")
+            val isPhone = isPhoneNumber(identifier)
+            return RecordingMetadata(
+                phoneNumber = if (isPhone) identifier else null,
+                contactName = if (!isPhone) identifier else null,
+                timestamp = timestamp,
+                originalFileName = fileName,
+                parserName = "OppoVivoCallParser"
+            )
+        }
+
+        val hyphenMatch = hyphenDateRegex.find(nameWithoutExt)
+        if (hyphenMatch != null) {
+            val identifier = hyphenMatch.groupValues[1].trim()
+            val yyyy = hyphenMatch.groupValues[2]
+            val mm = hyphenMatch.groupValues[3]
+            val dd = hyphenMatch.groupValues[4]
+            val hh = hyphenMatch.groupValues[5]
+            val min = hyphenMatch.groupValues[6]
+            val ss = hyphenMatch.groupValues[7]
+            val timestamp = parseDateTime("${yyyy}${mm}${dd}${hh}${min}${ss}", "yyyyMMddHHmmss")
+            val isPhone = isPhoneNumber(identifier)
+            return RecordingMetadata(
+                phoneNumber = if (isPhone) identifier else null,
+                contactName = if (!isPhone) identifier else null,
+                timestamp = timestamp,
+                originalFileName = fileName,
+                parserName = "OppoVivoCallParser"
+            )
+        }
+
+        return null
     }
 }
 
@@ -355,6 +460,8 @@ object RecordingParserChain {
             CallogRecordingParser(),
             SamsungCallRecordingParser(),
             SamsungCallParser(),
+            XiaomiCallParser(),
+            OppoVivoCallParser(),
             CompactDateTimeParser(),
             StandardDateTimeParser(),
             SimpleDateTimeParser(),

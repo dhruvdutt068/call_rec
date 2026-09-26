@@ -398,6 +398,9 @@ class CallSessionManager @Inject constructor(
                     notificationManager.showMissedCallNotification(session)
                 }
 
+                // Staggered OEM recording scans to capture newly written audio file from native dialer
+                triggerPostCallRecordingScans(callId)
+
                 // Auto clean up after brief timeout so UI can show "Call Ended"
                 scope.launch {
                     delay(1500)
@@ -538,6 +541,9 @@ class CallSessionManager @Inject constructor(
                         mapOf(callId to existingSession.copy(state = CallState.DISCONNECTED))
                     }
                     handleStateChange(callId, CallState.DISCONNECTED)
+                } else {
+                    // Call was handled via external native dialer: trigger OEM recording scan
+                    triggerPostCallRecordingScans(callId)
                 }
             }
             else -> {}
@@ -912,6 +918,28 @@ class CallSessionManager @Inject constructor(
             context.startActivity(intent)
         } catch (e: Exception) {
             Log.e(TAG, "Failed to launch InCallActivity", e)
+        }
+    }
+
+    private fun triggerPostCallRecordingScans(callId: String) {
+        scope.launch {
+            try {
+                DeveloperLogger.info(TAG, "Starting post-call staggered OEM recording scans for callId=$callId")
+                // Pass 1: 1.5s after disconnect (fast OEM flush)
+                delay(1500)
+                recordingRepository.scanRecordings()
+
+                // Pass 2: 3.5s after disconnect (standard OEM flush)
+                delay(2000)
+                recordingRepository.scanRecordings()
+
+                // Pass 3: 6.5s after disconnect (slower indexing / media store flush)
+                delay(3000)
+                recordingRepository.scanRecordings()
+                DeveloperLogger.info(TAG, "Finished post-call staggered OEM recording scans for callId=$callId")
+            } catch (e: Exception) {
+                DeveloperLogger.error(TAG, "Error in post-call recording scans: ${e.message}", e)
+            }
         }
     }
 

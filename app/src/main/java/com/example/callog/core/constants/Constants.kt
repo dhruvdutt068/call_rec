@@ -9,13 +9,17 @@ object Constants {
         "Recordings/Call Vault",
         "Recordings",
         "Recordings/Call",
+        "Sounds/Call",
         "Recordings/Record/Call",
         "Recordings/Record",
+        "Record/Call",
         "Call",
         "Samsung/Call",
         "MIUI/sound_recorder/call_rec",
         "OnePlus/Record/PhoneRecord",
-        "Record/PhoneRecord"
+        "Record/PhoneRecord",
+        "Music/Recordings/CallRecordings",
+        "Recordings/PhoneRecord"
     )
 
     // Notification constants

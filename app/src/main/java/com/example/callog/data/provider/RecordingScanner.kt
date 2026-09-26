@@ -66,7 +66,22 @@ class RecordingScanner @Inject constructor(
             }
         }
 
-        // 3. Query all audio files via MediaStore
+        // 3. Directly scan known OEM recording directories if readable on filesystem
+        try {
+            val root = android.os.Environment.getExternalStorageDirectory()
+            if (root != null && root.exists()) {
+                for (dirRel in Constants.RECORDING_DIRECTORIES) {
+                    val dir = File(root, dirRel)
+                    if (dir.exists() && dir.isDirectory && dir.canRead()) {
+                        scanFolder(dir, list)
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            Log.e("RecordingScanner", "Error directly scanning OEM directories", e)
+        }
+
+        // 4. Query all audio files via MediaStore
         val projection = arrayOf(
             MediaStore.Audio.Media.DATA,
             MediaStore.Audio.Media.DISPLAY_NAME,
@@ -104,8 +119,11 @@ class RecordingScanner @Inject constructor(
 
                     val isRecording = isCallRecordingFile(filePath, displayName)
                     if (isRecording) {
-                        Log.d("RecordingScanner", "Scanning file: $displayName")
                         val file = File(filePath)
+                        val effectiveSize = if (fileSize > 0) fileSize else if (file.exists()) file.length() else 0L
+                        if (effectiveSize == 0L) continue // Ignore empty or unflushed files
+
+                        Log.d("RecordingScanner", "Scanning file: $displayName")
                         val lastMod = if (dateModified > 0) dateModified * 1000L else if (file.exists()) file.lastModified() else dateAdded * 1000L
                         val metadata = RecordingParserChain.parse(displayName, lastMod)
                         Log.d("RecordingScanner", "Parsed successfully: Phone = ${metadata.phoneNumber}, ContactName = ${metadata.contactName}, Timestamp = ${metadata.timestamp}, Parser = ${metadata.parserName}")
@@ -118,7 +136,7 @@ class RecordingScanner @Inject constructor(
                                 contactName = metadata.contactName,
                                 timestamp = metadata.timestamp ?: lastMod,
                                 durationMs = duration,
-                                fileSize = if (fileSize > 0) fileSize else if (file.exists()) file.length() else 0L,
+                                fileSize = effectiveSize,
                                 lastModified = lastMod,
                                 parserName = metadata.parserName
                             )
@@ -136,16 +154,17 @@ class RecordingScanner @Inject constructor(
     }
 
     private fun isCallRecordingFile(filePath: String, displayName: String): Boolean {
-        // 1. Check if folder path contains call recording folders
-        val pathLower = filePath.lowercase()
-        val inRecordingFolder = Constants.RECORDING_DIRECTORIES.any { dir ->
-            pathLower.contains("/${dir.lowercase()}/") || pathLower.endsWith("/${dir.lowercase()}")
-        }
-        if (inRecordingFolder) return true
-
-        // 2. Check if file extension is supported
+        // 1. Check if file extension is supported
         val ext = displayName.substringAfterLast(".", "").lowercase()
         if (ext !in Constants.SUPPORTED_RECORDING_EXTENSIONS) return false
+
+        // 2. Check if folder path contains call recording folders
+        val pathLower = filePath.replace('\\', '/').lowercase()
+        val inRecordingFolder = Constants.RECORDING_DIRECTORIES.any { dir ->
+            val dLower = dir.lowercase()
+            pathLower.contains("/$dLower/") || pathLower.endsWith("/$dLower") || pathLower.contains("/$dLower")
+        }
+        if (inRecordingFolder) return true
 
         // 3. Check display name hints
         val nameLower = displayName.lowercase()

@@ -229,6 +229,55 @@ fun RecordingDiagnosticsScreen(
                 }
             }
 
+            // OEM Call Recording Quick Setup Banner
+            GlassyCard(
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(12.dp)) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                Icons.Default.Mic,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                "Native OEM Auto-Recording",
+                                style = CallogTypography.statusLabel,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        "For crystal-clear 2-way audio on modern Android, enable 'Auto record calls' in your phone's native dialer settings.",
+                        style = CallogTypography.denseData,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Button(
+                        onClick = { openOemCallRecordingSettings(context) },
+                        shape = CallogShapes.buttonShape,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.primary,
+                            contentColor = MaterialTheme.colorScheme.onPrimary
+                        ),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Icon(Icons.Default.Settings, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Open Native Dialer Recording Settings", style = CallogTypography.statusLabel)
+                    }
+                }
+            }
+
             // Filters
             ScrollableTabRow(
                 selectedTabIndex = when (selectedFilter) {
@@ -542,5 +591,56 @@ fun exportRecordingsCsv(context: Context, recordings: List<RecordingEntity>) {
         context.startActivity(Intent.createChooser(intent, "Share Recordings CSV"))
     } catch (e: Exception) {
         Toast.makeText(context, "Export failed: ${e.message}", Toast.LENGTH_LONG).show()
+    }
+}
+
+fun openOemCallRecordingSettings(context: Context) {
+    val manufacturer = android.os.Build.MANUFACTURER.lowercase()
+    val intents = when {
+        manufacturer.contains("samsung") -> listOf(
+            Intent("com.samsung.android.app.telephonyui.action.OPEN_RECORDING_SETTINGS"),
+            Intent("com.samsung.android.app.telephonyui.action.CALL_SETTINGS"),
+            Intent(android.telecom.TelecomManager.ACTION_CHANGE_DEFAULT_DIALER)
+        )
+        manufacturer.contains("xiaomi") || manufacturer.contains("redmi") || manufacturer.contains("poco") -> listOf(
+            Intent().setClassName("com.android.phone", "com.android.phone.settings.CallRecordSetting"),
+            Intent().setClassName("com.android.soundrecorder", "com.android.soundrecorder.SoundRecorder"),
+            Intent(android.provider.Settings.ACTION_SETTINGS)
+        )
+        manufacturer.contains("oppo") || manufacturer.contains("realme") || manufacturer.contains("oneplus") -> listOf(
+            Intent().setClassName("com.android.phone", "com.android.phone.OppoCallRecordSettings"),
+            Intent().setClassName("com.oplus.dialer", "com.oplus.dialer.settings.CallRecordSettingsActivity"),
+            Intent(android.telecom.TelecomManager.ACTION_CHANGE_DEFAULT_DIALER)
+        )
+        manufacturer.contains("vivo") || manufacturer.contains("iqoo") -> listOf(
+            Intent().setClassName("com.android.phone", "com.android.phone.RecordSettingsActivity"),
+            Intent().setClassName("com.vivo.soundrecorder", "com.vivo.soundrecorder.SoundRecorder")
+        )
+        else -> listOf(
+            Intent(android.telephony.TelephonyManager.ACTION_CONFIGURE_VOICEMAIL),
+            Intent(android.provider.Settings.ACTION_SETTINGS)
+        )
+    }
+
+    var launched = false
+    for (intent in intents) {
+        try {
+            intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK
+            context.startActivity(intent)
+            launched = true
+            break
+        } catch (_: Exception) {}
+    }
+
+    if (!launched) {
+        try {
+            val fallback = Intent(android.provider.Settings.ACTION_SETTINGS).apply {
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK
+            }
+            context.startActivity(fallback)
+            Toast.makeText(context, "Open Phone Dialer > Settings > Auto Call Recording", Toast.LENGTH_LONG).show()
+        } catch (e: Exception) {
+            Toast.makeText(context, "Could not open dialer settings", Toast.LENGTH_SHORT).show()
+        }
     }
 }

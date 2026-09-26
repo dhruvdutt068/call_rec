@@ -79,7 +79,7 @@ class RecordingRepositoryImpl @Inject constructor(
                 if (existingRecording != null && (existingRecording.matchStatus == MatchStatus.MATCHED || existingRecording.uploadStatus == UploadStatus.UPLOADED)) {
                     existingRecording.matchedCallId?.let { cid ->
                         val call = callDao.getCallById(cid)
-                        if (call != null && (call.recordingLocalPath == null || call.recordingPath == null)) {
+                        if (call != null && (call.recordingLocalPath == null || call.recordingPath == null || call.recordingLocalPath?.contains("Callog_") == true)) {
                             callDao.updateCall(
                                 call.copy(
                                     recordingPath = rec.filePath,
@@ -756,6 +756,11 @@ class RecordingRepositoryImpl @Inject constructor(
             val finalEntity = entity.copy(id = if (entity.id == 0L) insertedId else entity.id)
 
             if (matchedCall != null) {
+                val existingLocal = matchedCall.recordingLocalPath ?: matchedCall.recordingPath
+                if (existingLocal != null && !existingLocal.contains("Callog_") && File(existingLocal).exists() && File(existingLocal).length() > 0) {
+                    Log.i(TAG, "Call ${matchedCall.id} already has OEM recording $existingLocal. Skipping in-app recording override.")
+                    return@withContext Result.success(finalEntity.copy(matchStatus = MatchStatus.UNMATCHED, reason = "Superseded by OEM recording"))
+                }
                 callDao.updateCall(
                     matchedCall.copy(
                         recordingPath = session.filePath,
