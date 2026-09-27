@@ -178,11 +178,11 @@ class PresetRepositoryImpl @Inject constructor(
                 description = "Default local sandbox with debug tools and test backend",
                 configuration = PresetConfiguration(
                     supabaseUrl = SupabaseDefaults.DEV_URL,
-                    firebaseProjectId = "allset-491218",
-                    firebaseAppId = "1:799427430422:android:e0f5737f12b8b9cbb20d37",
-                    storageBucket = "allset-491218.firebasestorage.app",
-                    gcmSenderId = "799427430422",
-                    firebaseDatabaseId = "call-logs",
+                    firebaseProjectId = "restaurant-manager-185bd",
+                    firebaseAppId = "1:666477971024:android:4cbefd56ddee708ab07355",
+                    storageBucket = "restaurant-manager-185bd.firebasestorage.app",
+                    gcmSenderId = "666477971024",
+                    firebaseDatabaseId = null,
                     apiBaseUrl = "https://dev-api.callog.internal",
                     features = mapOf(
                         PresetConfiguration.FEATURE_DEV_DIAGNOSTICS to true,
@@ -197,7 +197,7 @@ class PresetRepositoryImpl @Inject constructor(
             )
             val devSecrets = PresetSecrets(
                 supabaseAnonKey = SupabaseDefaults.DEV_ANON_KEY,
-                firebaseApiKey = "AIzaSyBtlY7EoO6PgPUCMjNR55K88H2v665qQgQ",
+                firebaseApiKey = "AIzaSyBbzuMy2RT72urGPnaaJTRTW-DH2eOzFvs",
                 apiKey = "dev_api_key_sample"
             )
 
