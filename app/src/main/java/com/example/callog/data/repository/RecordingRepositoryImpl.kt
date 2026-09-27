@@ -735,6 +735,7 @@ class RecordingRepositoryImpl @Inject constructor(
                 matchedCall = recentCalls.minByOrNull { Math.abs(it.timestamp - session.startedAt) }
             }
 
+            val checksum = com.example.callog.data.security.FileCryptoUtils.calculateSha256(file)
             val entity = RecordingEntity(
                 id = existing?.id ?: 0L,
                 filePath = session.filePath,
@@ -749,7 +750,9 @@ class RecordingRepositoryImpl @Inject constructor(
                 matchStatus = if (matchedCall != null || callIdLong != null) MatchStatus.MATCHED else MatchStatus.UNMATCHED,
                 uploadStatus = UploadStatus.PENDING,
                 parser = "InCallRecorder",
-                reason = if (matchedCall != null) "Matched during active call (${session.callId})" else "Recorded during call (${session.callId})"
+                reason = if (matchedCall != null) "Matched during active call (${session.callId})" else "Recorded during call (${session.callId})",
+                checksum = checksum,
+                mimeType = "audio/mp4"
             )
 
             val insertedId = recordingDao.insertRecording(entity)

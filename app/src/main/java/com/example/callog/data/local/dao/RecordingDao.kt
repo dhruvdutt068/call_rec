@@ -22,6 +22,12 @@ interface RecordingDao {
     @Query("SELECT * FROM recordings_research WHERE filePath = :filePath LIMIT 1")
     suspend fun getRecordingByPath(filePath: String): RecordingEntity?
 
+    @Query("SELECT * FROM recordings_research WHERE checksum = :checksum LIMIT 1")
+    suspend fun getRecordingByChecksum(checksum: String): RecordingEntity?
+
+    @Query("SELECT * FROM recordings_research WHERE matchedCallId = :callId LIMIT 1")
+    suspend fun getRecordingByCallId(callId: Long): RecordingEntity?
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertRecording(recording: RecordingEntity): Long
 

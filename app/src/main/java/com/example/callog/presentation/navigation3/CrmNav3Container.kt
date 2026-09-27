@@ -92,6 +92,12 @@ fun CrmNav3Container(
     val ringtoneRepository = remember(telecomEntryPoint) {
         telecomEntryPoint.ringtoneRepository()
     }
+    val oemDetector = remember(telecomEntryPoint) {
+        telecomEntryPoint.oemCapabilityDetector()
+    }
+    val recordingScanner = remember(telecomEntryPoint) {
+        telecomEntryPoint.recordingScanner()
+    }
 
     var isDefaultDialer by remember { mutableStateOf(TelecomRoleHelper.isDefaultDialer(context)) }
     val roleLauncher = rememberLauncherForActivityResult(
@@ -561,6 +567,21 @@ fun CrmNav3Container(
                             shape = RoundedCornerShape(12.dp)
                         )
 
+                        NavigationDrawerItem(
+                            icon = { Icon(Icons.Default.GraphicEq, contentDescription = null) },
+                            label = { Text("OEM Recording Setup") },
+                            selected = false,
+                            onClick = {
+                                multiStack.navigate(Nav3Key.CrmTab.RecordingSettings)
+                                closeDrawer()
+                            },
+                            colors = NavigationDrawerItemDefaults.colors(
+                                unselectedIconColor = Slate400,
+                                unselectedTextColor = Slate300
+                            ),
+                            shape = RoundedCornerShape(12.dp)
+                        )
+
 
                         NavigationDrawerItem(
                             icon = { Icon(Icons.Default.Code, contentDescription = null) },
@@ -783,6 +804,15 @@ fun CrmNav3Container(
                         )
                     }
 
+                    // --- 7.5 OEM Recording Setup Screen ---
+                    is Nav3Key.CrmTab.RecordingSettings -> {
+                        com.example.callog.presentation.screens.settings.RecordingSettingsScreen(
+                            oemDetector = oemDetector,
+                            recordingScanner = recordingScanner,
+                            onBackClick = { multiStack.pop() }
+                        )
+                    }
+
                     // --- 8. Settings Screen ---
                     is Nav3Key.CrmTab.Settings -> {
                         SettingsScreen(
@@ -792,6 +822,9 @@ fun CrmNav3Container(
                             onNavigateToDeveloperDashboard = onNavigateToDeveloperDashboard,
                             onNavigateToRingtoneSettings = {
                                 multiStack.navigate(Nav3Key.CrmTab.RingtoneSettings)
+                            },
+                            onNavigateToRecordingSettings = {
+                                multiStack.navigate(Nav3Key.CrmTab.RecordingSettings)
                             }
                         )
                     }

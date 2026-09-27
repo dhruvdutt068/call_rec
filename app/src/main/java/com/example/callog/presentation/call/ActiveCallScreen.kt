@@ -593,6 +593,29 @@ fun LiveNotesBottomSheet(
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
+            Spacer(modifier = Modifier.height(10.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                val quickTags = listOf("Interested", "Budget Issue", "Callback Later")
+                quickTags.forEach { tag ->
+                    val isTagged = notes.contains("[$tag]")
+                    FilterChip(
+                        selected = isTagged,
+                        onClick = {
+                            val updated = if (isTagged) {
+                                notes.replace("[$tag]", "").replace("  ", " ").trim()
+                            } else {
+                                if (notes.isBlank()) "[$tag] " else "$notes\n[$tag] "
+                            }
+                            onNotesChange(updated)
+                        },
+                        label = { Text(tag, style = MaterialTheme.typography.labelSmall) }
+                    )
+                }
+            }
 
             Spacer(modifier = Modifier.height(12.dp))
 

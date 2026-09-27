@@ -41,6 +41,9 @@ class CallService : InCallService(), TelecomCallController {
     @Inject
     lateinit var ringtoneController: RingtoneController
 
+    @Inject
+    lateinit var recordingMediaObserver: com.example.callog.data.provider.RecordingMediaObserver
+
     private val callMap = ConcurrentHashMap<String, Call>()
     private val callbackMap = ConcurrentHashMap<String, Call.Callback>()
 
@@ -50,12 +53,14 @@ class CallService : InCallService(), TelecomCallController {
         DeveloperLogger.info("CALL_SERVICE_LIFECYCLE", "CallService created and attached to Telecom.")
         callSessionManager.registerTelecomController(this)
         callAudioController.attachTelecomController(this)
+        recordingMediaObserver.register()
     }
 
     override fun onDestroy() {
         super.onDestroy()
         Log.i(TAG, "CallService destroyed")
         DeveloperLogger.info("CALL_SERVICE_LIFECYCLE", "CallService destroyed and detached.")
+        recordingMediaObserver.unregister()
         callAudioController.detachTelecomController(this)
         callSessionManager.unregisterTelecomController(this)
 

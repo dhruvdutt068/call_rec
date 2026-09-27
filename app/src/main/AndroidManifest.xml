@@ -103,6 +103,10 @@
             </intent-filter>
         </service>
 
+        <service
+            android:name=".presentation.call.CrmCallOverlayService"
+            android:exported="false" />
+
         <receiver
             android:name=".data.receiver.CallReceiver"
             android:exported="true">

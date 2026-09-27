@@ -44,6 +44,7 @@ fun SettingsScreen(
     onDarkThemeChange: (Boolean) -> Unit,
     onNavigateToDeveloperDashboard: () -> Unit,
     onNavigateToRingtoneSettings: (() -> Unit)? = null,
+    onNavigateToRecordingSettings: (() -> Unit)? = null,
     onNavigateToEnvironmentPresets: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
@@ -309,6 +310,49 @@ fun SettingsScreen(
                                 Column {
                                     Text("CRM Ringtone Rules", color = Slate50, fontWeight = FontWeight.SemiBold)
                                     Text("Distinct tones for Hot, Warm & Customer calls", color = Slate400, style = MaterialTheme.typography.bodySmall)
+                                }
+                            }
+                            Icon(
+                                imageVector = Icons.Default.ChevronRight,
+                                contentDescription = null,
+                                tint = Slate400,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                    }
+
+                    if (onNavigateToRecordingSettings != null) {
+                        HorizontalDivider(color = Slate800)
+
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { onNavigateToRecordingSettings() }
+                                .padding(vertical = 4.dp)
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(36.dp)
+                                        .clip(CircleShape)
+                                        .background(Teal500.copy(alpha = 0.15f)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.GraphicEq,
+                                        contentDescription = null,
+                                        tint = Teal400,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
+                                Column {
+                                    Text("OEM Call Recording Bridge", color = Slate50, fontWeight = FontWeight.SemiBold)
+                                    Text("Hardware capability detection & auto-sync setup", color = Slate400, style = MaterialTheme.typography.bodySmall)
                                 }
                             }
                             Icon(

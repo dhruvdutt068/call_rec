@@ -429,6 +429,20 @@ object DatabaseModule {
         }
     }
 
+    private val MIGRATION_22_23 = object : Migration(22, 23) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            try {
+                db.execSQL("ALTER TABLE `recordings_research` ADD COLUMN `checksum` TEXT DEFAULT NULL")
+                db.execSQL("ALTER TABLE `recordings_research` ADD COLUMN `mimeType` TEXT DEFAULT 'audio/mp4'")
+                db.execSQL("ALTER TABLE `recordings_research` ADD COLUMN `leadId` TEXT DEFAULT NULL")
+                db.execSQL("ALTER TABLE `recordings_research` ADD COLUMN `confidence` REAL DEFAULT NULL")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_recordings_research_checksum` ON `recordings_research` (`checksum`)")
+            } catch (e: Exception) {
+                android.util.Log.e("DatabaseModule", "Failed to migrate database to v23", e)
+            }
+        }
+    }
+
     @Provides
     @Singleton
     fun provideDatabase(
@@ -438,7 +452,7 @@ object DatabaseModule {
             context,
             CallVaultDatabase::class.java,
             Constants.DATABASE_NAME
-        ).addMigrations(MIGRATION_5_6, MIGRATION_13_14, MIGRATION_14_15, MIGRATION_15_16, MIGRATION_16_17, MIGRATION_17_18, MIGRATION_18_19, MIGRATION_19_20, MIGRATION_20_21, MIGRATION_21_22)
+        ).addMigrations(MIGRATION_5_6, MIGRATION_13_14, MIGRATION_14_15, MIGRATION_15_16, MIGRATION_16_17, MIGRATION_17_18, MIGRATION_18_19, MIGRATION_19_20, MIGRATION_20_21, MIGRATION_21_22, MIGRATION_22_23)
          .fallbackToDestructiveMigration()
          .build()
      }

@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="wrap_content"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:background="@android:drawable/dialog_holo_dark_frame"
+    android:padding="12dp"
+    android:elevation="8dp">
+
+    <LinearLayout
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical">
+
+        <TextView
+            android:id="@+id/tv_lead_badge"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="HOT"
+            android:textColor="#FF4D4F"
+            android:textSize="11sp"
+            android:textStyle="bold"
+            android:background="#22FF4D4F"
+            android:paddingStart="6dp"
+            android:paddingEnd="6dp"
+            android:paddingTop="2dp"
+            android:paddingBottom="2dp"
+            android:layout_marginEnd="8dp" />
+
+        <TextView
+            android:id="@+id/tv_caller_name"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Incoming Caller"
+            android:textColor="#FFFFFF"
+            android:textSize="14sp"
+            android:textStyle="bold"
+            android:maxWidth="160dp"
+            android:singleLine="true" />
+
+        <ImageButton
+            android:id="@+id/btn_close_overlay"
+            android:layout_width="24dp"
+            android:layout_height="24dp"
+            android:layout_marginStart="8dp"
+            android:background="?android:attr/selectableItemBackgroundBorderless"
+            android:src="@android:drawable/ic_menu_close_clear_cancel"
+            android:contentDescription="Close HUD" />
+    </LinearLayout>
+
+    <TextView
+        android:id="@+id/tv_caller_company"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="CRM Account"
+        android:textColor="#AAAAAA"
+        android:textSize="11sp"
+        android:layout_marginTop="2dp"
+        android:maxWidth="180dp"
+        android:singleLine="true" />
+</LinearLayout>

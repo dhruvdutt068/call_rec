@@ -300,7 +300,31 @@ fun PostCallSummaryScreen(
                     unfocusedContainerColor = Slate900
                 )
             )
+
+            // Quick Tags Row
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                listOf("Interested", "Budget Issue", "Callback Later").forEach { tag ->
+                    val isSelected = notesText.contains("[$tag]")
+                    FilterChip(
+                        selected = isSelected,
+                        onClick = {
+                            notesText = if (isSelected) {
+                                notesText.replace("[$tag]", "").replace("  ", " ").trim()
+                            } else {
+                                if (notesText.isBlank()) "[$tag] " else "$notesText\n[$tag] "
+                            }
+                        },
+                        label = { Text(tag, style = MaterialTheme.typography.labelSmall) }
+                    )
+                }
+            }
         }
+
+        // Recording Discovery & Cloud Sync Status Card
+        RecordingStatusCard(session = session)
 
         // Follow-Up Scheduling
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -413,6 +437,123 @@ fun PostCallSummaryScreen(
                     text = "Skip & Dismiss",
                     color = Slate400,
                     style = MaterialTheme.typography.labelMedium
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun RecordingStatusCard(
+    session: CallSessionState,
+    modifier: Modifier = Modifier
+) {
+    GlassyCard(
+        modifier = modifier.fillMaxWidth()
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.GraphicEq,
+                        contentDescription = null,
+                        tint = Teal400,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Text(
+                        text = "OEM Call Recording Bridge",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = Slate100
+                    )
+                }
+
+                val hasRecording = session.recordingState is com.example.callog.domain.call.CallRecordingState.Recording ||
+                        session.recordingState is com.example.callog.domain.call.CallRecordingState.Saved ||
+                        session.durationSeconds > 0
+
+                val (badgeText, badgeColor) = if (session.recordingState is com.example.callog.domain.call.CallRecordingState.Saved) {
+                    "Attached" to Green500
+                } else if (session.durationSeconds > 0) {
+                    "Discovery Active" to Teal400
+                } else {
+                    "No Audio" to Slate500
+                }
+
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(badgeColor.copy(alpha = 0.15f))
+                        .padding(horizontal = 8.dp, vertical = 3.dp)
+                ) {
+                    Text(
+                        text = badgeText,
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = badgeColor
+                    )
+                }
+            }
+
+            HorizontalDivider(color = Slate800)
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column {
+                    Text(
+                        text = "Multi-Factor Correlation",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Slate400
+                    )
+                    Text(
+                        text = "±15s window, ±4s duration & phone matching",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Slate200
+                    )
+                }
+                Icon(
+                    imageVector = Icons.Default.Check,
+                    contentDescription = null,
+                    tint = Teal400,
+                    modifier = Modifier.size(16.dp)
+                )
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column {
+                    Text(
+                        text = "Cloud Upload (WorkManager)",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Slate400
+                    )
+                    Text(
+                        text = "Queued with SHA-256 integrity verification",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Slate200
+                    )
+                }
+                Icon(
+                    imageVector = Icons.Default.CloudUpload,
+                    contentDescription = null,
+                    tint = AllSetBlue,
+                    modifier = Modifier.size(16.dp)
                 )
             }
         }

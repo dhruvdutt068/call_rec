@@ -52,6 +52,17 @@ open class RingtoneController @Inject constructor(
         }
     }
 
+    private val audioFocusChangeListener = AudioManager.OnAudioFocusChangeListener { focusChange ->
+        when (focusChange) {
+            AudioManager.AUDIOFOCUS_LOSS,
+            AudioManager.AUDIOFOCUS_LOSS_TRANSIENT -> {
+                Log.i(TAG, "Audio focus lost ($focusChange). Silencing ringtone.")
+                DeveloperLogger.info("AUDIO_FOCUS_LOST", "Audio focus lost ($focusChange), silencing ringtone")
+                silenceRinger()
+            }
+        }
+    }
+
     val isRingtonePlaying: Boolean
         get() = synchronized(lock) { isPlaying }
 
@@ -68,8 +79,8 @@ open class RingtoneController @Inject constructor(
                 return
             }
 
-            // Trigger vibration in VIBRATE or NORMAL mode
-            startVibration()
+            // Trigger lead-aware vibration in VIBRATE or NORMAL mode
+            startVibration(lead?.status)
 
             if (ringerMode == AudioManager.RINGER_MODE_VIBRATE) {
                 Log.i(TAG, "Device is in VIBRATE mode. Suppressing ringtone audio.")
@@ -81,7 +92,7 @@ open class RingtoneController @Inject constructor(
             val ringtoneUri = ringtonePolicy.ringtoneFor(person, lead)
             DeveloperLogger.info(
                 "RINGTONE_CONTROLLER_STARTED",
-                "Playing CRM policy ringtone: uri=$ringtoneUri, caller=${person?.displayName ?: "Unknown"}"
+                "Playing CRM policy ringtone: uri=$ringtoneUri, status=${lead?.status ?: "UNKNOWN"}, caller=${person?.displayName ?: "Unknown"}"
             )
 
             try {
@@ -175,9 +186,14 @@ open class RingtoneController @Inject constructor(
         abandonAudioFocus()
     }
 
-    private fun startVibration() {
+    private fun startVibration(status: com.example.callog.domain.model.LeadStatus? = null) {
         try {
-            val pattern = longArrayOf(0, 1000, 1000)
+            val pattern = when (status) {
+                com.example.callog.domain.model.LeadStatus.HOT -> longArrayOf(0, 250, 150, 250, 1000) // Double-pulse
+                com.example.callog.domain.model.LeadStatus.WARM -> longArrayOf(0, 1000, 1000) // Standard vibration
+                com.example.callog.domain.model.LeadStatus.COLD -> longArrayOf(0, 150, 2500) // Minimal chime pulse
+                else -> longArrayOf(0, 1000, 1000) // System-compatible default
+            }
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 vibrator?.vibrate(VibrationEffect.createWaveform(pattern, 0))
             } else {
@@ -208,13 +224,14 @@ open class RingtoneController @Inject constructor(
                             .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
                             .build()
                     )
+                    .setOnAudioFocusChangeListener(audioFocusChangeListener)
                     .build()
                 audioFocusRequest = focusRequest
                 audioManager.requestAudioFocus(focusRequest)
             } else {
                 @Suppress("DEPRECATION")
                 audioManager.requestAudioFocus(
-                    null,
+                    audioFocusChangeListener,
                     AudioManager.STREAM_RING,
                     AudioManager.AUDIOFOCUS_GAIN_TRANSIENT
                 )

@@ -375,11 +375,11 @@ fun IncomingCallScreen(
 
 @Composable
 fun CrmStatusChip(status: LeadStatus) {
-    val (bg, text) = when (status) {
-        LeadStatus.HOT -> Color(0xFFFFEBEB) to Color(0xFFD32F2F)
-        LeadStatus.WARM -> Color(0xFFFFF7E6) to Color(0xFFD48806)
-        LeadStatus.COLD -> Color(0xFFF0F5FF) to Color(0xFF1D39C4)
-        else -> Color(0xFFF0F0F0) to Color(0xFF666666)
+    val (bg, text, icon) = when (status) {
+        LeadStatus.HOT -> Triple(Color(0xFFFFEBEB), Color(0xFFD32F2F), Icons.Default.LocalFireDepartment)
+        LeadStatus.WARM -> Triple(Color(0xFFFFF7E6), Color(0xFFD48806), Icons.Default.WbSunny)
+        LeadStatus.COLD -> Triple(Color(0xFFF0F5FF), Color(0xFF1D39C4), Icons.Default.AcUnit)
+        else -> Triple(Color(0xFFF0F0F0), Color(0xFF666666), null)
     }
 
     Box(
@@ -388,12 +388,25 @@ fun CrmStatusChip(status: LeadStatus) {
             .background(bg)
             .padding(horizontal = 8.dp, vertical = 3.dp)
     ) {
-        Text(
-            text = status.name,
-            style = MaterialTheme.typography.labelSmall,
-            fontWeight = FontWeight.Bold,
-            color = text
-        )
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            if (icon != null) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = text,
+                    modifier = Modifier.size(13.dp)
+                )
+            }
+            Text(
+                text = status.name,
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.Bold,
+                color = text
+            )
+        }
     }
 }
 

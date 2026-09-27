@@ -49,5 +49,7 @@ interface TelecomEntryPoint {
     fun callOrchestrator(): CallOrchestrator
     fun callSimulatorManager(): com.example.callog.domain.service.simulator.CallSimulatorManager
     fun callRecordingController(): com.example.callog.domain.call.CallRecordingController
+    fun oemCapabilityDetector(): com.example.callog.core.telecom.OemCapabilityDetector
+    fun recordingScanner(): com.example.callog.data.provider.RecordingScanner
 }
 

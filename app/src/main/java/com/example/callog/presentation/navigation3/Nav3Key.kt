@@ -75,6 +75,9 @@ sealed interface Nav3Key {
         data object RingtoneSettings : CrmTab
 
         @Serializable
+        data object RecordingSettings : CrmTab
+
+        @Serializable
         data object CallSimulator : CrmTab
     }
 

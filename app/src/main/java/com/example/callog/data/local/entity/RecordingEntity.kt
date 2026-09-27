@@ -8,7 +8,8 @@ import androidx.room.PrimaryKey
     tableName = "recordings_research",
     indices = [
         Index(value = ["filePath"], unique = true),
-        Index(value = ["matchedCallId"])
+        Index(value = ["matchedCallId"]),
+        Index(value = ["checksum"])
     ]
 )
 data class RecordingEntity(
@@ -26,5 +27,9 @@ data class RecordingEntity(
     val uploadStatus: UploadStatus,
     val cloudUrl: String? = null,
     val parser: String? = null,
-    val reason: String? = null
+    val reason: String? = null,
+    val checksum: String? = null,
+    val mimeType: String? = "audio/mp4",
+    val leadId: String? = null,
+    val confidence: Double? = null
 )
