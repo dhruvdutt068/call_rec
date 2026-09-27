@@ -377,7 +377,9 @@ class CallSessionManager @Inject constructor(
                 } else if (currentSession?.state == CallState.ACTIVE) {
                     notificationManager.showActiveCallNotification(currentSession)
                 }
-            }
+        } catch (e: CancellationException) {
+            DeveloperLogger.info("CRM_LOOKUP_CANCELLED", "CRM lookup for call $callId was cancelled")
+            throw e
         } catch (e: Exception) {
             Log.e(TAG, "Error resolving canonical person for call $callId", e)
             DeveloperLogger.error("CRM_LOOKUP_FAILED", "Exception resolving person for $callId", e)
@@ -781,60 +783,48 @@ class CallSessionManager @Inject constructor(
             is CallAction.Reject -> {
                 crmResolutionJobs.remove(action.callId)?.cancel()
                 ringtoneController.stopRingtone()
+                updateSessionsMap { current ->
+                    val existing = current[action.callId] ?: return@updateSessionsMap current
+                    current + (action.callId to existing.copy(state = CallState.DISCONNECTED))
+                }
                 if (controller != null && !action.callId.startsWith("sim_")) {
                     controller.rejectCall(action.callId)
                 } else if (!action.callId.startsWith("sim_")) {
                     tryEndCallFallback()
-                    updateSessionsMap { current ->
-                        val existing = current[action.callId] ?: return@updateSessionsMap current
-                        current + (action.callId to existing.copy(state = CallState.DISCONNECTED))
-                    }
                     handleStateChange(action.callId, CallState.DISCONNECTED)
                 } else {
-                    updateSessionsMap { current ->
-                        val existing = current[action.callId] ?: return@updateSessionsMap current
-                        current + (action.callId to existing.copy(state = CallState.DISCONNECTED))
-                    }
                     handleStateChange(action.callId, CallState.DISCONNECTED)
                 }
             }
             is CallAction.RejectWithMessage -> {
                 crmResolutionJobs.remove(action.callId)?.cancel()
                 ringtoneController.stopRingtone()
+                updateSessionsMap { current ->
+                    val existing = current[action.callId] ?: return@updateSessionsMap current
+                    current + (action.callId to existing.copy(state = CallState.DISCONNECTED))
+                }
                 if (controller != null && !action.callId.startsWith("sim_")) {
                     controller.rejectCallWithMessage(action.callId, action.message)
                 } else if (!action.callId.startsWith("sim_")) {
                     tryEndCallFallback()
-                    updateSessionsMap { current ->
-                        val existing = current[action.callId] ?: return@updateSessionsMap current
-                        current + (action.callId to existing.copy(state = CallState.DISCONNECTED))
-                    }
                     handleStateChange(action.callId, CallState.DISCONNECTED)
                 } else {
-                    updateSessionsMap { current ->
-                        val existing = current[action.callId] ?: return@updateSessionsMap current
-                        current + (action.callId to existing.copy(state = CallState.DISCONNECTED))
-                    }
                     handleStateChange(action.callId, CallState.DISCONNECTED)
                 }
             }
             is CallAction.Disconnect -> {
                 crmResolutionJobs.remove(action.callId)?.cancel()
                 ringtoneController.stopRingtone()
+                updateSessionsMap { current ->
+                    val existing = current[action.callId] ?: return@updateSessionsMap current
+                    current + (action.callId to existing.copy(state = CallState.DISCONNECTED))
+                }
                 if (controller != null && !action.callId.startsWith("sim_")) {
                     controller.disconnectCall(action.callId)
                 } else if (!action.callId.startsWith("sim_")) {
                     tryEndCallFallback()
-                    updateSessionsMap { current ->
-                        val existing = current[action.callId] ?: return@updateSessionsMap current
-                        current + (action.callId to existing.copy(state = CallState.DISCONNECTED))
-                    }
                     handleStateChange(action.callId, CallState.DISCONNECTED)
                 } else {
-                    updateSessionsMap { current ->
-                        val existing = current[action.callId] ?: return@updateSessionsMap current
-                        current + (action.callId to existing.copy(state = CallState.DISCONNECTED))
-                    }
                     handleStateChange(action.callId, CallState.DISCONNECTED)
                 }
             }

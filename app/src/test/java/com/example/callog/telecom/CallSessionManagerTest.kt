@@ -597,7 +597,7 @@ class CallSessionManagerTest {
             companyName = "Enterprise Corp",
             phoneNumbers = listOf(PhoneNumber("PN_FAST", "P_FAST", "+1 800 555 1234", "18005551234"))
         )
-        fakePersonRepository.people["18005551234"] = person
+        fakePersonRepository.people["8005551234"] = person
         fakePersonRepository.peopleById["P_FAST"] = person
         fakeLeadRepository.leads["P_FAST"] = Lead(id = "L_FAST", personId = "P_FAST", status = LeadStatus.HOT)
 

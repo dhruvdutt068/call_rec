@@ -6,6 +6,7 @@ import android.content.ContextWrapper
 import android.content.SharedPreferences
 import android.media.AudioManager
 import android.net.Uri
+import android.net.FakeUri
 import com.example.callog.core.telecom.RingtoneController
 import com.example.callog.data.repository.RingtoneRepositoryImpl
 import com.example.callog.domain.model.*
@@ -60,6 +61,7 @@ class RingtonePersistenceAndLifecycleTest {
         }
     }
 
+
     class TestContext(private val baseDir: File) : ContextWrapper(null) {
         val sharedPrefs = InMemorySharedPreferences()
 
@@ -76,7 +78,10 @@ class RingtonePersistenceAndLifecycleTest {
             mkdirs()
         }
         testContext = TestContext(tempDir)
-        ringtoneRepo = RingtoneRepositoryImpl(testContext)
+        ringtoneRepo = RingtoneRepositoryImpl(testContext).apply {
+            uriParser = { FakeUri(it) }
+            fileToUri = { FakeUri("file://${it.absolutePath}", it.absolutePath) }
+        }
     }
 
     @After
@@ -94,8 +99,7 @@ class RingtonePersistenceAndLifecycleTest {
         val dummyAudio = File(tempDir, "external_audio.m4a").apply {
             writeBytes(ByteArray(512) { 0x41 })
         }
-        val externalUri = Uri.fromFile(dummyAudio)
-        testContext.fileMap[externalUri] = dummyAudio
+        val externalUri = FakeUri("file://${dummyAudio.absolutePath}", dummyAudio.absolutePath)
 
         val result = ringtoneRepo.importRingtoneForLeadHot(externalUri)
         assertTrue(result.isSuccess)
@@ -123,8 +127,7 @@ class RingtonePersistenceAndLifecycleTest {
         val initialAudio = File(tempDir, "initial_audio.m4a").apply {
             writeBytes(ByteArray(512) { 0x42 })
         }
-        val initialUri = Uri.fromFile(initialAudio)
-        testContext.fileMap[initialUri] = initialAudio
+        val initialUri = FakeUri("file://${initialAudio.absolutePath}", initialAudio.absolutePath)
         val firstResult = ringtoneRepo.importRingtoneForLeadWarm(initialUri)
         assertTrue(firstResult.isSuccess)
         val initialSavedUri = ringtoneRepo.warmLead()
@@ -134,8 +137,7 @@ class RingtonePersistenceAndLifecycleTest {
         val badAudio = File(tempDir, "corrupted.m4a").apply {
             writeBytes(ByteArray(0))
         }
-        val badUri = Uri.fromFile(badAudio)
-        testContext.fileMap[badUri] = badAudio
+        val badUri = FakeUri("file://${badAudio.absolutePath}", badAudio.absolutePath)
 
         val secondResult = ringtoneRepo.importRingtoneForLeadWarm(badUri)
         assertTrue("Corrupted 0-byte file import must fail", secondResult.isFailure)
@@ -151,8 +153,7 @@ class RingtonePersistenceAndLifecycleTest {
         val audioFile = File(tempDir, "sample.m4a").apply {
             writeBytes(ByteArray(512) { 0x43 })
         }
-        val externalUri = Uri.fromFile(audioFile)
-        testContext.fileMap[externalUri] = audioFile
+        val externalUri = FakeUri("file://${audioFile.absolutePath}", audioFile.absolutePath)
 
         val importResult = ringtoneRepo.importRingtoneForLeadCold(externalUri)
         assertTrue(importResult.isSuccess)
@@ -171,8 +172,7 @@ class RingtonePersistenceAndLifecycleTest {
         val audioFile = File(tempDir, "will_delete.m4a").apply {
             writeBytes(ByteArray(512) { 0x44 })
         }
-        val externalUri = Uri.fromFile(audioFile)
-        testContext.fileMap[externalUri] = audioFile
+        val externalUri = FakeUri("file://${audioFile.absolutePath}", audioFile.absolutePath)
 
         ringtoneRepo.importRingtoneForCustomer(externalUri)
         val customerUri = ringtoneRepo.customer()
@@ -195,7 +195,7 @@ class RingtonePersistenceAndLifecycleTest {
     @Test
     fun testRingtoneControllerIdempotentCalls() {
         val policy = object : com.example.callog.domain.repository.RingtonePolicy {
-            override fun ringtoneFor(person: Person?, lead: Lead?): Uri = Uri.parse("file://${tempDir.absolutePath}/test.m4a")
+            override fun ringtoneFor(person: Person?, lead: Lead?): Uri = FakeUri("file://${tempDir.absolutePath}/test.m4a", "${tempDir.absolutePath}/test.m4a")
         }
 
         var startCount = 0

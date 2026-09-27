@@ -37,6 +37,10 @@ class RingtoneRepositoryImpl @Inject constructor(
 
     private fun prefs() = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
 
+    // Visible for JVM testing where static Android Uri methods return null stubs
+    internal var uriParser: (String) -> Uri = { Uri.parse(it) }
+    internal var fileToUri: (File) -> Uri = { Uri.fromFile(it) }
+
     private fun getRingtonesDir(): File {
         return File(context.filesDir, RINGTONES_DIR).apply {
             if (!exists()) mkdirs()
@@ -48,7 +52,7 @@ class RingtoneRepositoryImpl @Inject constructor(
         if (uriString.isNullOrBlank()) return null
 
         return try {
-            val uri = Uri.parse(uriString)
+            val uri = uriParser(uriString)
             if (uri.scheme == "file") {
                 val file = File(uri.path ?: "")
                 if (!file.exists() || !file.isFile || file.length() <= 0L || !file.canRead()) {
@@ -150,7 +154,7 @@ class RingtoneRepositoryImpl @Inject constructor(
                 tempFile.delete()
             }
 
-            val internalUri = Uri.fromFile(destFile)
+            val internalUri = fileToUri(destFile)
             val title = resolveUriTitle(sourceUri, destFile)
 
             prefs().edit()
