@@ -27,5 +27,33 @@ Thumbs.db
 .externalNativeBuild/
 .cxx/
 
-# Google Services / Sensitive Info
+# Google Services & Sensitive Credentials
 /app/google-services.json
+google-services.json
+
+# Supabase credentials (never commit real keys)
+**/SupabaseDefaults.kt.bak
+supabase/.env
+supabase/config.toml.local
+
+# Firebase / GCP service account keys
+*.json.secret
+service-account*.json
+firebase-adminsdk*.json
+*-service-account.json
+
+# Local environment / secrets files
+.env
+.env.local
+.env.dev
+.env.prod
+*.env
+secrets.properties
+keystore.properties
+
+# Android signing keystores & key files
+*.jks
+*.keystore
+*.p12
+*.pfx
+key.properties

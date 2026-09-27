@@ -489,5 +489,24 @@ class LeadLifecycleTest {
                 leads[idx] = leads[idx].copy(isArchived = true, archivedAt = archivedAt, updatedAt = updatedAt, syncStatus = "PENDING")
             }
         }
+
+        override suspend fun updateSyncStatusIfTimestampMatches(id: String, status: String, expectedUpdatedAt: Long): Int {
+            val idx = leads.indexOfFirst { it.id == id && it.updatedAt == expectedUpdatedAt }
+            return if (idx != -1) {
+                leads[idx] = leads[idx].copy(syncStatus = status)
+                1
+            } else 0
+        }
+
+        override suspend fun updateStatusById(id: String, status: String, updatedAt: Long) {
+            val idx = leads.indexOfFirst { it.id == id }
+            if (idx != -1) {
+                leads[idx] = leads[idx].copy(status = status, updatedAt = updatedAt, syncStatus = "PENDING")
+            }
+        }
+
+        override suspend fun deleteLeadById(id: String) {
+            leads.removeAll { it.id == id }
+        }
     }
 }

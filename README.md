@@ -355,10 +355,64 @@ The app requires permissions to perform system reads and storage lookups declare
 * `READ_EXTERNAL_STORAGE` / `READ_MEDIA_AUDIO` - Access audio recordings.
 
 ### 2. Remote Configuration (Firebase & Supabase)
-To establish server connections, configure details via the **Device Configuration** Settings screen inside the app:
-* **Device Phone Number & Owner Name**: Used to attribute caller details and organize upload pathways.
-* **Firebase Credentials**: Setup the required `google-services.json` or connect directly.
-* **Supabase Client**: Configured to upsert `people`, `phone_numbers`, `contact_aliases`, `devices`, and `sales_calls` into your PostgreSQL database.
+
+The app supports **two environments**: `DEVELOPMENT` and `PRODUCTION`. Credentials are managed in two places:
+
+#### 2a. Supabase — `app/src/main/java/com/example/callog/core/config/SupabaseDefaults.kt`
+
+```kotlin
+object SupabaseDefaults {
+    // Development
+    const val DEV_URL = "https://<your-dev-project>.supabase.co"
+    const val DEV_ANON_KEY = "<your-dev-anon-key>"
+
+    // Production
+    const val PROD_URL = "https://<your-prod-project>.supabase.co"
+    const val PROD_ANON_KEY = "<your-prod-anon-key>"
+}
+```
+
+> ⚠️ **Never commit real keys.** Fill these in locally only.
+
+#### 2b. Firebase — `app/google-services.json`
+
+This file is **git-ignored** and must be added manually. Place your Firebase project's `google-services.json` in `app/`.
+
+- **DEV**: Use the `allset-491218` project config
+- **PROD**: Use the `allset-244ab` project config (or swap before release)
+
+The app dynamically switches Firebase projects at runtime via `EnvironmentConfigManager`. Firestore and Storage automatically use the active environment's credentials — no rebuild required.
+
+#### 2c. Firebase Fallback Defaults — `EnvironmentConfigManager.kt`
+
+If no runtime override is set, the app falls back to hardcoded defaults in:
+`app/src/main/java/com/example/callog/core/config/EnvironmentConfigManager.kt`
+
+Fill in `projectId`, `apiKey`, `appId`, `storageBucket`, and `gcmSenderId` for both `DEVELOPMENT` and `PRODUCTION` blocks.
+
+#### 2d. Switching Environments at Runtime
+
+No code change or rebuild needed — switch from within the app:
+1. Open **Settings → Developer / Environment**
+2. Select **DEVELOPMENT** or **PRODUCTION**
+3. Firebase and Supabase clients reinitialize automatically
+
+---
+
+### 3. Security & .gitignore
+
+The following sensitive files are **git-ignored** and must never be committed:
+
+| File | Purpose |
+|---|---|
+| `app/google-services.json` | Firebase project configuration |
+| `*.jks` / `*.keystore` | Android signing keystores |
+| `key.properties` / `keystore.properties` | Signing credential references |
+| `secrets.properties` | Any local secret overrides |
+| `service-account*.json` | Firebase Admin / GCP service accounts |
+| `.env` / `.env.*` | Environment variable files |
+
+Always keep a **secure private backup** of your `google-services.json` files (e.g., in a private vault or password manager).
 
 ---
 

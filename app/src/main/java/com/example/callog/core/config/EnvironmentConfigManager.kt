@@ -136,21 +136,21 @@ class EnvironmentConfigManager @Inject constructor(
             // Built-in defaults for Development and Production/Deployment
             if (env == AppEnvironment.DEVELOPMENT) {
                 FirebaseConfig(
-                    projectId = "restaurant-manager-185bd",
-                    apiKey = "AIzaSyBbzuMy2RT72urGPnaaJTRTW-DH2eOzFvs",
-                    appId = "1:666477971024:android:4cbefd56ddee708ab07355",
-                    storageBucket = "restaurant-manager-185bd.firebasestorage.app",
-                    gcmSenderId = "666477971024",
-                    databaseUrl = null,
+                    projectId = "allset-491218",
+                    apiKey = "AIzaSyBtlY7EoO6PgPUCMjNR55K88H2v665qQgQ",
+                    appId = "1:799427430422:android:e0f5737f12b8b9cbb20d37",
+                    storageBucket = "allset-491218.firebasestorage.app",
+                    gcmSenderId = "799427430422",
+                    databaseUrl = "https://allset-491218-default-rtdb.asia-southeast1.firebasedatabase.app",
                     databaseId = null
                 )
             } else {
                 FirebaseConfig(
-                    projectId = "restaurant-manager-185bd",
-                    apiKey = "AIzaSyBbzuMy2RT72urGPnaaJTRTW-DH2eOzFvs",
-                    appId = "1:666477971024:android:4cbefd56ddee708ab07355",
-                    storageBucket = "restaurant-manager-185bd.firebasestorage.app",
-                    gcmSenderId = "666477971024",
+                    projectId = "allset-244ab",
+                    apiKey = "AIzaSyDLqHOgAdLBz9__Un_BI0ZMwz5l2ucJnKo",
+                    appId = "1:598633676290:android:e264397de748bf0371711b",
+                    storageBucket = "allset-244ab.firebasestorage.app",
+                    gcmSenderId = "598633676290",
                     databaseUrl = null,
                     databaseId = null
                 )
