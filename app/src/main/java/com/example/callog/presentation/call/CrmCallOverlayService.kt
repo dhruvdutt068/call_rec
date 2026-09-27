@@ -105,16 +105,15 @@ class CrmCallOverlayService : Service() {
     private fun observeCallSession() {
         sessionJob?.cancel()
         sessionJob = scope.launch {
-            callSessionManager.activeSessions.collectLatest { sessions ->
-                val active = sessions.firstOrNull()
+            callSessionManager.activeCallSession.collectLatest { active ->
                 if (active == null) {
-                    DeveloperLogger.info(TAG, "No active sessions remaining, auto-closing CRM HUD overlay.")
+                    DeveloperLogger.info(TAG, "No active call session remaining, auto-closing CRM HUD overlay.")
                     removeOverlayView()
                     stopSelf()
                 } else {
                     updateViewContent(
                         name = active.callerDisplayName.ifBlank { active.phoneNumber },
-                        leadStatus = active.lead?.status?.name ?: "UNKNOWN",
+                        leadStatus = active.crmStatus.name,
                         company = active.companyName ?: ""
                     )
                 }
