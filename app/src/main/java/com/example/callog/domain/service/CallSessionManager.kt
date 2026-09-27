@@ -377,6 +377,7 @@ class CallSessionManager @Inject constructor(
                 } else if (currentSession?.state == CallState.ACTIVE) {
                     notificationManager.showActiveCallNotification(currentSession)
                 }
+            }
         } catch (e: CancellationException) {
             DeveloperLogger.info("CRM_LOOKUP_CANCELLED", "CRM lookup for call $callId was cancelled")
             throw e
