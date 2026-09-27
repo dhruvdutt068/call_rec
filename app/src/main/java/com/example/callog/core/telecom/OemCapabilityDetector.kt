@@ -157,9 +157,9 @@ class OemCapabilityDetector @Inject constructor(
             )
             OemType.VIVO -> listOf(
                 "Open Phone app -> Settings (or Settings -> Phone -> Call recording).",
-                "Tap 'Record settings'.",
-                "Select 'Record all calls automatically'.",
-                "Callog will monitor incoming files in the Recordings folder."
+                "Tap 'Record settings' and select 'Record all calls automatically'.",
+                "IMPORTANT: On Vivo, the native call recorder is built into Vivo's system dialer. If Callog is set as the Default Phone App, Vivo bypasses recording. Keep Vivo Phone as default and use Callog's Smart CRM Overlay Mode.",
+                "Settings -> Battery -> Background power consumption -> Callog -> Set to 'High background power usage' so recordings auto-sync."
             )
             OemType.GOOGLE_PIXEL -> listOf(
                 "Google Pixel devices use Google Dialer which strictly limits automatic 2-way recording.",

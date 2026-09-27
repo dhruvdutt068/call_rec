@@ -19,7 +19,11 @@ object Constants {
         "OnePlus/Record/PhoneRecord",
         "Record/PhoneRecord",
         "Music/Recordings/CallRecordings",
-        "Recordings/PhoneRecord"
+        "Recordings/PhoneRecord",
+        "Record",
+        "vivo/record",
+        "vivo/records",
+        "Sounds/Recordings"
     )
 
     // Notification constants
