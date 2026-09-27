@@ -34,6 +34,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.launch
 import com.example.callog.domain.repository.RingtoneRepository
 import com.example.callog.presentation.components.GlassyCard
 import com.example.callog.presentation.theme.*
@@ -60,6 +61,8 @@ fun CrmRingtoneSettingsScreen(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val snackbarHostState = remember { SnackbarHostState() }
 
     // Local mutable states for the active URIs
     var hotUri by remember { mutableStateOf(ringtoneRepository.hotLead()) }
@@ -68,6 +71,7 @@ fun CrmRingtoneSettingsScreen(
     var customerUri by remember { mutableStateOf(ringtoneRepository.customer()) }
 
     var activePickerTarget by remember { mutableStateOf<RingtoneTarget?>(null) }
+    var importingTarget by remember { mutableStateOf<RingtoneTarget?>(null) }
     var playingTarget by remember { mutableStateOf<RingtoneTarget?>(null) }
     var mediaPlayer by remember { mutableStateOf<MediaPlayer?>(null) }
 
@@ -114,29 +118,56 @@ fun CrmRingtoneSettingsScreen(
     val pickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.StartActivityForResult()
     ) { result ->
-        if (result.resultCode == Activity.RESULT_OK) {
+        val target = activePickerTarget
+        activePickerTarget = null
+        if (result.resultCode == Activity.RESULT_OK && target != null) {
             val chosenUri: Uri? = result.data?.getParcelableExtra(RingtoneManager.EXTRA_RINGTONE_PICKED_URI)
-            when (activePickerTarget) {
-                RingtoneTarget.HOT -> {
-                    ringtoneRepository.setRingtoneForLeadHot(chosenUri)
-                    hotUri = chosenUri
+            if (chosenUri != null) {
+                scope.launch {
+                    importingTarget = target
+                    val importResult = when (target) {
+                        RingtoneTarget.HOT -> ringtoneRepository.importRingtoneForLeadHot(chosenUri)
+                        RingtoneTarget.WARM -> ringtoneRepository.importRingtoneForLeadWarm(chosenUri)
+                        RingtoneTarget.COLD -> ringtoneRepository.importRingtoneForLeadCold(chosenUri)
+                        RingtoneTarget.CUSTOMER -> ringtoneRepository.importRingtoneForCustomer(chosenUri)
+                        else -> Result.failure(IllegalArgumentException("Unsupported target: $target"))
+                    }
+                    importingTarget = null
+                    importResult.onSuccess { savedInternalUri ->
+                        when (target) {
+                            RingtoneTarget.HOT -> hotUri = savedInternalUri
+                            RingtoneTarget.WARM -> warmUri = savedInternalUri
+                            RingtoneTarget.COLD -> coldUri = savedInternalUri
+                            RingtoneTarget.CUSTOMER -> customerUri = savedInternalUri
+                            else -> {}
+                        }
+                        snackbarHostState.showSnackbar("${target.title} imported and saved")
+                    }.onFailure { err ->
+                        snackbarHostState.showSnackbar("Failed to import ringtone: ${err.localizedMessage ?: "Unknown error"}")
+                    }
                 }
-                RingtoneTarget.WARM -> {
-                    ringtoneRepository.setRingtoneForLeadWarm(chosenUri)
-                    warmUri = chosenUri
+            } else {
+                when (target) {
+                    RingtoneTarget.HOT -> {
+                        ringtoneRepository.setRingtoneForLeadHot(null)
+                        hotUri = null
+                    }
+                    RingtoneTarget.WARM -> {
+                        ringtoneRepository.setRingtoneForLeadWarm(null)
+                        warmUri = null
+                    }
+                    RingtoneTarget.COLD -> {
+                        ringtoneRepository.setRingtoneForLeadCold(null)
+                        coldUri = null
+                    }
+                    RingtoneTarget.CUSTOMER -> {
+                        ringtoneRepository.setRingtoneForCustomer(null)
+                        customerUri = null
+                    }
+                    else -> {}
                 }
-                RingtoneTarget.COLD -> {
-                    ringtoneRepository.setRingtoneForLeadCold(chosenUri)
-                    coldUri = chosenUri
-                }
-                RingtoneTarget.CUSTOMER -> {
-                    ringtoneRepository.setRingtoneForCustomer(chosenUri)
-                    customerUri = chosenUri
-                }
-                else -> {}
             }
         }
-        activePickerTarget = null
     }
 
     fun launchRingtonePicker(target: RingtoneTarget, currentUri: Uri?) {
@@ -152,16 +183,11 @@ fun CrmRingtoneSettingsScreen(
     }
 
     fun getRingtoneTitle(uri: Uri?): String {
-        if (uri == null) return "System Default"
-        return try {
-            val ringtone = RingtoneManager.getRingtone(context, uri)
-            ringtone?.getTitle(context) ?: "Custom Audio"
-        } catch (e: Exception) {
-            "Custom Sound"
-        }
+        return ringtoneRepository.getRingtoneTitle(uri)
     }
 
     Scaffold(
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
                 title = {
@@ -261,6 +287,7 @@ fun CrmRingtoneSettingsScreen(
                 target = RingtoneTarget.HOT,
                 ringtoneTitle = getRingtoneTitle(hotUri),
                 isPlaying = playingTarget == RingtoneTarget.HOT,
+                isImporting = importingTarget == RingtoneTarget.HOT,
                 onPlayToggle = {
                     if (playingTarget == RingtoneTarget.HOT) stopAudio()
                     else playAudio(RingtoneTarget.HOT, hotUri)
@@ -278,6 +305,7 @@ fun CrmRingtoneSettingsScreen(
                 target = RingtoneTarget.WARM,
                 ringtoneTitle = getRingtoneTitle(warmUri),
                 isPlaying = playingTarget == RingtoneTarget.WARM,
+                isImporting = importingTarget == RingtoneTarget.WARM,
                 onPlayToggle = {
                     if (playingTarget == RingtoneTarget.WARM) stopAudio()
                     else playAudio(RingtoneTarget.WARM, warmUri)
@@ -295,6 +323,7 @@ fun CrmRingtoneSettingsScreen(
                 target = RingtoneTarget.COLD,
                 ringtoneTitle = getRingtoneTitle(coldUri),
                 isPlaying = playingTarget == RingtoneTarget.COLD,
+                isImporting = importingTarget == RingtoneTarget.COLD,
                 onPlayToggle = {
                     if (playingTarget == RingtoneTarget.COLD) stopAudio()
                     else playAudio(RingtoneTarget.COLD, coldUri)
@@ -312,6 +341,7 @@ fun CrmRingtoneSettingsScreen(
                 target = RingtoneTarget.CUSTOMER,
                 ringtoneTitle = getRingtoneTitle(customerUri),
                 isPlaying = playingTarget == RingtoneTarget.CUSTOMER,
+                isImporting = importingTarget == RingtoneTarget.CUSTOMER,
                 onPlayToggle = {
                     if (playingTarget == RingtoneTarget.CUSTOMER) stopAudio()
                     else playAudio(RingtoneTarget.CUSTOMER, customerUri)
@@ -393,6 +423,7 @@ private fun RingtoneCategoryCard(
     target: RingtoneTarget,
     ringtoneTitle: String,
     isPlaying: Boolean,
+    isImporting: Boolean = false,
     onPlayToggle: () -> Unit,
     onChangeRingtone: () -> Unit,
     onResetToDefault: () -> Unit,
@@ -477,6 +508,7 @@ private fun RingtoneCategoryCard(
                     ) {
                         IconButton(
                             onClick = onPlayToggle,
+                            enabled = !isImporting,
                             modifier = Modifier
                                 .size(36.dp)
                                 .scale(if (isPlaying) pulseScale else 1f)
@@ -490,13 +522,13 @@ private fun RingtoneCategoryCard(
                         }
                         Column {
                             Text(
-                                text = ringtoneTitle,
+                                text = if (isImporting) "Importing audio..." else ringtoneTitle,
                                 style = MaterialTheme.typography.bodyMedium,
                                 fontWeight = FontWeight.SemiBold,
                                 color = if (isCustomSet) target.accentColor else Slate300
                             )
                             Text(
-                                text = if (isCustomSet) "Custom Rule Active" else "Inheriting Default",
+                                text = if (isImporting) "Saving to private storage..." else if (isCustomSet) "Custom Rule Active" else "Inheriting Default",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = if (isCustomSet) target.accentColor.copy(alpha = 0.8f) else Slate400
                             )
@@ -509,6 +541,7 @@ private fun RingtoneCategoryCard(
                     ) {
                         FilledTonalButton(
                             onClick = onChangeRingtone,
+                            enabled = !isImporting,
                             contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
                             shape = RoundedCornerShape(8.dp),
                             colors = ButtonDefaults.filledTonalButtonColors(
@@ -516,12 +549,21 @@ private fun RingtoneCategoryCard(
                                 contentColor = target.accentColor
                             )
                         ) {
-                            Text("Change", style = MaterialTheme.typography.labelMedium)
+                            if (isImporting) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(14.dp),
+                                    strokeWidth = 2.dp,
+                                    color = target.accentColor
+                                )
+                            } else {
+                                Text("Change", style = MaterialTheme.typography.labelMedium)
+                            }
                         }
 
                         if (isCustomSet) {
                             IconButton(
                                 onClick = onResetToDefault,
+                                enabled = !isImporting,
                                 modifier = Modifier.size(32.dp)
                             ) {
                                 Icon(

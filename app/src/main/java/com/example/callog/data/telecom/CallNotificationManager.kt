@@ -103,6 +103,8 @@ open class CallNotificationManager @Inject constructor(
             .setPriority(NotificationCompat.PRIORITY_MAX)
             .setCategory(NotificationCompat.CATEGORY_CALL)
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+            .setSound(null)
+            .setVibrate(null)
             .setOngoing(true)
             .setAutoCancel(false)
             .setContentIntent(fullScreenPendingIntent)

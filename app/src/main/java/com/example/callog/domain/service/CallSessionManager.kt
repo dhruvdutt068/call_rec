@@ -19,6 +19,7 @@ import com.example.callog.core.utils.PhoneNumberNormalizer
 import com.example.callog.data.telecom.CallNotificationManager
 import com.example.callog.data.telecom.TelecomCallController
 import com.example.callog.domain.call.*
+import com.example.callog.domain.model.Lead
 import com.example.callog.domain.model.LeadPriority
 import com.example.callog.domain.model.LeadStatus
 import com.example.callog.domain.model.Person
@@ -30,6 +31,7 @@ import com.example.callog.sim.SimRepository
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
+import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -53,10 +55,12 @@ class CallSessionManager @Inject constructor(
 ) {
     companion object {
         private const val TAG = "CallSessionManager"
+        const val CRM_LOOKUP_TIMEOUT_MS = 350L
     }
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var tickerJob: Job? = null
+    private val crmResolutionJobs = ConcurrentHashMap<String, Job>()
     val recordingState: StateFlow<com.example.callog.domain.call.CallRecordingState> = callRecordingController.recordingState
 
     private var telecomController: TelecomCallController? = null
@@ -219,9 +223,16 @@ class CallSessionManager @Inject constructor(
 
         // Canonical identity & CRM resolution if not already resolved
         if (existingPreSession?.personId == null) {
-            scope.launch {
-                resolvePersonAndLead(callId, rawNumber.ifBlank { initialSession.phoneNumber }, normalized.ifBlank { initialSession.normalizedPhoneNumber }, simInfo)
+            val job = scope.launch {
+                resolvePersonAndLead(
+                    callId = callId,
+                    rawNumber = rawNumber.ifBlank { initialSession.phoneNumber },
+                    normalizedNumber = normalized.ifBlank { initialSession.normalizedPhoneNumber },
+                    simInfo = simInfo,
+                    isRinging = initialState == CallState.RINGING
+                )
             }
+            crmResolutionJobs[callId] = job
         }
 
         handleStateChange(callId, initialState)
@@ -230,17 +241,53 @@ class CallSessionManager @Inject constructor(
 
     /**
      * Resolves the canonical person from PersonRepository and associated CRM lead data.
+     * Coordinates ringtone playback during cold starts to avoid default tone cut-off glitches.
      */
     private suspend fun resolvePersonAndLead(
         callId: String,
         rawNumber: String,
         normalizedNumber: String,
-        simInfo: SimInfo?
+        simInfo: SimInfo?,
+        isRinging: Boolean = false
     ) {
         try {
-            val person: Person? = if (normalizedNumber.isNotBlank()) {
-                personRepository.findPersonByNormalizedPhone(normalizedNumber)
-            } else null
+            DeveloperLogger.info("CRM_LOOKUP_STARTED", "Starting CRM lookup for call $callId (isRinging=$isRinging)")
+            var person: Person? = null
+            var lead: Lead? = null
+            var timedOut = false
+
+            if (isRinging) {
+                // Bounded lookup period for cold-start ringtone determination
+                val lookupResult = withTimeoutOrNull(CRM_LOOKUP_TIMEOUT_MS) {
+                    val p = if (normalizedNumber.isNotBlank()) {
+                        personRepository.findPersonByNormalizedPhone(normalizedNumber)
+                    } else null
+                    val l = p?.let { leadRepository.getLeadForPerson(it.id) }
+                    Pair(p, l)
+                }
+                if (lookupResult != null) {
+                    person = lookupResult.first
+                    lead = lookupResult.second
+                } else {
+                    timedOut = true
+                    DeveloperLogger.warning(
+                        "CRM_LOOKUP_TIMEOUT",
+                        "CRM lookup exceeded ${CRM_LOOKUP_TIMEOUT_MS}ms for $callId. Starting fallback tone."
+                    )
+                }
+            } else {
+                person = if (normalizedNumber.isNotBlank()) {
+                    personRepository.findPersonByNormalizedPhone(normalizedNumber)
+                } else null
+                lead = person?.let { leadRepository.getLeadForPerson(it.id) }
+            }
+
+            // Verify call is still active/ringing before continuing
+            val curSession = _sessionsMap.value[callId]
+            if (curSession == null || (isRinging && curSession.state != CallState.RINGING)) {
+                DeveloperLogger.info("CRM_LOOKUP_ABORTED", "Call $callId is no longer ringing. Skipping ringtone and session updates.")
+                return
+            }
 
             if (person != null) {
                 DeveloperLogger.info(
@@ -248,7 +295,6 @@ class CallSessionManager @Inject constructor(
                     "Resolved canonical Person: ${person.displayName} (id=${person.id}) for $rawNumber"
                 )
 
-                val lead = leadRepository.getLeadForPerson(person.id)
                 val recentCalls = callRepository.getCallsForPerson(person.id)
                 val lastCall = recentCalls.firstOrNull()
                 val interactionSummary = lastCall?.let {
@@ -258,6 +304,8 @@ class CallSessionManager @Inject constructor(
                 val followUpSummary = lead?.nextFollowUpAt?.let {
                     "Follow-up: ${it.toRelativeTimeSpan()}"
                 }
+
+                val resolutionState = if (lead != null) CrmResolutionState.RESOLVED else CrmResolutionState.RESOLVED_NO_LEAD
 
                 updateSessionsMap { current ->
                     val existing = current[callId] ?: return@updateSessionsMap current
@@ -269,19 +317,29 @@ class CallSessionManager @Inject constructor(
                         priority = lead?.priority ?: LeadPriority.MEDIUM,
                         initials = computeInitials(person.displayName),
                         recentInteractionSummary = interactionSummary,
-                        pendingFollowUp = followUpSummary
+                        pendingFollowUp = followUpSummary,
+                        crmResolutionState = resolutionState
                     ))
                 }
 
                 // If currently ringing, update ringtone and notification with resolved CRM metadata
                 val currentSession = _sessionsMap.value[callId]
                 if (currentSession?.state == CallState.RINGING) {
-                    ringtoneController.startRingtone(person, lead)
+                    ringtoneController.startRingtone(callId, person, lead)
                     notificationManager.showIncomingCallNotification(currentSession)
                 } else if (currentSession?.state == CallState.ACTIVE) {
                     notificationManager.showActiveCallNotification(currentSession)
                 }
             } else {
+                // If ringing and lookup timed out or returned no person, immediately start fallback tone so call isn't silent
+                if (isRinging) {
+                    val currentSession = _sessionsMap.value[callId]
+                    if (currentSession?.state == CallState.RINGING) {
+                        ringtoneController.startRingtone(callId, null, null)
+                    }
+                }
+
+                // Query Android Contacts for system caller name
                 DeveloperLogger.info(
                     "CANONICAL_PERSON_NOT_FOUND",
                     "No canonical Person found for $rawNumber. Querying Android Contacts."
@@ -300,14 +358,21 @@ class CallSessionManager @Inject constructor(
                         current + (callId to existing.copy(
                             callerDisplayName = contactName,
                             initials = computeInitials(contactName),
-                            avatarUrl = contactPhoto
+                            avatarUrl = contactPhoto,
+                            crmResolutionState = CrmResolutionState.RESOLVED_NO_LEAD
+                        ))
+                    }
+                } else {
+                    updateSessionsMap { current ->
+                        val existing = current[callId] ?: return@updateSessionsMap current
+                        current + (callId to existing.copy(
+                            crmResolutionState = if (timedOut) CrmResolutionState.FAILED else CrmResolutionState.RESOLVED_NO_LEAD
                         ))
                     }
                 }
 
                 val currentSession = _sessionsMap.value[callId]
                 if (currentSession?.state == CallState.RINGING) {
-                    ringtoneController.startRingtone(null, null)
                     notificationManager.showIncomingCallNotification(currentSession)
                 } else if (currentSession?.state == CallState.ACTIVE) {
                     notificationManager.showActiveCallNotification(currentSession)
@@ -315,6 +380,19 @@ class CallSessionManager @Inject constructor(
             }
         } catch (e: Exception) {
             Log.e(TAG, "Error resolving canonical person for call $callId", e)
+            DeveloperLogger.error("CRM_LOOKUP_FAILED", "Exception resolving person for $callId", e)
+            updateSessionsMap { current ->
+                val existing = current[callId] ?: return@updateSessionsMap current
+                current + (callId to existing.copy(crmResolutionState = CrmResolutionState.FAILED))
+            }
+            if (isRinging) {
+                val currentSession = _sessionsMap.value[callId]
+                if (currentSession?.state == CallState.RINGING) {
+                    ringtoneController.startRingtone(callId, null, null)
+                }
+            }
+        } finally {
+            crmResolutionJobs.remove(callId)
         }
     }
 
@@ -330,6 +408,10 @@ class CallSessionManager @Inject constructor(
             "TELECOM_CALL_STATE_CHANGED",
             "Call $callId state changed to: $newState"
         )
+
+        if (newState != CallState.RINGING) {
+            crmResolutionJobs.remove(callId)?.cancel()
+        }
 
         updateSessionsMap { current ->
             val existing = current[callId] ?: return@updateSessionsMap current
@@ -359,10 +441,25 @@ class CallSessionManager @Inject constructor(
                 if (session != null) {
                     notificationManager.showIncomingCallNotification(session)
                 }
-                scope.launch {
-                    val person = session?.personId?.let { personRepository.getPersonById(it) }
-                    val lead = person?.let { leadRepository.getLeadForPerson(it.id) }
-                    ringtoneController.startRingtone(person, lead)
+                if (session?.personId != null) {
+                    scope.launch {
+                        val person = personRepository.getPersonById(session.personId)
+                        val lead = person?.let { leadRepository.getLeadForPerson(it.id) }
+                        if (_sessionsMap.value[callId]?.state == CallState.RINGING) {
+                            ringtoneController.startRingtone(callId, person, lead)
+                        }
+                    }
+                } else if (!crmResolutionJobs.containsKey(callId)) {
+                    val job = scope.launch {
+                        resolvePersonAndLead(
+                            callId = callId,
+                            rawNumber = session?.phoneNumber ?: "",
+                            normalizedNumber = session?.normalizedPhoneNumber ?: "",
+                            simInfo = session?.simInfo,
+                            isRinging = true
+                        )
+                    }
+                    crmResolutionJobs[callId] = job
                 }
                 launchInCallActivity(isSimulated)
             }
@@ -638,6 +735,7 @@ class CallSessionManager @Inject constructor(
 
         when (action) {
             is CallAction.Answer -> {
+                crmResolutionJobs.remove(action.callId)?.cancel()
                 ringtoneController.stopRingtone()
                 // Auto-hold active call if answering an incoming call while already on a call
                 val currentActive = _sessionsMap.value.values.find { it.state == CallState.ACTIVE && it.callId != action.callId }
@@ -681,6 +779,7 @@ class CallSessionManager @Inject constructor(
                 }
             }
             is CallAction.Reject -> {
+                crmResolutionJobs.remove(action.callId)?.cancel()
                 ringtoneController.stopRingtone()
                 if (controller != null && !action.callId.startsWith("sim_")) {
                     controller.rejectCall(action.callId)
@@ -700,6 +799,7 @@ class CallSessionManager @Inject constructor(
                 }
             }
             is CallAction.RejectWithMessage -> {
+                crmResolutionJobs.remove(action.callId)?.cancel()
                 ringtoneController.stopRingtone()
                 if (controller != null && !action.callId.startsWith("sim_")) {
                     controller.rejectCallWithMessage(action.callId, action.message)
@@ -719,6 +819,7 @@ class CallSessionManager @Inject constructor(
                 }
             }
             is CallAction.Disconnect -> {
+                crmResolutionJobs.remove(action.callId)?.cancel()
                 ringtoneController.stopRingtone()
                 if (controller != null && !action.callId.startsWith("sim_")) {
                     controller.disconnectCall(action.callId)

@@ -39,6 +39,13 @@ data class CallAudioModel(
     val supportedRoutes: List<AudioRoute> = listOf(AudioRoute.EARPIECE, AudioRoute.SPEAKER)
 )
 
+enum class CrmResolutionState {
+    PENDING,
+    RESOLVED,
+    RESOLVED_NO_LEAD,
+    FAILED
+}
+
 data class CallSessionState(
     val callId: String,
     val phoneNumber: String,
@@ -62,7 +69,8 @@ data class CallSessionState(
     val isKeypadVisible: Boolean = false,
     val recordingState: CallRecordingState = CallRecordingState.Idle,
     val recentInteractionSummary: String? = null,
-    val pendingFollowUp: String? = null
+    val pendingFollowUp: String? = null,
+    val crmResolutionState: CrmResolutionState = CrmResolutionState.PENDING
 ) {
     val isRinging: Boolean
         get() = state == CallState.RINGING

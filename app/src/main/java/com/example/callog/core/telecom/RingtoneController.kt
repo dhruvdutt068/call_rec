@@ -17,6 +17,7 @@ import com.example.callog.domain.model.Lead
 import com.example.callog.domain.model.Person
 import com.example.callog.domain.repository.RingtonePolicy
 import dagger.hilt.android.qualifiers.ApplicationContext
+import java.io.File
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -40,6 +41,13 @@ open class RingtoneController @Inject constructor(
     private var audioFocusRequest: AudioFocusRequest? = null
     private var isPlaying = false
 
+    private var currentCallId: String? = null
+    private var currentRingtoneUri: Uri? = null
+    @Volatile
+    private var isSilencedByUser: Boolean = false
+    @Volatile
+    private var isPausedForTransientFocus: Boolean = false
+
     private val lock = Any()
 
     private val vibrator: Vibrator? by lazy {
@@ -54,11 +62,56 @@ open class RingtoneController @Inject constructor(
 
     private val audioFocusChangeListener = AudioManager.OnAudioFocusChangeListener { focusChange ->
         when (focusChange) {
-            AudioManager.AUDIOFOCUS_LOSS,
-            AudioManager.AUDIOFOCUS_LOSS_TRANSIENT -> {
-                Log.i(TAG, "Audio focus lost ($focusChange). Silencing ringtone.")
-                DeveloperLogger.info("AUDIO_FOCUS_LOST", "Audio focus lost ($focusChange), silencing ringtone")
+            AudioManager.AUDIOFOCUS_LOSS -> {
+                Log.i(TAG, "Audio focus permanently lost ($focusChange). Silencing ringtone.")
+                DeveloperLogger.info("AUDIO_FOCUS_LOSS", "Audio focus permanently lost ($focusChange), silencing ringtone")
                 silenceRinger()
+            }
+            AudioManager.AUDIOFOCUS_LOSS_TRANSIENT -> {
+                Log.i(TAG, "Audio focus transiently lost. Pausing ringtone.")
+                DeveloperLogger.info("AUDIO_FOCUS_LOSS_TRANSIENT", "Audio focus transiently lost, pausing ringtone")
+                synchronized(lock) {
+                    if (isPlaying && mediaPlayer?.isPlaying == true && !isSilencedByUser) {
+                        try {
+                            mediaPlayer?.pause()
+                            isPausedForTransientFocus = true
+                        } catch (e: Exception) {
+                            Log.w(TAG, "Error pausing player on transient focus loss", e)
+                        }
+                    }
+                }
+            }
+            AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK -> {
+                Log.i(TAG, "Audio focus loss can duck. Lowering volume.")
+                DeveloperLogger.info("AUDIO_FOCUS_DUCK", "Ducking ringtone audio volume")
+                synchronized(lock) {
+                    try {
+                        mediaPlayer?.setVolume(0.2f, 0.2f)
+                    } catch (e: Exception) {
+                        Log.w(TAG, "Error ducking volume", e)
+                    }
+                }
+            }
+            AudioManager.AUDIOFOCUS_GAIN -> {
+                Log.i(TAG, "Audio focus regained.")
+                DeveloperLogger.info("AUDIO_FOCUS_GAIN", "Audio focus regained, resuming ringtone if appropriate")
+                synchronized(lock) {
+                    if (isPausedForTransientFocus && !isSilencedByUser) {
+                        try {
+                            mediaPlayer?.start()
+                            mediaPlayer?.setVolume(1.0f, 1.0f)
+                            isPausedForTransientFocus = false
+                        } catch (e: Exception) {
+                            Log.w(TAG, "Error resuming player on focus gain", e)
+                        }
+                    } else if (isPlaying && !isSilencedByUser) {
+                        try {
+                            mediaPlayer?.setVolume(1.0f, 1.0f)
+                        } catch (e: Exception) {
+                            Log.w(TAG, "Error restoring volume on focus gain", e)
+                        }
+                    }
+                }
             }
         }
     }
@@ -70,8 +123,19 @@ open class RingtoneController @Inject constructor(
      * Starts playing the ringtone resolved from [RingtonePolicy] for the incoming caller.
      */
     open fun startRingtone(person: Person? = null, lead: Lead? = null) {
+        startRingtone(callId = currentCallId, person = person, lead = lead)
+    }
+
+    /**
+     * Starts playing the ringtone associated with a specific [callId].
+     * Idempotent: Redundant calls with the same resolved ringtone for the active call will not restart audio.
+     */
+    open fun startRingtone(callId: String?, person: Person?, lead: Lead?) {
         synchronized(lock) {
-            stopRingtoneInternal()
+            if (isSilencedByUser && (callId == null || callId == currentCallId)) {
+                Log.i(TAG, "Ringtone was silenced by user for call $callId. Suppressing playback.")
+                return
+            }
 
             val ringerMode = audioManager?.ringerMode ?: AudioManager.RINGER_MODE_NORMAL
             if (ringerMode == AudioManager.RINGER_MODE_SILENT) {
@@ -87,13 +151,43 @@ open class RingtoneController @Inject constructor(
                 return
             }
 
+            val ringtoneUri = ringtonePolicy.ringtoneFor(person, lead)
+
+            // Idempotent check: if already playing the exact same ringtone for this call, do not restart!
+            if (isPlaying && currentCallId == callId && currentRingtoneUri == ringtoneUri && mediaPlayer?.isPlaying == true) {
+                DeveloperLogger.info(
+                    "RINGTONE_ALREADY_PLAYING",
+                    "Ringtone $ringtoneUri is already playing for callId=$callId. Ignoring redundant start."
+                )
+                return
+            }
+
+            stopRingtoneInternal()
+
             requestAudioFocus()
 
-            val ringtoneUri = ringtonePolicy.ringtoneFor(person, lead)
+            currentCallId = callId
+            currentRingtoneUri = ringtoneUri
+            isSilencedByUser = false
+            isPausedForTransientFocus = false
+
             DeveloperLogger.info(
                 "RINGTONE_CONTROLLER_STARTED",
-                "Playing CRM policy ringtone: uri=$ringtoneUri, status=${lead?.status ?: "UNKNOWN"}, caller=${person?.displayName ?: "Unknown"}"
+                "Playing CRM policy ringtone: uri=$ringtoneUri, status=${lead?.status ?: "UNKNOWN"}, caller=${person?.displayName ?: "Unknown"}, callId=$callId"
             )
+
+            // Validate file if scheme is file
+            if (ringtoneUri.scheme == "file") {
+                val file = File(ringtoneUri.path ?: "")
+                if (!file.exists() || !file.isFile || file.length() <= 0L || !file.canRead()) {
+                    DeveloperLogger.warning(
+                        "RINGTONE_FILE_CORRUPTED",
+                        "Ringtone file at ${file.absolutePath} is invalid or missing. Falling back to default."
+                    )
+                    playDefaultFallback()
+                    return
+                }
+            }
 
             try {
                 val player = MediaPlayer().apply {
@@ -117,6 +211,7 @@ open class RingtoneController @Inject constructor(
                 isPlaying = true
             } catch (e: Exception) {
                 Log.e(TAG, "Failed playing ringtone uri: $ringtoneUri. Falling back to default tone.", e)
+                DeveloperLogger.error("RINGTONE_PLAYBACK_ERROR", "Failed playing ringtone uri: $ringtoneUri", e)
                 playDefaultFallback()
             }
         }
@@ -141,9 +236,11 @@ open class RingtoneController @Inject constructor(
                 }
                 mediaPlayer = player
                 isPlaying = true
+                DeveloperLogger.info("RINGTONE_FALLBACK_STARTED", "Playing system default fallback tone: $defaultUri")
             }
         } catch (ex: Exception) {
             Log.e(TAG, "Fallback ringtone playback also failed", ex)
+            DeveloperLogger.error("RINGTONE_FALLBACK_FAILED", "Fallback ringtone failed", ex)
         }
     }
 
@@ -152,7 +249,9 @@ open class RingtoneController @Inject constructor(
      */
     open fun silenceRinger() {
         synchronized(lock) {
-            DeveloperLogger.info("RINGTONE_SILENCED", "Silencing incoming ringer.")
+            DeveloperLogger.info("RINGTONE_SILENCED", "Silencing incoming ringer for call $currentCallId.")
+            isSilencedByUser = true
+            isPausedForTransientFocus = false
             stopRingtoneInternal()
         }
     }
@@ -162,6 +261,11 @@ open class RingtoneController @Inject constructor(
      */
     open fun stopRingtone() {
         synchronized(lock) {
+            DeveloperLogger.info("RINGTONE_STOPPED", "Stopping ringtone and resetting state for call $currentCallId.")
+            currentCallId = null
+            currentRingtoneUri = null
+            isSilencedByUser = false
+            isPausedForTransientFocus = false
             stopRingtoneInternal()
         }
     }

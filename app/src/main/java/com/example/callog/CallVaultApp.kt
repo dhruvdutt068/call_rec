@@ -39,6 +39,8 @@ class CallVaultApp : Application() {
                 NotificationManager.IMPORTANCE_HIGH
             ).apply {
                 description = "Displays live in-call controls, caller ID, and incoming call heads-up notifications."
+                setSound(null, null)
+                enableVibration(false)
                 setBypassDnd(true)
                 lockscreenVisibility = android.app.Notification.VISIBILITY_PUBLIC
             }
@@ -53,15 +55,25 @@ class CallVaultApp : Application() {
                 lockscreenVisibility = android.app.Notification.VISIBILITY_PUBLIC
             }
 
+            // Safe migration: remove legacy noisy notification channel if it exists
+            try {
+                manager.deleteNotificationChannel(LEGACY_CALLS_NOTIFICATION_CHANNEL_ID)
+                DeveloperLogger.info("NOTIFICATION_CHANNEL", "Deleted legacy noisy channel $LEGACY_CALLS_NOTIFICATION_CHANNEL_ID")
+            } catch (e: Exception) {
+                // Ignore if legacy channel was not present
+            }
+
             manager.createNotificationChannel(reminderChannel)
             manager.createNotificationChannel(callsChannel)
             manager.createNotificationChannel(missedCallsChannel)
+            DeveloperLogger.info("NOTIFICATION_CHANNEL", "Configured silent incoming call notification channel $CALLS_NOTIFICATION_CHANNEL_ID")
         }
     }
 
     companion object {
         const val NOTIFICATION_CHANNEL_ID = "call_vault_reminders"
-        const val CALLS_NOTIFICATION_CHANNEL_ID = "callog_incoming_calls"
+        const val CALLS_NOTIFICATION_CHANNEL_ID = "callog_incoming_calls_v2"
+        const val LEGACY_CALLS_NOTIFICATION_CHANNEL_ID = "callog_incoming_calls"
         const val MISSED_CALLS_NOTIFICATION_CHANNEL_ID = "callog_missed_calls"
     }
 }
