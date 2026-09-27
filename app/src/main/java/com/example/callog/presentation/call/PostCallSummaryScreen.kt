@@ -521,7 +521,7 @@ fun RecordingStatusCard(
                     Text(
                         text = "±15s window, ±4s duration & phone matching",
                         style = MaterialTheme.typography.bodySmall,
-                        color = Slate200
+                        color = Slate100
                     )
                 }
                 Icon(
@@ -546,7 +546,7 @@ fun RecordingStatusCard(
                     Text(
                         text = "Queued with SHA-256 integrity verification",
                         style = MaterialTheme.typography.bodySmall,
-                        color = Slate200
+                        color = Slate100
                     )
                 }
                 Icon(

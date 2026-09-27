@@ -7,12 +7,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Call
-import androidx.compose.material.icons.filled.CallEnd
-import androidx.compose.material.icons.filled.Email
-import androidx.compose.material.icons.filled.Event
-import androidx.compose.material.icons.filled.History
-import androidx.compose.material.icons.filled.SimCard
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -377,7 +372,7 @@ fun IncomingCallScreen(
 fun CrmStatusChip(status: LeadStatus) {
     val (bg, text, icon) = when (status) {
         LeadStatus.HOT -> Triple(Color(0xFFFFEBEB), Color(0xFFD32F2F), Icons.Default.LocalFireDepartment)
-        LeadStatus.WARM -> Triple(Color(0xFFFFF7E6), Color(0xFFD48806), Icons.Default.WbSunny)
+        LeadStatus.WARM -> Triple(Color(0xFFFFF7E6), Color(0xFFD48806), Icons.Default.Bolt)
         LeadStatus.COLD -> Triple(Color(0xFFF0F5FF), Color(0xFF1D39C4), Icons.Default.AcUnit)
         else -> Triple(Color(0xFFF0F0F0), Color(0xFF666666), null)
     }

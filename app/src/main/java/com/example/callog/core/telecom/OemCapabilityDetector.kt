@@ -68,7 +68,7 @@ class OemCapabilityDetector @Inject constructor(
         )
     }
 
-    private fun resolveOemType(manufacturer: String, brand: String): OemType {
+    internal fun resolveOemType(manufacturer: String, brand: String): OemType {
         val m = manufacturer.lowercase()
         val b = brand.lowercase()
 
@@ -127,7 +127,7 @@ class OemCapabilityDetector @Inject constructor(
         return null
     }
 
-    private fun getInstructionsForOem(oemType: OemType): List<String> {
+    internal fun getInstructionsForOem(oemType: OemType): List<String> {
         return when (oemType) {
             OemType.SAMSUNG -> listOf(
                 "Open the Samsung Phone app.",

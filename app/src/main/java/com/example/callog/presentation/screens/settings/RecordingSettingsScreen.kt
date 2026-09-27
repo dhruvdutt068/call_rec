@@ -101,7 +101,7 @@ fun RecordingSettingsScreen(
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = "Back",
-                            tint = Slate200
+                            tint = Slate100
                         )
                     }
                 },
@@ -262,7 +262,7 @@ fun RecordingSettingsScreen(
                             Text(
                                 text = step,
                                 style = MaterialTheme.typography.bodyMedium,
-                                color = Slate200,
+                                color = Slate100,
                                 modifier = Modifier.weight(1f)
                             )
                         }
@@ -291,7 +291,7 @@ fun RecordingSettingsScreen(
                         Text(
                             text = if (hasPermission) "Permission granted. Callog can observe audio recordings." else "Permission needed to discover saved recordings.",
                             style = MaterialTheme.typography.bodySmall,
-                            color = if (hasPermission) Green400 else Amber400
+                            color = if (hasPermission) Green500 else Amber500
                         )
                     }
 
@@ -299,7 +299,7 @@ fun RecordingSettingsScreen(
                         OutlinedButton(
                             onClick = { permissionLauncher.launch(requiredPermission) },
                             shape = RoundedCornerShape(8.dp),
-                            colors = ButtonDefaults.outlinedButtonColors(contentColor = Amber400)
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = Amber500)
                         ) {
                             Text("Grant")
                         }
@@ -307,7 +307,7 @@ fun RecordingSettingsScreen(
                         Icon(
                             imageVector = Icons.Default.CheckCircle,
                             contentDescription = "Granted",
-                            tint = Green400
+                            tint = Green500
                         )
                     }
                 }
@@ -369,7 +369,7 @@ fun RecordingSettingsScreen(
                             text = "Found ${scanResultCount} call recording(s) on device storage.",
                             style = MaterialTheme.typography.bodySmall,
                             fontWeight = FontWeight.SemiBold,
-                            color = if (scanResultCount!! > 0) Green400 else Amber400
+                            color = if (scanResultCount!! > 0) Green500 else Amber500
                         )
                     }
                 }
