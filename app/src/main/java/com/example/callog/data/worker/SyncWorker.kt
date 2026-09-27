@@ -269,7 +269,29 @@ class SyncWorker(
                 DeveloperLogger.error("SUPABASE_UPLOAD_FAILED", "Exception occurred during Supabase sync execution", exception = e, network = network)
             }
 
-            // Step 2d: Sync pending CRM Leads to Supabase (Disabled - leads table sync turned off)
+            // Step 2d: Sync pending CRM Leads to Supabase
+            try {
+                val pendingLeads = leadDao.getPendingLeads().take(100)
+                if (pendingLeads.isNotEmpty()) {
+                    DeveloperLogger.info("SUPABASE_LEAD_UPLOAD_STARTED", "Syncing ${pendingLeads.size} pending leads to Supabase.", network = network)
+                    val leadStartTime = System.currentTimeMillis()
+                    val leadSyncResult = supabaseService.syncLeads(pendingLeads)
+                    val leadDuration = System.currentTimeMillis() - leadStartTime
+
+                    if (leadSyncResult.isSuccess) {
+                        for (lead in pendingLeads) {
+                            leadDao.updateSyncStatusIfTimestampMatches(lead.id, "SYNCED", lead.updatedAt)
+                        }
+                        DeveloperLogger.success("SUPABASE_LEAD_UPLOAD_SUCCESS", "Successfully synced ${pendingLeads.size} leads to Supabase table leads.", durationMs = leadDuration, network = network)
+                    } else {
+                        val exception = leadSyncResult.exceptionOrNull()
+                        val errorMsg = exception?.message ?: "Unknown lead sync error"
+                        DeveloperLogger.error("SUPABASE_LEAD_UPLOAD_FAILED", "Supabase lead sync failed: $errorMsg", exception = exception, network = network)
+                    }
+                }
+            } catch (e: Exception) {
+                DeveloperLogger.error("SUPABASE_LEAD_UPLOAD_FAILED", "Exception occurred during Supabase lead sync execution", exception = e, network = network)
+            }
 
             // Step 3: Fetch all pending items from local database for Firestore (limit to last 100)
             val pendingCalls = syncRepository.getPendingCalls().take(100)

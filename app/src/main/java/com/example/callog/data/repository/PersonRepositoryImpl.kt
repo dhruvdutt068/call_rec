@@ -496,9 +496,24 @@ class PersonRepositoryImpl @Inject constructor(
             for (l in remoteLeads) {
                 val existingLocal = leadDao.getLeadByPersonId(l.personId)
                 val remoteUpdatedAt = parseTimestamp(l.updatedAt)
-                if (existingLocal != null && existingLocal.syncStatus == "PENDING" && existingLocal.updatedAt > remoteUpdatedAt) {
-                    // Retain pending offline edits to be synced by background worker
-                    continue
+                if (existingLocal != null) {
+                    if (existingLocal.syncStatus == "PENDING" && existingLocal.updatedAt > remoteUpdatedAt) {
+                        DeveloperLogger.info(
+                            "STALE_LEAD_UPDATE_REJECTED",
+                            "Rejected remote lead ${l.id} for person ${l.personId}: local pending change is newer"
+                        )
+                        continue
+                    }
+                    if (existingLocal.updatedAt > remoteUpdatedAt) {
+                        DeveloperLogger.info(
+                            "STALE_LEAD_UPDATE_REJECTED",
+                            "Rejected remote lead ${l.id} for person ${l.personId}: local record is newer (${existingLocal.updatedAt} > $remoteUpdatedAt)"
+                        )
+                        continue
+                    }
+                    if (existingLocal.id != l.id) {
+                        leadDao.deleteLeadById(existingLocal.id)
+                    }
                 }
                 if (!knownPersonIds.contains(l.personId)) {
                     peopleToInsert.add(
@@ -516,13 +531,13 @@ class PersonRepositoryImpl @Inject constructor(
                     LeadEntity(
                         id = l.id,
                         personId = l.personId,
-                        status = l.status,
-                        priority = l.priority,
+                        status = l.status.uppercase(),
+                        priority = l.priority.uppercase(),
                         feedback = l.feedback,
                         feedbackRating = l.feedbackRating,
                         notes = l.notes,
                         ownerId = l.ownerId,
-                        source = l.source,
+                        source = l.source.uppercase(),
                         nextFollowUpAt = l.nextFollowUpAt?.let { parseTimestamp(it) },
                         isArchived = l.isArchived,
                         archivedAt = l.archivedAt?.let { parseTimestamp(it) },

@@ -37,6 +37,12 @@ interface LeadDao {
     @Query("UPDATE leads SET syncStatus = :status WHERE id = :id")
     suspend fun updateSyncStatus(id: String, status: String)
 
+    @Query("UPDATE leads SET syncStatus = :status WHERE id = :id AND updatedAt = :expectedUpdatedAt")
+    suspend fun updateSyncStatusIfTimestampMatches(id: String, status: String, expectedUpdatedAt: Long): Int
+
+    @Query("UPDATE leads SET status = :status, updatedAt = :updatedAt, syncStatus = 'PENDING' WHERE id = :id")
+    suspend fun updateStatusById(id: String, status: String, updatedAt: Long = System.currentTimeMillis())
+
     @Query("UPDATE leads SET status = :status, updatedAt = :updatedAt, syncStatus = 'PENDING' WHERE personId = :personId")
     suspend fun updateStatus(personId: String, status: String, updatedAt: Long = System.currentTimeMillis())
 
@@ -54,4 +60,7 @@ interface LeadDao {
 
     @Query("UPDATE leads SET isArchived = 1, archivedAt = :archivedAt, updatedAt = :updatedAt, syncStatus = 'PENDING' WHERE personId = :personId")
     suspend fun archiveLead(personId: String, archivedAt: Long = System.currentTimeMillis(), updatedAt: Long = System.currentTimeMillis())
+
+    @Query("DELETE FROM leads WHERE id = :id")
+    suspend fun deleteLeadById(id: String)
 }

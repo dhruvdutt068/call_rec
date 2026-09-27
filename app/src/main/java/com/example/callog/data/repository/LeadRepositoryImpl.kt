@@ -42,13 +42,13 @@ class LeadRepositoryImpl @Inject constructor(
                     val restoredEntity = LeadEntity(
                         id = remoteLead.id,
                         personId = remoteLead.personId,
-                        status = remoteLead.status,
-                        priority = remoteLead.priority,
+                        status = remoteLead.status.uppercase(),
+                        priority = remoteLead.priority.uppercase(),
                         feedback = remoteLead.feedback,
                         feedbackRating = remoteLead.feedbackRating,
                         notes = remoteLead.notes,
                         ownerId = remoteLead.ownerId,
-                        source = remoteLead.source,
+                        source = remoteLead.source.uppercase(),
                         nextFollowUpAt = remoteLead.nextFollowUpAt?.let { parseTimestamp(it) },
                         isArchived = remoteLead.isArchived,
                         archivedAt = remoteLead.archivedAt?.let { parseTimestamp(it) },
@@ -57,6 +57,10 @@ class LeadRepositoryImpl @Inject constructor(
                         syncStatus = "SYNCED"
                     )
                     leadDao.insertLead(restoredEntity)
+                    DeveloperLogger.info(
+                        "LEAD_STATUS_RESTORED",
+                        "Restored lead ${restoredEntity.id} (status=${restoredEntity.status}) from Supabase for person $personId"
+                    )
                     return@withContext restoredEntity.toDomain()
                 }
             } catch (e: Exception) {
@@ -81,7 +85,11 @@ class LeadRepositoryImpl @Inject constructor(
     override suspend fun saveLead(lead: Lead) = withContext(Dispatchers.IO) {
         val entity = lead.toEntity()
         leadDao.insertLead(entity)
-        syncLeadToSupabase(lead.personId)
+        DeveloperLogger.info(
+            "ROOM_STATUS_UPDATED",
+            "Saved lead ${lead.id} to Room with status=${lead.status.name}, updatedAt=${entity.updatedAt}"
+        )
+        syncLeadToSupabase(lead.personId, entity.updatedAt)
     }
 
     override suspend fun getOrCreateLeadForPerson(personId: String): Lead = withContext(Dispatchers.IO) {
@@ -98,13 +106,13 @@ class LeadRepositoryImpl @Inject constructor(
                     val restoredEntity = LeadEntity(
                         id = remoteLead.id,
                         personId = remoteLead.personId,
-                        status = remoteLead.status,
-                        priority = remoteLead.priority,
+                        status = remoteLead.status.uppercase(),
+                        priority = remoteLead.priority.uppercase(),
                         feedback = remoteLead.feedback,
                         feedbackRating = remoteLead.feedbackRating,
                         notes = remoteLead.notes,
                         ownerId = remoteLead.ownerId,
-                        source = remoteLead.source,
+                        source = remoteLead.source.uppercase(),
                         nextFollowUpAt = remoteLead.nextFollowUpAt?.let { parseTimestamp(it) },
                         isArchived = remoteLead.isArchived,
                         archivedAt = remoteLead.archivedAt?.let { parseTimestamp(it) },
@@ -113,6 +121,10 @@ class LeadRepositoryImpl @Inject constructor(
                         syncStatus = "SYNCED"
                     )
                     leadDao.insertLead(restoredEntity)
+                    DeveloperLogger.info(
+                        "LEAD_STATUS_RESTORED",
+                        "Restored lead ${restoredEntity.id} (status=${restoredEntity.status}) from Supabase for person $personId"
+                    )
                     return@withContext restoredEntity.toDomain()
                 }
             } catch (e: Exception) {
@@ -130,39 +142,60 @@ class LeadRepositoryImpl @Inject constructor(
             updatedAt = System.currentTimeMillis(),
             syncStatus = "PENDING"
         )
-        leadDao.insertLead(newLead.toEntity())
-        syncLeadToSupabase(personId)
+        val entity = newLead.toEntity()
+        leadDao.insertLead(entity)
+        DeveloperLogger.info(
+            "LEAD_CREATED",
+            "Created local lead ${newLead.id} for person $personId (status=${newLead.status.name})"
+        )
+        syncLeadToSupabase(personId, entity.updatedAt)
         newLead
     }
 
     override suspend fun updateLeadStatus(personId: String, status: LeadStatus) = withContext(Dispatchers.IO) {
-        val existing = leadDao.getLeadByPersonId(personId)
-        if (existing == null) {
-            getOrCreateLeadForPerson(personId)
+        val existing = leadDao.getLeadByPersonId(personId) ?: run {
+            val created = getOrCreateLeadForPerson(personId)
+            created.toEntity()
         }
+        val previousStatus = existing.status
         val now = System.currentTimeMillis()
+
+        DeveloperLogger.info(
+            "LEAD_STATUS_CHANGED_LOCAL",
+            "Lead ${existing.id} for person $personId changing status from $previousStatus to ${status.name}"
+        )
+
         leadDao.updateStatus(personId, status.name, now)
-        syncLeadToSupabase(personId)
+        DeveloperLogger.info(
+            "ROOM_STATUS_UPDATED",
+            "Room updated lead ${existing.id} status=${status.name}, updatedAt=$now, syncStatus=PENDING"
+        )
+        DeveloperLogger.info(
+            "LEAD_UPDATE_QUEUED",
+            "Lead ${existing.id} status update queued for synchronization"
+        )
+
+        syncLeadToSupabase(personId, now)
     }
 
     override suspend fun updateLeadPriority(personId: String, priority: LeadPriority) = withContext(Dispatchers.IO) {
-        val existing = leadDao.getLeadByPersonId(personId)
-        if (existing == null) {
-            getOrCreateLeadForPerson(personId)
+        val existing = leadDao.getLeadByPersonId(personId) ?: run {
+            val created = getOrCreateLeadForPerson(personId)
+            created.toEntity()
         }
         val now = System.currentTimeMillis()
         leadDao.updatePriority(personId, priority.name, now)
-        syncLeadToSupabase(personId)
+        syncLeadToSupabase(personId, now)
     }
 
     override suspend fun updateLeadNotes(personId: String, notes: String) = withContext(Dispatchers.IO) {
-        val existing = leadDao.getLeadByPersonId(personId)
-        if (existing == null) {
-            getOrCreateLeadForPerson(personId)
+        val existing = leadDao.getLeadByPersonId(personId) ?: run {
+            val created = getOrCreateLeadForPerson(personId)
+            created.toEntity()
         }
         val now = System.currentTimeMillis()
         leadDao.updateNotes(personId, notes, now)
-        syncLeadToSupabase(personId)
+        syncLeadToSupabase(personId, now)
     }
 
     override suspend fun updateLeadFeedback(
@@ -170,33 +203,75 @@ class LeadRepositoryImpl @Inject constructor(
         feedback: String,
         rating: Int?
     ) = withContext(Dispatchers.IO) {
-        val existing = leadDao.getLeadByPersonId(personId)
-        if (existing == null) {
-            getOrCreateLeadForPerson(personId)
+        val existing = leadDao.getLeadByPersonId(personId) ?: run {
+            val created = getOrCreateLeadForPerson(personId)
+            created.toEntity()
         }
         val now = System.currentTimeMillis()
         leadDao.updateFeedback(personId, feedback, rating, now)
-        syncLeadToSupabase(personId)
+        syncLeadToSupabase(personId, now)
     }
 
     override suspend fun updateLeadFollowUp(personId: String, nextFollowUpAt: Long?) = withContext(Dispatchers.IO) {
-        val existing = leadDao.getLeadByPersonId(personId)
-        if (existing == null) {
-            getOrCreateLeadForPerson(personId)
+        val existing = leadDao.getLeadByPersonId(personId) ?: run {
+            val created = getOrCreateLeadForPerson(personId)
+            created.toEntity()
         }
         val now = System.currentTimeMillis()
         leadDao.updateFollowUp(personId, nextFollowUpAt, now)
-        syncLeadToSupabase(personId)
+        syncLeadToSupabase(personId, now)
     }
 
     override suspend fun archiveLead(personId: String) = withContext(Dispatchers.IO) {
         val now = System.currentTimeMillis()
         leadDao.archiveLead(personId, now, now)
-        syncLeadToSupabase(personId)
+        syncLeadToSupabase(personId, now)
     }
 
-    private suspend fun syncLeadToSupabase(personId: String) {
-        // Disabled: leads table sync turned off per configuration
+    private suspend fun syncLeadToSupabase(personId: String, expectedUpdatedAt: Long? = null) {
+        val lead = leadDao.getLeadByPersonId(personId) ?: return
+        if (supabaseService == null) return
+
+        try {
+            DeveloperLogger.info(
+                "SUPABASE_LEAD_UPDATE_STARTED",
+                "Starting Supabase update for lead ${lead.id} (status=${lead.status}, updatedAt=${lead.updatedAt})"
+            )
+            val startTime = System.currentTimeMillis()
+            val result = supabaseService.syncLeads(listOf(lead))
+            val duration = System.currentTimeMillis() - startTime
+
+            if (result.isSuccess) {
+                // Ensure local record has not been updated concurrently before marking SYNCED
+                val targetTime = expectedUpdatedAt ?: lead.updatedAt
+                val rowsUpdated = leadDao.updateSyncStatusIfTimestampMatches(lead.id, "SYNCED", targetTime)
+                if (rowsUpdated > 0) {
+                    DeveloperLogger.success(
+                        "SUPABASE_LEAD_UPDATE_SUCCESS",
+                        "Successfully synced lead ${lead.id} to Supabase in ${duration}ms",
+                        durationMs = duration
+                    )
+                } else {
+                    DeveloperLogger.warning(
+                        "LEAD_CONFLICT_DETECTED",
+                        "Lead ${lead.id} was updated locally while sync was in flight. Retaining PENDING status."
+                    )
+                }
+            } else {
+                val err = result.exceptionOrNull()?.message ?: "Unknown error"
+                DeveloperLogger.error(
+                    "SUPABASE_LEAD_UPDATE_FAILED",
+                    "Supabase update failed for lead ${lead.id}: $err. Retaining PENDING for background retry.",
+                    exception = result.exceptionOrNull()
+                )
+            }
+        } catch (e: Exception) {
+            DeveloperLogger.error(
+                "SUPABASE_LEAD_UPDATE_FAILED",
+                "Exception syncing lead ${lead.id} to Supabase: ${e.message}",
+                exception = e
+            )
+        }
     }
 
     private fun parseTimestamp(isoString: String?): Long {

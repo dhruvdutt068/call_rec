@@ -8,9 +8,16 @@ enum class LeadStatus {
     CUSTOMER,
     UNKNOWN;
 
+    val isCrmActive: Boolean
+        get() = this in setOf(HOT, WARM, COLD, NEW, CUSTOMER)
+
+    fun toDbString(): String = name
+
     companion object {
         fun fromString(value: String?): LeadStatus {
-            return entries.find { it.name.equals(value, ignoreCase = true) } ?: UNKNOWN
+            if (value.isNullOrBlank()) return UNKNOWN
+            val trimmed = value.trim()
+            return entries.find { it.name.equals(trimmed, ignoreCase = true) } ?: UNKNOWN
         }
     }
 }
