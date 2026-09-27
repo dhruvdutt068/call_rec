@@ -113,8 +113,19 @@ class RingtoneRepositoryImpl @Inject constructor(
         val tempFile = File(dir, "${targetKey}_tmp_${System.currentTimeMillis()}.tmp")
 
         try {
-            val inputStream = context.contentResolver.openInputStream(sourceUri)
-                ?: throw FileNotFoundException("Cannot open stream for URI: $sourceUri")
+            val inputStream = if (sourceUri.scheme == "file") {
+                val path = sourceUri.path
+                val srcFile = if (path != null) File(path) else null
+                if (srcFile != null && srcFile.exists()) {
+                    srcFile.inputStream()
+                } else {
+                    context.contentResolver.openInputStream(sourceUri)
+                        ?: throw FileNotFoundException("Cannot open stream for URI: $sourceUri")
+                }
+            } else {
+                context.contentResolver.openInputStream(sourceUri)
+                    ?: throw FileNotFoundException("Cannot open stream for URI: $sourceUri")
+            }
 
             var bytesCopied = 0L
             inputStream.use { input ->

@@ -41,7 +41,7 @@ open class RingtoneController @Inject constructor(
     private var audioFocusRequest: AudioFocusRequest? = null
     private var isPlaying = false
 
-    private var currentCallId: String? = null
+    protected var currentCallId: String? = null
     private var currentRingtoneUri: Uri? = null
     @Volatile
     private var isSilencedByUser: Boolean = false
@@ -120,17 +120,20 @@ open class RingtoneController @Inject constructor(
         get() = synchronized(lock) { isPlaying }
 
     /**
-     * Starts playing the ringtone resolved from [RingtonePolicy] for the incoming caller.
+     * Starts playing the ringtone associated with a specific [callId].
+     * Sets the active [currentCallId] and delegates to [startRingtone].
      */
-    open fun startRingtone(person: Person? = null, lead: Lead? = null) {
-        startRingtone(callId = currentCallId, person = person, lead = lead)
+    open fun startRingtone(callId: String?, person: Person?, lead: Lead?) {
+        currentCallId = callId
+        startRingtone(person, lead)
     }
 
     /**
-     * Starts playing the ringtone associated with a specific [callId].
+     * Starts playing the ringtone resolved from [RingtonePolicy] for the incoming caller.
      * Idempotent: Redundant calls with the same resolved ringtone for the active call will not restart audio.
      */
-    open fun startRingtone(callId: String?, person: Person?, lead: Lead?) {
+    open fun startRingtone(person: Person? = null, lead: Lead? = null) {
+        val callId = currentCallId
         synchronized(lock) {
             if (isSilencedByUser && (callId == null || callId == currentCallId)) {
                 Log.i(TAG, "Ringtone was silenced by user for call $callId. Suppressing playback.")
@@ -151,7 +154,18 @@ open class RingtoneController @Inject constructor(
                 return
             }
 
-            val ringtoneUri = ringtonePolicy.ringtoneFor(person, lead)
+            val ringtoneUri = try {
+                ringtonePolicy.ringtoneFor(person, lead)
+            } catch (e: Throwable) {
+                Log.w(TAG, "Failed to resolve ringtone from policy for call $callId: ${e.message}", e)
+                null
+            }
+
+            if (ringtoneUri == null) {
+                Log.w(TAG, "Resolved ringtone URI is null for call $callId. Using default fallback.")
+                playDefaultFallback()
+                return
+            }
 
             // Idempotent check: if already playing the exact same ringtone for this call, do not restart!
             if (isPlaying && currentCallId == callId && currentRingtoneUri == ringtoneUri && mediaPlayer?.isPlaying == true) {

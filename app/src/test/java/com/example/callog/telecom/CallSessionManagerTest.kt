@@ -584,6 +584,118 @@ class CallSessionManagerTest {
         assertEquals("call_missed_1", fakeNotificationManager.lastMissedSession?.callId)
     }
 
+    // ─────────────────────────────────────────────────────────────
+    // Cold-Start Ringtone & CRM Race Condition Scenarios
+    // ─────────────────────────────────────────────────────────────
+
+    @Test
+    fun testColdStartFastCrmResolutionPlaysHotLeadRingtone() = runBlocking {
+        // Fast CRM resolution within bounded timeout
+        val person = Person(
+            id = "P_FAST",
+            displayName = "High Intent Buyer",
+            companyName = "Enterprise Corp",
+            phoneNumbers = listOf(PhoneNumber("PN_FAST", "P_FAST", "+1 800 555 1234", "18005551234"))
+        )
+        fakePersonRepository.people["18005551234"] = person
+        fakePersonRepository.peopleById["P_FAST"] = person
+        fakeLeadRepository.leads["P_FAST"] = Lead(id = "L_FAST", personId = "P_FAST", status = LeadStatus.HOT)
+
+        callSessionManager.onTelecomCallAdded(
+            callId = "call_fast_crm",
+            rawNumber = "+1 800 555 1234",
+            telecomDisplayName = "Enterprise",
+            direction = CallDirection.INCOMING,
+            initialState = CallState.RINGING,
+            capabilities = CallCapabilities(),
+            accountHandleId = null,
+            accountComponentName = null
+        )
+
+        kotlinx.coroutines.delay(100)
+
+        assertTrue("Ringtone must start when ringing call arrives", fakeRingtoneController.started)
+        assertEquals("call_fast_crm", fakeRingtoneController.lastCallId)
+        assertEquals("High Intent Buyer", fakeRingtoneController.lastPerson?.displayName)
+        assertEquals(LeadStatus.HOT, fakeRingtoneController.lastLead?.status)
+        assertEquals("Ringtone playback must only start once on initial resolution", 1, fakeRingtoneController.startCount)
+    }
+
+    @Test
+    fun testColdStartUnknownCallerAppliesDefaultFallback() = runBlocking {
+        // Unknown caller with no Person or Lead record
+        callSessionManager.onTelecomCallAdded(
+            callId = "call_unknown_crm",
+            rawNumber = "+1 999 888 7777",
+            telecomDisplayName = "Mystery Caller",
+            direction = CallDirection.INCOMING,
+            initialState = CallState.RINGING,
+            capabilities = CallCapabilities(),
+            accountHandleId = null,
+            accountComponentName = null
+        )
+
+        kotlinx.coroutines.delay(100)
+
+        assertTrue(fakeRingtoneController.started)
+        assertEquals("call_unknown_crm", fakeRingtoneController.lastCallId)
+        assertNull("Unknown caller should have null person", fakeRingtoneController.lastPerson)
+        assertNull("Unknown caller should have null lead", fakeRingtoneController.lastLead)
+
+        val session = callSessionManager.activeCallSession.value
+        assertEquals(CrmResolutionState.RESOLVED_NO_LEAD, session?.crmResolutionState)
+    }
+
+    @Test
+    fun testCallRejectedDuringLookupCancelsResolutionAndDoesNotPlayRingtone() = runBlocking {
+        callSessionManager.onTelecomCallAdded(
+            callId = "call_early_reject",
+            rawNumber = "+1 555 444 3333",
+            telecomDisplayName = "Quick Reject",
+            direction = CallDirection.INCOMING,
+            initialState = CallState.RINGING,
+            capabilities = CallCapabilities(),
+            accountHandleId = null,
+            accountComponentName = null
+        )
+
+        // User immediately rejects call
+        callSessionManager.executeAction(CallAction.Reject("call_early_reject"))
+
+        kotlinx.coroutines.delay(150)
+
+        // Playback must be stopped and not resurrected
+        assertTrue(fakeRingtoneController.stopped)
+        assertFalse(fakeRingtoneController.started)
+    }
+
+    @Test
+    fun testMultiCallRingtoneAssociation() = runBlocking {
+        val personA = Person(id = "PA", displayName = "Person A", phoneNumbers = listOf(PhoneNumber("PNA", "PA", "111", "111")))
+        val personB = Person(id = "PB", displayName = "Person B", phoneNumbers = listOf(PhoneNumber("PNB", "PB", "222", "222")))
+        fakePersonRepository.people["111"] = personA
+        fakePersonRepository.people["222"] = personB
+        fakeLeadRepository.leads["PA"] = Lead(id = "LA", personId = "PA", status = LeadStatus.HOT)
+        fakeLeadRepository.leads["PB"] = Lead(id = "LB", personId = "PB", status = LeadStatus.COLD)
+
+        // First call arrives
+        callSessionManager.onTelecomCallAdded("call_A", "111", "Person A", CallDirection.INCOMING, CallState.RINGING, CallCapabilities(), null, null)
+        kotlinx.coroutines.delay(100)
+        assertEquals("call_A", fakeRingtoneController.lastCallId)
+        assertEquals(LeadStatus.HOT, fakeRingtoneController.lastLead?.status)
+
+        // First call is answered
+        callSessionManager.executeAction(CallAction.Answer("call_A"))
+        callSessionManager.onTelecomCallStateChanged("call_A", CallState.ACTIVE)
+        assertTrue(fakeRingtoneController.stopped)
+
+        // Second call arrives as waiting/ringing call
+        callSessionManager.onTelecomCallAdded("call_B", "222", "Person B", CallDirection.INCOMING, CallState.RINGING, CallCapabilities(), null, null)
+        kotlinx.coroutines.delay(100)
+        assertEquals("call_B", fakeRingtoneController.lastCallId)
+        assertEquals(LeadStatus.COLD, fakeRingtoneController.lastLead?.status)
+    }
+
     // ── Test Fakes ───────────────────────────────────────────────
 
     private fun createFakeContext(): Context {
@@ -642,10 +754,18 @@ class CallSessionManagerTest {
     class FakeRingtoneController(context: Context) : com.example.callog.core.telecom.RingtoneController(context, FakeRingtonePolicy()) {
         var started = false
         var stopped = false
+        var lastCallId: String? = null
+        var lastPerson: Person? = null
+        var lastLead: Lead? = null
+        var startCount = 0
 
         override fun startRingtone(person: Person?, lead: Lead?) {
             started = true
             stopped = false
+            startCount++
+            lastCallId = currentCallId
+            lastPerson = person
+            lastLead = lead
         }
 
         override fun stopRingtone() {
