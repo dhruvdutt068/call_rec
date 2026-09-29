@@ -29,16 +29,36 @@ class ClientCrmRepositoryImpl @Inject constructor(
     }
 
     override suspend fun publishCallEvent(event: CrmCallEvent): Result<Unit> = withContext(Dispatchers.IO) {
-        // Disabled: Client CRM tables (calls_log, lead_communications) syncing is turned off
-        DeveloperLogger.info("CRM_EVENT_SKIPPED", "External CRM publishing is disabled for callId=${event.callId}")
-        Result.success(Unit)
+        try {
+            val dto = CrmPayloadMapper.toClientLeadCommunicationDto(event)
+            val result = remoteDataSource.insertLeadCommunication(dto)
+            if (result.isSuccess) {
+                DeveloperLogger.success("CRM_EVENT_PUBLISHED", "Logged callId=${event.callId} to lead_communications")
+            } else {
+                DeveloperLogger.warning("CRM_EVENT_FAILED", "Failed logging callId=${event.callId} to lead_communications: ${result.exceptionOrNull()?.message}")
+            }
+            result
+        } catch (e: Exception) {
+            DeveloperLogger.error("CRM_EVENT_EXCEPTION", "Error publishing call event: ${e.message}", exception = e)
+            Result.failure(e)
+        }
     }
 
     override suspend fun publishBatchCallEvents(events: List<CrmCallEvent>): Result<Unit> = withContext(Dispatchers.IO) {
         if (events.isEmpty()) return@withContext Result.success(Unit)
-        // Disabled: Client CRM tables (calls_log, lead_communications) syncing is turned off
-        DeveloperLogger.info("CRM_BATCH_SKIPPED", "External CRM batch publishing is disabled (${events.size} events skipped)")
-        Result.success(Unit)
+        try {
+            val dtos = events.map { CrmPayloadMapper.toClientLeadCommunicationDto(it) }
+            val result = remoteDataSource.insertBatchLeadCommunications(dtos)
+            if (result.isSuccess) {
+                DeveloperLogger.success("CRM_BATCH_PUBLISHED", "Batch logged ${events.size} calls to lead_communications")
+            } else {
+                DeveloperLogger.warning("CRM_BATCH_FAILED", "Failed batch logging calls to lead_communications: ${result.exceptionOrNull()?.message}")
+            }
+            result
+        } catch (e: Exception) {
+            DeveloperLogger.error("CRM_BATCH_EXCEPTION", "Error publishing batch call events: ${e.message}", exception = e)
+            Result.failure(e)
+        }
     }
 
     override fun observeLeadByPhone(rawPhoneNumber: String): Flow<CrmLeadSummary?> = flow {

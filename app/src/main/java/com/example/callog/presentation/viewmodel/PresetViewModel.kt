@@ -3,6 +3,7 @@ package com.example.callog.presentation.viewmodel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.callog.data.remote.SupabaseService
+import com.example.callog.domain.model.AppEnvironment
 import com.example.callog.domain.model.preset.*
 import com.example.callog.domain.usecase.preset.*
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -27,7 +28,8 @@ class PresetViewModel @Inject constructor(
     private val duplicatePresetUseCase: DuplicatePresetUseCase,
     private val importExportPresetUseCase: ImportExportPresetUseCase,
     private val supabaseService: SupabaseService,
-    private val firestoreService: com.example.callog.data.remote.FirestoreService
+    private val firestoreService: com.example.callog.data.remote.FirestoreService,
+    private val environmentConfigManager: com.example.callog.core.config.EnvironmentConfigManager
 ) : ViewModel() {
 
     val presets: StateFlow<List<AppPreset>> = getPresetsUseCase()
@@ -82,6 +84,15 @@ class PresetViewModel @Inject constructor(
         viewModelScope.launch {
             try {
                 setActivePresetUseCase(presetId)
+                val targetPreset = presets.value.firstOrNull { it.id == presetId }
+                if (targetPreset != null) {
+                    val targetEnv = if (targetPreset.environment == PresetEnvironment.PRODUCTION) {
+                        com.example.callog.core.config.AppEnvironment.PRODUCTION
+                    } else {
+                        com.example.callog.core.config.AppEnvironment.DEVELOPMENT
+                    }
+                    environmentConfigManager.setActiveEnvironment(targetEnv)
+                }
                 _uiEvents.emit(PresetUiEvent.ShowToast("Environment preset switched successfully"))
             } catch (e: Exception) {
                 _uiEvents.emit(PresetUiEvent.ShowToast("Failed to switch preset: ${e.message}"))
@@ -191,7 +202,12 @@ class PresetViewModel @Inject constructor(
 
             // 1. Supabase Test if URL is present
             if (!preset.configuration.supabaseUrl.isNullOrBlank()) {
-                val subKey = secrets?.supabaseAnonKey ?: ""
+                val defaultSubKey = if (preset.environment == PresetEnvironment.PRODUCTION || preset.configuration.supabaseUrl == com.example.callog.core.config.SupabaseDefaults.PROD_URL) {
+                    com.example.callog.core.config.SupabaseDefaults.PROD_ANON_KEY
+                } else {
+                    com.example.callog.core.config.SupabaseDefaults.DEV_ANON_KEY
+                }
+                val subKey = secrets?.supabaseAnonKey?.ifBlank { null } ?: defaultSubKey
                 val sbResult = supabaseService.testSupabaseConnection(preset.configuration.supabaseUrl, subKey)
                 if (sbResult.isSuccess) {
                     results.add("Supabase: Connected")
@@ -204,7 +220,14 @@ class PresetViewModel @Inject constructor(
             // 2. Firebase & Storage Test if Firebase Project is configured
             val fbProj = preset.configuration.firebaseProjectId?.trim()
             val fbAppId = preset.configuration.firebaseAppId?.trim()
-            val fbKey = secrets?.firebaseApiKey?.trim()
+            val defaultFbKey = if (preset.environment == PresetEnvironment.PRODUCTION || fbProj == "allset-244ab") {
+                com.example.callog.core.config.EnvironmentConfigManager.PROD_API_KEY
+            } else {
+                com.example.callog.core.config.EnvironmentConfigManager.DEV_API_KEY
+            }
+            val fbKey = secrets?.firebaseApiKey?.trim()?.ifBlank { null } ?: defaultFbKey
+            val dbId = preset.configuration.firebaseDatabaseId?.trim()?.ifBlank { null }
+                ?: if (preset.environment == PresetEnvironment.PRODUCTION || fbProj == "allset-244ab") "call-logs" else null
 
             if (!fbProj.isNullOrBlank() && !fbAppId.isNullOrBlank() && !fbKey.isNullOrBlank()) {
                 val fbConfig = com.example.callog.domain.model.FirebaseConfig(
@@ -214,7 +237,7 @@ class PresetViewModel @Inject constructor(
                     storageBucket = preset.configuration.storageBucket?.ifBlank { null },
                     gcmSenderId = preset.configuration.gcmSenderId?.ifBlank { null },
                     databaseUrl = preset.configuration.databaseUrl?.ifBlank { null },
-                    databaseId = preset.configuration.firebaseDatabaseId?.ifBlank { null }
+                    databaseId = dbId
                 )
                 val fbResult = firestoreService.testFirebaseConnection(fbConfig)
                 if (fbResult.isSuccess) {
@@ -281,9 +304,13 @@ class PresetViewModel @Inject constructor(
             },
             configuration = PresetConfiguration(
                 supabaseUrl = if (env == PresetEnvironment.DEVELOPMENT) com.example.callog.core.config.SupabaseDefaults.DEV_URL else com.example.callog.core.config.SupabaseDefaults.PROD_URL,
-                firebaseProjectId = "allset-491218",
-                storageBucket = "allset-491218.firebasestorage.app",
-                apiBaseUrl = "",
+                firebaseProjectId = if (env == PresetEnvironment.DEVELOPMENT) "allset-491218" else "allset-244ab",
+                firebaseAppId = if (env == PresetEnvironment.DEVELOPMENT) "1:799427430422:android:e0f5737f12b8b9cbb20d37" else "1:598633676290:android:e264397de748bf0371711b",
+                storageBucket = if (env == PresetEnvironment.DEVELOPMENT) "allset-491218.firebasestorage.app" else "allset-244ab.firebasestorage.app",
+                gcmSenderId = if (env == PresetEnvironment.DEVELOPMENT) "799427430422" else "598633676290",
+                databaseUrl = if (env == PresetEnvironment.DEVELOPMENT) "https://allset-491218-default-rtdb.asia-southeast1.firebasedatabase.app" else null,
+                firebaseDatabaseId = if (env == PresetEnvironment.DEVELOPMENT) null else "call-logs",
+                apiBaseUrl = if (env == PresetEnvironment.DEVELOPMENT) "https://dev-api.callog.internal" else "https://api.callog.com",
                 features = defaultFeatures
             ),
             isActive = false

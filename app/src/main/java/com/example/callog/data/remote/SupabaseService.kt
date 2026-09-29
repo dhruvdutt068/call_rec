@@ -60,6 +60,25 @@ class SupabaseService @Inject constructor(
     }
 
     fun getActiveConfig(): SupabaseConfig {
+        val activePreset = activePresetProvider.activePresetFlow.value
+        if (activePreset != null && !activePreset.configuration.supabaseUrl.isNullOrBlank()) {
+            val secrets = runBlocking {
+                try {
+                    activePresetProvider.getActiveSecrets()
+                } catch (e: Exception) {
+                    null
+                }
+            }
+            val defaultKey = if (activePreset.environment == com.example.callog.domain.model.preset.PresetEnvironment.PRODUCTION || 
+                activePreset.configuration.supabaseUrl == SupabaseDefaults.PROD_URL) {
+                SupabaseDefaults.PROD_ANON_KEY
+            } else {
+                SupabaseDefaults.DEV_ANON_KEY
+            }
+            val key = secrets?.supabaseAnonKey?.ifBlank { null } ?: defaultKey
+            return SupabaseConfig(activePreset.configuration.supabaseUrl.trim(), key.trim())
+        }
+
         return environmentConfigManager.getActiveSupabaseConfig()
     }
 
@@ -94,9 +113,21 @@ class SupabaseService @Inject constructor(
 
     suspend fun testSupabaseConnection(url: String, key: String): Result<Unit> = withContext(Dispatchers.IO) {
         try {
+            val resolvedUrl = url.trim()
+            val defaultKey = if (resolvedUrl == SupabaseDefaults.PROD_URL || resolvedUrl.contains("vxineppqpqslqjqvnlzv", ignoreCase = true)) {
+                SupabaseDefaults.PROD_ANON_KEY
+            } else {
+                SupabaseDefaults.DEV_ANON_KEY
+            }
+            val resolvedKey = key.trim().ifBlank { defaultKey }
+
+            if (resolvedUrl.isBlank() || resolvedKey.isBlank()) {
+                return@withContext Result.failure(IllegalArgumentException("Supabase URL and API Key must not be blank"))
+            }
+
             val testClient = createSupabaseClient(
-                supabaseUrl = url.trim(),
-                supabaseKey = key.trim()
+                supabaseUrl = resolvedUrl,
+                supabaseKey = resolvedKey
             ) {
                 install(Postgrest)
             }
@@ -278,6 +309,24 @@ class SupabaseService @Inject constructor(
         }
     }
 
+    private fun sanitizeLeadStatusForDb(status: String?): String {
+        return when (status?.trim()?.uppercase()) {
+            "HOT" -> "HOT"
+            "WARM" -> "WARM"
+            "COLD" -> "COLD"
+            else -> "UNKNOWN"
+        }
+    }
+
+    private fun sanitizeLeadPriorityForDb(priority: String?): String {
+        return when (priority?.trim()?.uppercase()) {
+            "LOW" -> "LOW"
+            "HIGH" -> "HIGH"
+            "URGENT" -> "URGENT"
+            else -> "MEDIUM"
+        }
+    }
+
     suspend fun syncLeads(leads: List<com.example.callog.data.local.entity.LeadEntity>): Result<Unit> = withContext(Dispatchers.IO) {
         if (leads.isEmpty()) return@withContext Result.success(Unit)
         return@withContext try {
@@ -285,8 +334,8 @@ class SupabaseService @Inject constructor(
                 com.example.callog.data.remote.model.SupabaseLead(
                     id = it.id,
                     personId = it.personId,
-                    status = it.status.uppercase(),
-                    priority = it.priority.uppercase(),
+                    status = sanitizeLeadStatusForDb(it.status),
+                    priority = sanitizeLeadPriorityForDb(it.priority),
                     feedback = it.feedback,
                     feedbackRating = it.feedbackRating,
                     notes = it.notes,
@@ -313,7 +362,7 @@ class SupabaseService @Inject constructor(
         return@withContext try {
             getClient().from(SupabaseDefaults.TABLE_LEADS).update(
                 mapOf(
-                    "status" to status.uppercase(),
+                    "status" to sanitizeLeadStatusForDb(status),
                     "updated_at" to formatTimestamp(updatedAt)
                 )
             ) {
@@ -536,6 +585,100 @@ class SupabaseService @Inject constructor(
             Result.success(rpcResult)
         } catch (e: Exception) {
             Log.e(TAG, "Error executing resolve_and_attach_contact RPC on Supabase", e)
+            Result.failure(e)
+        }
+    }
+
+    suspend fun fetchLeadStages(): Result<List<com.example.callog.data.remote.model.SupabaseLeadStage>> = withContext(Dispatchers.IO) {
+        return@withContext try {
+            val stages = getClient().from(SupabaseDefaults.TABLE_LEAD_STAGES)
+                .select {
+                    filter {
+                        eq("is_active", true)
+                    }
+                    order(column = "sort_order", order = io.github.jan.supabase.postgrest.query.Order.ASCENDING)
+                }
+                .decodeList<com.example.callog.data.remote.model.SupabaseLeadStage>()
+            Result.success(stages)
+        } catch (e: Exception) {
+            Log.e(TAG, "Error fetching lead stages from Supabase", e)
+            Result.failure(e)
+        }
+    }
+
+    suspend fun fetchLeadStatuses(): Result<List<com.example.callog.data.remote.model.SupabaseLeadStatus>> = withContext(Dispatchers.IO) {
+        return@withContext try {
+            val statuses = getClient().from(SupabaseDefaults.TABLE_LEAD_STATUSES)
+                .select {
+                    filter {
+                        eq("is_active", true)
+                    }
+                    order(column = "sort_order", order = io.github.jan.supabase.postgrest.query.Order.ASCENDING)
+                }
+                .decodeList<com.example.callog.data.remote.model.SupabaseLeadStatus>()
+            Result.success(statuses)
+        } catch (e: Exception) {
+            Log.e(TAG, "Error fetching lead statuses from Supabase", e)
+            Result.failure(e)
+        }
+    }
+
+    suspend fun fetchLeadsMaster(stageId: Long? = null, limit: Long = 100): Result<List<com.example.callog.data.remote.model.SupabaseLeadMaster>> = withContext(Dispatchers.IO) {
+        return@withContext try {
+            val leads = getClient().from(SupabaseDefaults.TABLE_LEADS_MASTER)
+                .select {
+                    if (stageId != null) {
+                        filter {
+                            eq("fk_lead_stage", stageId)
+                        }
+                    }
+                    order(column = "updated_at", order = io.github.jan.supabase.postgrest.query.Order.DESCENDING)
+                    limit(limit)
+                }
+                .decodeList<com.example.callog.data.remote.model.SupabaseLeadMaster>()
+            Result.success(leads)
+        } catch (e: Exception) {
+            Log.e(TAG, "Error fetching leads_master from Supabase", e)
+            Result.failure(e)
+        }
+    }
+
+    suspend fun updateLeadMasterStage(leadId: Long, newStageId: Long): Result<Unit> = withContext(Dispatchers.IO) {
+        return@withContext try {
+            val now = formatTimestamp(System.currentTimeMillis())
+            getClient().from(SupabaseDefaults.TABLE_LEADS_MASTER).update(
+                mapOf(
+                    "fk_lead_stage" to newStageId,
+                    "updated_at" to now
+                )
+            ) {
+                filter {
+                    eq("id", leadId)
+                }
+            }
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Log.e(TAG, "Error updating lead_stage in leads_master for leadId=$leadId", e)
+            Result.failure(e)
+        }
+    }
+
+    suspend fun createLeadTask(task: com.example.callog.data.remote.model.SupabaseLeadTask): Result<Unit> = withContext(Dispatchers.IO) {
+        return@withContext try {
+            getClient().from(SupabaseDefaults.TABLE_LEAD_TASKS).insert(task)
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Log.e(TAG, "Error creating lead task in Supabase", e)
+            Result.failure(e)
+        }
+    }
+
+    suspend fun createLeadNote(note: com.example.callog.data.remote.model.SupabaseLeadNote): Result<Unit> = withContext(Dispatchers.IO) {
+        return@withContext try {
+            getClient().from(SupabaseDefaults.TABLE_LEAD_NOTES).insert(note)
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Log.e(TAG, "Error creating lead note in Supabase", e)
             Result.failure(e)
         }
     }

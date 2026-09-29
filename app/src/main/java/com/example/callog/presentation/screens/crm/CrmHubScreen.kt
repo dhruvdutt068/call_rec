@@ -208,7 +208,8 @@ data class PipelineDeal(
     val dealAmount: String,
     val stageId: String,
     val priority: String, // HIGH, MEDIUM, LOW
-    val lastCallTime: String
+    val lastCallTime: String,
+    val leadMasterId: Long? = null
 )
 
 @Composable
@@ -220,46 +221,99 @@ fun PipelineBoardScreen(
     val context = LocalContext.current
     val contacts by callViewModel.contacts.collectAsState()
     val callLogs by callViewModel.callLogs.collectAsState()
+    val remoteStages by callViewModel.leadStages.collectAsState()
+    val remoteLeads by callViewModel.leadsMaster.collectAsState()
+    val isCrmLoading by callViewModel.isCrmLoading.collectAsState()
 
-    val stages = remember {
-        listOf(
-            PipelineStage("NEW", "New Leads", Icons.Default.FiberNew, Color(0xFF4A4FD8)),
-            PipelineStage("CONTACTED", "Contacted", Icons.Default.PhoneCallback, Color(0xFF45C79A)),
-            PipelineStage("QUALIFIED", "Qualified", Icons.Default.Stars, Color(0xFFF4B544)),
-            PipelineStage("PROPOSAL", "Proposal", Icons.Default.Description, Color(0xFFB8BCFF)),
-            PipelineStage("WON", "Closed / Won", Icons.Default.CheckCircle, Color(0xFF45C79A))
-        )
+    LaunchedEffect(Unit) {
+        callViewModel.loadCrmPipeline()
     }
 
-    var selectedStageId by remember { mutableStateOf("NEW") }
-
-    // Generate dynamic pipeline deals from active contacts & call logs
-    val deals = remember(contacts, callLogs) {
-        val sampleStages = listOf("NEW", "CONTACTED", "QUALIFIED", "PROPOSAL", "WON")
-        val sampleAmounts = listOf("₹45,000", "₹1,20,000", "₹85,000", "₹2,50,000", "₹60,000", "₹1,80,000", "₹95,000")
-        val samplePriorities = listOf("HIGH", "MEDIUM", "LOW")
-        val dateFormat = java.text.SimpleDateFormat("MMM dd, HH:mm", java.util.Locale.getDefault())
-
-        contacts.take(15).mapIndexed { index, contact ->
-            val assignedStage = sampleStages[index % sampleStages.size]
-            val amount = sampleAmounts[index % sampleAmounts.size]
-            val priority = samplePriorities[index % samplePriorities.size]
-            val phone = contact.phoneNumbers.firstOrNull() ?: "+91 98765 43210"
-            val lastCall = callLogs.find { it.number.contains(phone.takeLast(6)) }?.let {
-                dateFormat.format(java.util.Date(it.timestamp))
-            } ?: "Recently"
-
-            PipelineDeal(
-                id = "DEAL_$index",
-                personId = contact.contactId,
-                contactName = contact.name,
-                company = if (index % 2 == 0) "Enterprise Client" else "Retail Customer",
-                phoneNumber = phone,
-                dealAmount = amount,
-                stageId = assignedStage,
-                priority = priority,
-                lastCallTime = lastCall
+    val stages = remember(remoteStages) {
+        if (remoteStages.isNotEmpty()) {
+            val stageColors = listOf(
+                Color(0xFF4A4FD8), Color(0xFF45C79A), Color(0xFFF4B544),
+                Color(0xFFB8BCFF), Color(0xFF10B981), Color(0xFF8B5CF6), Color(0xFFEC4899)
             )
+            val stageIcons = listOf(
+                Icons.Default.FiberNew, Icons.Default.PhoneCallback, Icons.Default.Stars,
+                Icons.Default.Description, Icons.Default.CheckCircle, Icons.Default.Assignment
+            )
+            remoteStages.mapIndexed { idx, st ->
+                PipelineStage(
+                    id = st.id.toString(),
+                    name = st.name,
+                    icon = stageIcons[idx % stageIcons.size],
+                    color = stageColors[idx % stageColors.size]
+                )
+            }
+        } else {
+            listOf(
+                PipelineStage("NEW", "New Leads", Icons.Default.FiberNew, Color(0xFF4A4FD8)),
+                PipelineStage("CONTACTED", "Contacted", Icons.Default.PhoneCallback, Color(0xFF45C79A)),
+                PipelineStage("QUALIFIED", "Qualified", Icons.Default.Stars, Color(0xFFF4B544)),
+                PipelineStage("PROPOSAL", "Proposal", Icons.Default.Description, Color(0xFFB8BCFF)),
+                PipelineStage("WON", "Closed / Won", Icons.Default.CheckCircle, Color(0xFF45C79A))
+            )
+        }
+    }
+
+    var selectedStageId by remember { mutableStateOf("") }
+    LaunchedEffect(stages) {
+        if (selectedStageId.isEmpty() || stages.none { it.id == selectedStageId }) {
+            selectedStageId = stages.firstOrNull()?.id ?: "NEW"
+        }
+    }
+
+    // Generate dynamic pipeline deals from active leads_master or fallback to contacts
+    val deals = remember(remoteLeads, contacts, callLogs, stages) {
+        if (remoteLeads.isNotEmpty()) {
+            remoteLeads.map { lm ->
+                val phoneStr = lm.leadMobile?.toLong()?.toString() ?: ""
+                val formattedPhone = if (phoneStr.isNotBlank()) "+$phoneStr" else "No phone"
+                val stageKey = lm.fkLeadStage?.toString() ?: (stages.firstOrNull()?.id ?: "NEW")
+                val matchedContact = contacts.find { c -> phoneStr.isNotBlank() && c.phoneNumbers.any { p -> p.contains(phoneStr.takeLast(8)) } }
+
+                PipelineDeal(
+                    id = "LM_${lm.id}",
+                    personId = matchedContact?.contactId ?: lm.id.toString(),
+                    contactName = lm.leadName?.ifBlank { null } ?: matchedContact?.name ?: "Lead #${lm.id}",
+                    company = lm.leadSource ?: "Direct CRM Lead",
+                    phoneNumber = formattedPhone,
+                    dealAmount = if (lm.requirementCaptured == true) "Qualified" else "Inquiry",
+                    stageId = stageKey,
+                    priority = if (lm.visitStatus == true) "HIGH" else "MEDIUM",
+                    lastCallTime = lm.lastCallContactedAt?.take(16)?.replace("T", " ") ?: "Not contacted yet",
+                    leadMasterId = lm.id
+                )
+            }
+        } else {
+            val sampleStages = listOf("NEW", "CONTACTED", "QUALIFIED", "PROPOSAL", "WON")
+            val sampleAmounts = listOf("₹45,000", "₹1,20,000", "₹85,000", "₹2,50,000", "₹60,000", "₹1,80,000", "₹95,000")
+            val samplePriorities = listOf("HIGH", "MEDIUM", "LOW")
+            val dateFormat = java.text.SimpleDateFormat("MMM dd, HH:mm", java.util.Locale.getDefault())
+
+            contacts.take(15).mapIndexed { index, contact ->
+                val assignedStage = sampleStages[index % sampleStages.size]
+                val amount = sampleAmounts[index % sampleAmounts.size]
+                val priority = samplePriorities[index % samplePriorities.size]
+                val phone = contact.phoneNumbers.firstOrNull() ?: "+91 98765 43210"
+                val lastCall = callLogs.find { it.number.contains(phone.takeLast(6)) }?.let {
+                    dateFormat.format(java.util.Date(it.timestamp))
+                } ?: "Recently"
+
+                PipelineDeal(
+                    id = "DEAL_$index",
+                    personId = contact.contactId,
+                    contactName = contact.name,
+                    company = if (index % 2 == 0) "Enterprise Client" else "Retail Customer",
+                    phoneNumber = phone,
+                    dealAmount = amount,
+                    stageId = assignedStage,
+                    priority = priority,
+                    lastCallTime = lastCall
+                )
+            }
         }
     }
 
@@ -387,6 +441,14 @@ fun PipelineBoardScreen(
                 items(activeStageDeals, key = { it.id }) { deal ->
                     PipelineDealCard(
                         deal = deal,
+                        availableStages = stages,
+                        onMoveStage = { newStageId ->
+                            deal.leadMasterId?.let { lmId ->
+                                newStageId.toLongOrNull()?.let { stageLong ->
+                                    callViewModel.updateLeadStage(lmId, stageLong)
+                                }
+                            }
+                        },
                         onClick = { onContactClick?.invoke(deal.personId) },
                         onCallClick = {
                             callViewModel.initiateCall(context, deal.phoneNumber)
@@ -401,10 +463,14 @@ fun PipelineBoardScreen(
 @Composable
 fun PipelineDealCard(
     deal: PipelineDeal,
+    availableStages: List<PipelineStage> = emptyList(),
+    onMoveStage: ((String) -> Unit)? = null,
     onClick: () -> Unit = {},
     onCallClick: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
+    var showStageMenu by remember { mutableStateOf(false) }
+
     GlassyCard(
         modifier = modifier,
         onClick = onClick
@@ -434,25 +500,67 @@ fun PipelineDealCard(
                     )
                 }
 
-                Surface(
-                    shape = RoundedCornerShape(6.dp),
-                    color = when (deal.priority) {
-                        "HIGH" -> Red500.copy(alpha = 0.2f)
-                        "MEDIUM" -> Amber500.copy(alpha = 0.2f)
-                        else -> Slate700
-                    }
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    Text(
-                        text = deal.priority,
-                        style = MaterialTheme.typography.labelSmall,
-                        fontWeight = FontWeight.Bold,
+                    if (deal.leadMasterId != null && availableStages.isNotEmpty() && onMoveStage != null) {
+                        Box {
+                            TextButton(
+                                onClick = { showStageMenu = true },
+                                contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp)
+                            ) {
+                                Text(
+                                    text = "Stage ▾",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = AllSetLavender
+                                )
+                            }
+                            DropdownMenu(
+                                expanded = showStageMenu,
+                                onDismissRequest = { showStageMenu = false },
+                                modifier = Modifier.background(Slate900)
+                            ) {
+                                availableStages.forEach { targetStage ->
+                                    DropdownMenuItem(
+                                        text = {
+                                            Text(
+                                                text = targetStage.name,
+                                                color = if (targetStage.id == deal.stageId) AllSetLavender else Slate100
+                                            )
+                                        },
+                                        onClick = {
+                                            showStageMenu = false
+                                            if (targetStage.id != deal.stageId) {
+                                                onMoveStage(targetStage.id)
+                                            }
+                                        }
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    Surface(
+                        shape = RoundedCornerShape(6.dp),
                         color = when (deal.priority) {
-                            "HIGH" -> Red500
-                            "MEDIUM" -> Amber500
-                            else -> Slate300
-                        },
-                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                    )
+                            "HIGH" -> Red500.copy(alpha = 0.2f)
+                            "MEDIUM" -> Amber500.copy(alpha = 0.2f)
+                            else -> Slate700
+                        }
+                    ) {
+                        Text(
+                            text = deal.priority,
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = when (deal.priority) {
+                                "HIGH" -> Red500
+                                "MEDIUM" -> Amber500
+                                else -> Slate300
+                            },
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                        )
+                    }
                 }
             }
 

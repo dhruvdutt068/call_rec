@@ -37,6 +37,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.example.callog.core.config.EnvironmentConfigManager
+import com.example.callog.core.config.SupabaseDefaults
 import com.example.callog.domain.model.preset.*
 import com.example.callog.presentation.components.GlassyCard
 import com.example.callog.presentation.theme.*
@@ -837,21 +839,33 @@ private fun EditPresetBottomSheet(
     onDismiss: () -> Unit,
     onSave: (AppPreset, PresetSecrets) -> Unit
 ) {
+    val defaultSbKey = if (preset.environment == PresetEnvironment.PRODUCTION || preset.configuration.supabaseUrl == SupabaseDefaults.PROD_URL) {
+        SupabaseDefaults.PROD_ANON_KEY
+    } else {
+        SupabaseDefaults.DEV_ANON_KEY
+    }
+    val defaultFbKey = if (preset.environment == PresetEnvironment.PRODUCTION || preset.configuration.firebaseProjectId == "allset-244ab") {
+        EnvironmentConfigManager.PROD_API_KEY
+    } else {
+        EnvironmentConfigManager.DEV_API_KEY
+    }
+
     var name by remember { mutableStateOf(preset.name) }
     var selectedEnv by remember { mutableStateOf(preset.environment) }
     var description by remember { mutableStateOf(preset.description ?: "") }
 
     var supabaseUrl by remember { mutableStateOf(preset.configuration.supabaseUrl ?: "") }
-    var supabaseAnonKey by remember { mutableStateOf(initialSecrets.supabaseAnonKey ?: "") }
+    var supabaseAnonKey by remember { mutableStateOf(initialSecrets.supabaseAnonKey?.ifBlank { null } ?: defaultSbKey) }
     var isKeyVisible by remember { mutableStateOf(false) }
 
     var firebaseProjectId by remember { mutableStateOf(preset.configuration.firebaseProjectId ?: "") }
     var firebaseAppId by remember { mutableStateOf(preset.configuration.firebaseAppId ?: "") }
-    var firebaseApiKey by remember { mutableStateOf(initialSecrets.firebaseApiKey ?: "") }
+    var firebaseApiKey by remember { mutableStateOf(initialSecrets.firebaseApiKey?.ifBlank { null } ?: defaultFbKey) }
     var isFirebaseApiKeyVisible by remember { mutableStateOf(false) }
     var storageBucket by remember { mutableStateOf(preset.configuration.storageBucket ?: "") }
     var gcmSenderId by remember { mutableStateOf(preset.configuration.gcmSenderId ?: "") }
     var databaseUrl by remember { mutableStateOf(preset.configuration.databaseUrl ?: "") }
+    var firebaseDatabaseId by remember { mutableStateOf(preset.configuration.firebaseDatabaseId ?: "") }
     var apiBaseUrl by remember { mutableStateOf(preset.configuration.apiBaseUrl ?: "") }
 
     val featuresState = remember {
@@ -1107,6 +1121,21 @@ private fun EditPresetBottomSheet(
                 )
             )
 
+            OutlinedTextField(
+                value = firebaseDatabaseId,
+                onValueChange = { firebaseDatabaseId = it },
+                label = { Text("Cloud Firestore Database ID (e.g. call-logs)") },
+                placeholder = { Text("call-logs (Leave blank for default)", color = Slate500) },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedTextColor = Slate50,
+                    unfocusedTextColor = Slate50,
+                    focusedBorderColor = Teal400,
+                    unfocusedBorderColor = Slate700
+                )
+            )
+
             // Section: Feature Flags
             Text(
                 text = "Environment Feature Flags",
@@ -1165,6 +1194,7 @@ private fun EditPresetBottomSheet(
                             storageBucket = storageBucket.trim(),
                             gcmSenderId = gcmSenderId.trim(),
                             databaseUrl = databaseUrl.trim(),
+                            firebaseDatabaseId = firebaseDatabaseId.trim().ifBlank { null },
                             apiBaseUrl = apiBaseUrl.trim(),
                             features = featuresState.toMap()
                         )
@@ -1176,8 +1206,8 @@ private fun EditPresetBottomSheet(
                             updatedAt = System.currentTimeMillis()
                         )
                         val updatedSecrets = initialSecrets.copy(
-                            supabaseAnonKey = supabaseAnonKey.trim(),
-                            firebaseApiKey = firebaseApiKey.trim()
+                            supabaseAnonKey = supabaseAnonKey.trim().ifBlank { defaultSbKey },
+                            firebaseApiKey = firebaseApiKey.trim().ifBlank { defaultFbKey }
                         )
                         onSave(updatedPreset, updatedSecrets)
                     },

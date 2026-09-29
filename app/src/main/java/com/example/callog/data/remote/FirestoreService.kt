@@ -66,6 +66,35 @@ class FirestoreService @Inject constructor(
     }
 
     fun getSavedConfig(): FirebaseConfig? {
+        val activePreset = activePresetProvider.activePresetFlow.value
+        if (activePreset != null && !activePreset.configuration.firebaseProjectId.isNullOrBlank()) {
+            val secrets = runBlocking {
+                try {
+                    activePresetProvider.getActiveSecrets()
+                } catch (e: Exception) {
+                    null
+                }
+            }
+            val defaultApiKey = if (activePreset.environment == com.example.callog.domain.model.preset.PresetEnvironment.PRODUCTION) {
+                "AIzaSyDLqHOgAdLBz9__Un_BI0ZMwz5l2ucJnKo"
+            } else {
+                "AIzaSyBtlY7EoO6PgPUCMjNR55K88H2v665qQgQ"
+            }
+            val apiKey = secrets?.firebaseApiKey?.ifBlank { null } ?: defaultApiKey
+            val dbId = activePreset.configuration.firebaseDatabaseId?.ifBlank { null }
+                ?: if (activePreset.environment == com.example.callog.domain.model.preset.PresetEnvironment.PRODUCTION) "call-logs" else null
+
+            return FirebaseConfig(
+                projectId = activePreset.configuration.firebaseProjectId.trim(),
+                apiKey = apiKey.trim(),
+                appId = activePreset.configuration.firebaseAppId?.trim() ?: "",
+                storageBucket = activePreset.configuration.storageBucket?.trim()?.ifBlank { null },
+                gcmSenderId = activePreset.configuration.gcmSenderId?.trim()?.ifBlank { null },
+                databaseUrl = activePreset.configuration.databaseUrl?.trim()?.ifBlank { null },
+                databaseId = dbId
+            )
+        }
+
         val envConfig = environmentConfigManager.getActiveFirebaseConfig()
         if (envConfig != null) {
             return envConfig
@@ -213,10 +242,16 @@ class FirestoreService @Inject constructor(
                         FirebaseFirestore.getInstance(customApp)
                     }
                 } else {
-                    if (FirebaseApp.getApps(context).isEmpty()) {
-                        FirebaseApp.initializeApp(context)
+                    val defaultApp = if (FirebaseApp.getApps(context).isEmpty()) {
+                        FirebaseApp.initializeApp(context) ?: FirebaseApp.getInstance()
+                    } else {
+                        FirebaseApp.getInstance()
                     }
-                    FirebaseFirestore.getInstance()
+                    if (environmentConfigManager.getActiveEnvironment() == AppEnvironment.PRODUCTION) {
+                        FirebaseFirestore.getInstance(defaultApp, "call-logs")
+                    } else {
+                        FirebaseFirestore.getInstance(defaultApp)
+                    }
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to initialize Firebase Firestore", e)
@@ -243,10 +278,17 @@ class FirestoreService @Inject constructor(
                 }
                 Pair(fs, stor)
             } else {
-                if (FirebaseApp.getApps(context).isEmpty()) {
-                    FirebaseApp.initializeApp(context)
+                val defaultApp = if (FirebaseApp.getApps(context).isEmpty()) {
+                    FirebaseApp.initializeApp(context) ?: FirebaseApp.getInstance()
+                } else {
+                    FirebaseApp.getInstance()
                 }
-                Pair(FirebaseFirestore.getInstance(), FirebaseStorage.getInstance())
+                val fs = if (environmentConfigManager.getActiveEnvironment() == AppEnvironment.PRODUCTION) {
+                    FirebaseFirestore.getInstance(defaultApp, "call-logs")
+                } else {
+                    FirebaseFirestore.getInstance(defaultApp)
+                }
+                Pair(fs, FirebaseStorage.getInstance(defaultApp))
             }
 
             // Write a test document that stays in Firestore for inspection

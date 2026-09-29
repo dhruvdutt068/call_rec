@@ -901,4 +901,48 @@ class CallViewModel @Inject constructor(
             }
         }
     }
+
+    // --- CRM Pipeline Integration (leads_master & lead_stages) ---
+    private val _leadStages = MutableStateFlow<List<com.example.callog.data.remote.model.SupabaseLeadStage>>(emptyList())
+    val leadStages: StateFlow<List<com.example.callog.data.remote.model.SupabaseLeadStage>> = _leadStages.asStateFlow()
+
+    private val _leadsMaster = MutableStateFlow<List<com.example.callog.data.remote.model.SupabaseLeadMaster>>(emptyList())
+    val leadsMaster: StateFlow<List<com.example.callog.data.remote.model.SupabaseLeadMaster>> = _leadsMaster.asStateFlow()
+
+    private val _isCrmLoading = MutableStateFlow(false)
+    val isCrmLoading: StateFlow<Boolean> = _isCrmLoading.asStateFlow()
+
+    fun loadCrmPipeline() {
+        viewModelScope.launch {
+            _isCrmLoading.value = true
+            try {
+                val stagesRes = supabaseService.fetchLeadStages()
+                if (stagesRes.isSuccess) {
+                    _leadStages.value = stagesRes.getOrDefault(emptyList())
+                }
+                val leadsRes = supabaseService.fetchLeadsMaster()
+                if (leadsRes.isSuccess) {
+                    _leadsMaster.value = leadsRes.getOrDefault(emptyList())
+                }
+            } catch (e: Exception) {
+                DeveloperLogger.warning("CRM_LOAD_FAILED", "Failed loading CRM pipeline from Supabase: ${e.message}")
+            } finally {
+                _isCrmLoading.value = false
+            }
+        }
+    }
+
+    fun updateLeadStage(leadId: Long, newStageId: Long) {
+        viewModelScope.launch {
+            val result = supabaseService.updateLeadMasterStage(leadId, newStageId)
+            if (result.isSuccess) {
+                _leadsMaster.value = _leadsMaster.value.map {
+                    if (it.id == leadId) it.copy(fkLeadStage = newStageId) else it
+                }
+                DeveloperLogger.success("CRM_STAGE_UPDATED", "Lead $leadId moved to stage $newStageId")
+            } else {
+                DeveloperLogger.warning("CRM_STAGE_UPDATE_FAILED", "Failed updating stage for lead $leadId: ${result.exceptionOrNull()?.message}")
+            }
+        }
+    }
 }

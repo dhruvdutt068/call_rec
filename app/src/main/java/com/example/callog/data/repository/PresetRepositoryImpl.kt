@@ -58,7 +58,26 @@ class PresetRepositoryImpl @Inject constructor(
     }
 
     override suspend fun getSecrets(presetId: String): PresetSecrets? = withContext(Dispatchers.IO) {
-        secretStore.getSecrets(presetId)
+        val stored = secretStore.getSecrets(presetId)
+        if (stored != null && !stored.supabaseAnonKey.isNullOrBlank()) {
+            stored
+        } else {
+            if (presetId == "preset_prod_default") {
+                PresetSecrets(
+                    supabaseAnonKey = SupabaseDefaults.PROD_ANON_KEY,
+                    firebaseApiKey = "AIzaSyDLqHOgAdLBz9__Un_BI0ZMwz5l2ucJnKo",
+                    apiKey = ""
+                ).also { secretStore.saveSecrets(presetId, it) }
+            } else if (presetId == "preset_dev_default") {
+                PresetSecrets(
+                    supabaseAnonKey = SupabaseDefaults.DEV_ANON_KEY,
+                    firebaseApiKey = "AIzaSyBtlY7EoO6PgPUCMjNR55K88H2v665qQgQ",
+                    apiKey = "dev_api_key_sample"
+                ).also { secretStore.saveSecrets(presetId, it) }
+            } else {
+                stored
+            }
+        }
     }
 
     override suspend fun savePreset(preset: AppPreset, secrets: PresetSecrets?): Unit = withContext(Dispatchers.IO) {
@@ -167,69 +186,72 @@ class PresetRepositoryImpl @Inject constructor(
     }
 
     private suspend fun ensureDefaultPresetsInternal() {
+        val devId = "preset_dev_default"
+        val devPreset = AppPreset(
+            id = devId,
+            name = "Development",
+            environment = PresetEnvironment.DEVELOPMENT,
+            description = "Default local sandbox with debug tools and test backend",
+            configuration = PresetConfiguration(
+                supabaseUrl = SupabaseDefaults.DEV_URL,
+                firebaseProjectId = "allset-491218",
+                firebaseAppId = "1:799427430422:android:e0f5737f12b8b9cbb20d37",
+                storageBucket = "allset-491218.firebasestorage.app",
+                gcmSenderId = "799427430422",
+                databaseUrl = "https://allset-491218-default-rtdb.asia-southeast1.firebasedatabase.app",
+                firebaseDatabaseId = null,
+                apiBaseUrl = "https://dev-api.callog.internal",
+                features = mapOf(
+                    PresetConfiguration.FEATURE_DEV_DIAGNOSTICS to true,
+                    PresetConfiguration.FEATURE_CALL_SIMULATOR to true,
+                    PresetConfiguration.FEATURE_DEBUG_LOGGING to true,
+                    PresetConfiguration.FEATURE_EXPERIMENTAL_CALL_UI to true,
+                    PresetConfiguration.FEATURE_FAKE_RECORDINGS to true,
+                    PresetConfiguration.FEATURE_NETWORK_INSPECTOR to true
+                )
+            ),
+            isActive = true
+        )
+        val devSecrets = PresetSecrets(
+            supabaseAnonKey = SupabaseDefaults.DEV_ANON_KEY,
+            firebaseApiKey = "AIzaSyBtlY7EoO6PgPUCMjNR55K88H2v665qQgQ",
+            apiKey = "dev_api_key_sample"
+        )
+
+        val prodId = "preset_prod_default"
+        val prodPreset = AppPreset(
+            id = prodId,
+            name = "Production",
+            environment = PresetEnvironment.PRODUCTION,
+            description = "Live customer environment with strict security",
+            configuration = PresetConfiguration(
+                supabaseUrl = SupabaseDefaults.PROD_URL,
+                firebaseProjectId = "allset-244ab",
+                firebaseAppId = "1:598633676290:android:e264397de748bf0371711b",
+                storageBucket = "allset-244ab.firebasestorage.app",
+                gcmSenderId = "598633676290",
+                databaseUrl = null,
+                firebaseDatabaseId = "call-logs",
+                apiBaseUrl = "https://api.callog.com",
+                features = mapOf(
+                    PresetConfiguration.FEATURE_DEV_DIAGNOSTICS to false,
+                    PresetConfiguration.FEATURE_CALL_SIMULATOR to false,
+                    PresetConfiguration.FEATURE_DEBUG_LOGGING to false,
+                    PresetConfiguration.FEATURE_EXPERIMENTAL_CALL_UI to false,
+                    PresetConfiguration.FEATURE_FAKE_RECORDINGS to false,
+                    PresetConfiguration.FEATURE_NETWORK_INSPECTOR to false
+                )
+            ),
+            isActive = false
+        )
+        val prodSecrets = PresetSecrets(
+            supabaseAnonKey = SupabaseDefaults.PROD_ANON_KEY,
+            firebaseApiKey = "AIzaSyDLqHOgAdLBz9__Un_BI0ZMwz5l2ucJnKo",
+            apiKey = ""
+        )
+
         if (presetDao.getCount() == 0) {
             Log.i(TAG, "Seeding default environment presets...")
-
-            val devId = "preset_dev_default"
-            val devPreset = AppPreset(
-                id = devId,
-                name = "Development",
-                environment = PresetEnvironment.DEVELOPMENT,
-                description = "Default local sandbox with debug tools and test backend",
-                configuration = PresetConfiguration(
-                    supabaseUrl = SupabaseDefaults.DEV_URL,
-                    firebaseProjectId = "restaurant-manager-185bd",
-                    firebaseAppId = "1:666477971024:android:4cbefd56ddee708ab07355",
-                    storageBucket = "restaurant-manager-185bd.firebasestorage.app",
-                    gcmSenderId = "666477971024",
-                    firebaseDatabaseId = null,
-                    apiBaseUrl = "https://dev-api.callog.internal",
-                    features = mapOf(
-                        PresetConfiguration.FEATURE_DEV_DIAGNOSTICS to true,
-                        PresetConfiguration.FEATURE_CALL_SIMULATOR to true,
-                        PresetConfiguration.FEATURE_DEBUG_LOGGING to true,
-                        PresetConfiguration.FEATURE_EXPERIMENTAL_CALL_UI to true,
-                        PresetConfiguration.FEATURE_FAKE_RECORDINGS to true,
-                        PresetConfiguration.FEATURE_NETWORK_INSPECTOR to true
-                    )
-                ),
-                isActive = true
-            )
-            val devSecrets = PresetSecrets(
-                supabaseAnonKey = SupabaseDefaults.DEV_ANON_KEY,
-                firebaseApiKey = "AIzaSyBbzuMy2RT72urGPnaaJTRTW-DH2eOzFvs",
-                apiKey = "dev_api_key_sample"
-            )
-
-            val prodId = "preset_prod_default"
-            val prodPreset = AppPreset(
-                id = prodId,
-                name = "Production",
-                environment = PresetEnvironment.PRODUCTION,
-                description = "Live customer environment with strict security",
-                configuration = PresetConfiguration(
-                    supabaseUrl = SupabaseDefaults.PROD_URL,
-                    firebaseProjectId = "allset-491218",
-                    firebaseAppId = "1:799427430422:android:e0f5737f12b8b9cbb20d37",
-                    storageBucket = "allset-491218.firebasestorage.app",
-                    gcmSenderId = "799427430422",
-                    apiBaseUrl = "https://api.callog.com",
-                    features = mapOf(
-                        PresetConfiguration.FEATURE_DEV_DIAGNOSTICS to false,
-                        PresetConfiguration.FEATURE_CALL_SIMULATOR to false,
-                        PresetConfiguration.FEATURE_DEBUG_LOGGING to false,
-                        PresetConfiguration.FEATURE_EXPERIMENTAL_CALL_UI to false,
-                        PresetConfiguration.FEATURE_FAKE_RECORDINGS to false,
-                        PresetConfiguration.FEATURE_NETWORK_INSPECTOR to false
-                    )
-                ),
-                isActive = false
-            )
-            val prodSecrets = PresetSecrets(
-                supabaseAnonKey = SupabaseDefaults.PROD_ANON_KEY,
-                firebaseApiKey = "AIzaSyDLqHOgAdLBz9__Un_BI0ZMwz5l2ucJnKo",
-                apiKey = ""
-            )
 
             presetDao.insertAll(
                 listOf(
@@ -242,6 +264,48 @@ class PresetRepositoryImpl @Inject constructor(
             secretStore.saveSecrets(prodId, prodSecrets)
 
             Log.i(TAG, "Default environment presets seeded successfully.")
+        } else {
+            // Self-heal existing default presets if they contain obsolete credentials
+            val existingDevEntity = presetDao.getPresetById(devId)
+            if (existingDevEntity != null) {
+                val existingDev = existingDevEntity.toDomain(json)
+                if (existingDev.configuration.firebaseProjectId != "allset-491218" ||
+                    existingDev.configuration.supabaseUrl != SupabaseDefaults.DEV_URL) {
+                    val updatedDev = devPreset.copy(isActive = existingDev.isActive)
+                    presetDao.insertOrUpdate(PresetEntity.fromDomain(updatedDev, json))
+                    secretStore.saveSecrets(devId, devSecrets)
+                    Log.i(TAG, "Self-healed preset_dev_default to verified credentials.")
+                }
+            }
+            val existingProdEntity = presetDao.getPresetById(prodId)
+            if (existingProdEntity != null) {
+                val existingProd = existingProdEntity.toDomain(json)
+                if (existingProd.configuration.firebaseProjectId != "allset-244ab" ||
+                    existingProd.configuration.supabaseUrl != SupabaseDefaults.PROD_URL ||
+                    existingProd.configuration.firebaseDatabaseId != "call-logs") {
+                    val updatedProd = prodPreset.copy(
+                        isActive = existingProd.isActive,
+                        configuration = prodPreset.configuration.copy(
+                            features = existingProd.configuration.features
+                        )
+                    )
+                    presetDao.insertOrUpdate(PresetEntity.fromDomain(updatedProd, json))
+                    secretStore.saveSecrets(prodId, prodSecrets)
+                    Log.i(TAG, "Self-healed preset_prod_default to verified credentials with call-logs Firestore database.")
+                }
+            }
+
+            // Always ensure default presets have valid non-blank secrets in secretStore
+            val prodSec = secretStore.getSecrets(prodId)
+            if (prodSec == null || prodSec.supabaseAnonKey.isNullOrBlank()) {
+                secretStore.saveSecrets(prodId, prodSecrets)
+                Log.i(TAG, "Restored default secrets for preset_prod_default.")
+            }
+            val devSec = secretStore.getSecrets(devId)
+            if (devSec == null || devSec.supabaseAnonKey.isNullOrBlank()) {
+                secretStore.saveSecrets(devId, devSecrets)
+                Log.i(TAG, "Restored default secrets for preset_dev_default.")
+            }
         }
     }
 }

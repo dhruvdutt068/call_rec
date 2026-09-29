@@ -32,7 +32,17 @@ class EnvironmentConfigManager @Inject constructor(
     private val environmentChangeListeners = mutableListOf<() -> Unit>()
 
     private fun loadActiveEnvironment(): AppEnvironment {
-        val raw = prefs.getString(KEY_ACTIVE_ENV, AppEnvironment.PRODUCTION.name)
+        val flavorDefault = try {
+            val resId = context.resources.getIdentifier("app_environment", "string", context.packageName)
+            if (resId != 0) {
+                AppEnvironment.fromString(context.getString(resId))
+            } else {
+                AppEnvironment.DEVELOPMENT
+            }
+        } catch (e: Exception) {
+            AppEnvironment.DEVELOPMENT
+        }
+        val raw = prefs.getString(KEY_ACTIVE_ENV, flavorDefault.name)
         return AppEnvironment.fromString(raw)
     }
 
@@ -122,7 +132,20 @@ class EnvironmentConfigManager @Inject constructor(
         val databaseUrl = prefs.getString("${prefix}_firebase_database_url", null)
         val databaseId = prefs.getString("${prefix}_firebase_database_id", null)
 
+        // Sanitize stale/buggy saved preferences from previous builds
+        if (env == AppEnvironment.PRODUCTION && projectId == "allset-491218") {
+            prefs.edit().remove("${prefix}_firebase_project_id").apply()
+            return defaultFirebaseConfig(env)
+        }
+        if (env == AppEnvironment.DEVELOPMENT && projectId == "restaurant-manager-185bd") {
+            prefs.edit().remove("${prefix}_firebase_project_id").apply()
+            return defaultFirebaseConfig(env)
+        }
+
         return if (!projectId.isNullOrBlank() && !apiKey.isNullOrBlank() && !appId.isNullOrBlank()) {
+            val resolvedDbId = databaseId?.trim()?.ifBlank { null }
+                ?: if (env == AppEnvironment.PRODUCTION) "call-logs" else null
+
             FirebaseConfig(
                 projectId = projectId.trim(),
                 apiKey = apiKey.trim(),
@@ -130,31 +153,39 @@ class EnvironmentConfigManager @Inject constructor(
                 storageBucket = storageBucket?.trim()?.ifBlank { null },
                 gcmSenderId = gcmSenderId?.trim()?.ifBlank { null },
                 databaseUrl = databaseUrl?.trim()?.ifBlank { null },
-                databaseId = databaseId?.trim()?.ifBlank { null }
+                databaseId = resolvedDbId
             )
         } else {
-            // Built-in defaults for Development and Production/Deployment
-            if (env == AppEnvironment.DEVELOPMENT) {
-                FirebaseConfig(
-                    projectId = "allset-491218",
-                    apiKey = "AIzaSyBtlY7EoO6PgPUCMjNR55K88H2v665qQgQ",
-                    appId = "1:799427430422:android:e0f5737f12b8b9cbb20d37",
-                    storageBucket = "allset-491218.firebasestorage.app",
-                    gcmSenderId = "799427430422",
-                    databaseUrl = "https://allset-491218-default-rtdb.asia-southeast1.firebasedatabase.app",
-                    databaseId = null
-                )
-            } else {
-                FirebaseConfig(
-                    projectId = "allset-244ab",
-                    apiKey = "AIzaSyDLqHOgAdLBz9__Un_BI0ZMwz5l2ucJnKo",
-                    appId = "1:598633676290:android:e264397de748bf0371711b",
-                    storageBucket = "allset-244ab.firebasestorage.app",
-                    gcmSenderId = "598633676290",
-                    databaseUrl = null,
-                    databaseId = null
-                )
-            }
+            defaultFirebaseConfig(env)
+        }
+    }
+
+    companion object {
+        const val DEV_API_KEY = "AIzaSyBtlY7EoO6PgPUCMjNR55K88H2v665qQgQ"
+        const val PROD_API_KEY = "AIzaSyDLqHOgAdLBz9__Un_BI0ZMwz5l2ucJnKo"
+    }
+
+    private fun defaultFirebaseConfig(env: AppEnvironment): FirebaseConfig {
+        return if (env == AppEnvironment.DEVELOPMENT) {
+            FirebaseConfig(
+                projectId = "allset-491218",
+                apiKey = DEV_API_KEY,
+                appId = "1:799427430422:android:e0f5737f12b8b9cbb20d37",
+                storageBucket = "allset-491218.firebasestorage.app",
+                gcmSenderId = "799427430422",
+                databaseUrl = "https://allset-491218-default-rtdb.asia-southeast1.firebasedatabase.app",
+                databaseId = null
+            )
+        } else {
+            FirebaseConfig(
+                projectId = "allset-244ab",
+                apiKey = PROD_API_KEY,
+                appId = "1:598633676290:android:e264397de748bf0371711b",
+                storageBucket = "allset-244ab.firebasestorage.app",
+                gcmSenderId = "598633676290",
+                databaseUrl = null,
+                databaseId = "call-logs"
+            )
         }
     }
 

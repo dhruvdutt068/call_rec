@@ -248,8 +248,31 @@ class SyncWorker(
                     val startTime = System.currentTimeMillis()
                     val syncResult = supabaseService.syncSalesCalls(pendingSalesCalls)
                     val duration = System.currentTimeMillis() - startTime
-
-                    // CRM tables (calls_log, lead_communications) syncing disabled per configuration
+                    // Sync to CRM table lead_communications (triggers auto-association to leads_master)
+                    try {
+                        val crmEvents = pendingSalesCalls.map { sc ->
+                            val epochMs = try {
+                                java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", java.util.Locale.US).apply {
+                                    timeZone = java.util.TimeZone.getTimeZone("UTC")
+                                }.parse(sc.createdAt)?.time ?: System.currentTimeMillis()
+                            } catch (_: Exception) {
+                                System.currentTimeMillis()
+                            }
+                            com.example.callog.domain.crm.model.CrmCallEvent(
+                                callId = sc.callId,
+                                rawPhoneNumber = sc.buyerPhone,
+                                contactName = sc.buyerName,
+                                callType = sc.callType,
+                                durationSeconds = sc.duration,
+                                timestampEpochMs = epochMs,
+                                salespersonPhone = sc.salespersonPhone,
+                                salespersonName = sc.salespersonName
+                            )
+                        }
+                        crmRepository.publishBatchCallEvents(crmEvents)
+                    } catch (e: Exception) {
+                        DeveloperLogger.warning("CRM_COMM_SYNC_WARNING", "Failed syncing batch to lead_communications: ${e.message}", network = network)
+                    }
 
                     if (syncResult.isSuccess) {
                         for (salesCall in pendingSalesCalls) {

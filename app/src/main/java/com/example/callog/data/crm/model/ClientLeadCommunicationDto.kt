@@ -8,7 +8,7 @@ import kotlinx.serialization.Serializable
  */
 @Serializable
 data class ClientLeadCommunicationDto(
-    @SerialName("id") val id: String? = null,
+    @SerialName("id") val id: Long? = null,
     @SerialName("phone_number") val phoneNumber: String,
     @SerialName("lead_name") val leadName: String? = null,
     @SerialName("communication_type") val communicationType: String = "CALL",
