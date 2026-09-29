@@ -12,7 +12,7 @@ enum class AppEnvironment(val label: String) {
             return when (value?.trim()?.uppercase()) {
                 "PRODUCTION", "DEPLOYMENT" -> PRODUCTION
                 "DEVELOPMENT" -> DEVELOPMENT
-                else -> entries.firstOrNull { it.name.equals(value, ignoreCase = true) } ?: DEVELOPMENT
+                else -> entries.firstOrNull { it.name.equals(value, ignoreCase = true) } ?: PRODUCTION
             }
         }
     }

@@ -32,7 +32,7 @@ class EnvironmentConfigManager @Inject constructor(
     private val environmentChangeListeners = mutableListOf<() -> Unit>()
 
     private fun loadActiveEnvironment(): AppEnvironment {
-        val raw = prefs.getString(KEY_ACTIVE_ENV, AppEnvironment.DEVELOPMENT.name)
+        val raw = prefs.getString(KEY_ACTIVE_ENV, AppEnvironment.PRODUCTION.name)
         return AppEnvironment.fromString(raw)
     }
 

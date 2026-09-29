@@ -63,8 +63,8 @@ class CallViewModel @Inject constructor(
 
     fun setEnvironment(env: com.example.callog.domain.model.AppEnvironment) {
         environmentConfigManager.setActiveEnvironment(env)
-        loadFirebaseConfig()
-        loadSupabaseConfig()
+        // FirestoreService and SupabaseService react automatically via their
+        // registered EnvironmentConfigManager listeners — no manual reload needed.
         DeveloperLogger.info("CallViewModel", "Active environment switched to: ${env.label}")
     }
 

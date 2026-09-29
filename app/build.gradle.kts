@@ -25,6 +25,7 @@ android {
 
     buildFeatures {
         compose = true
+        resValues = true
     }
 
     compileOptions {
@@ -42,6 +43,19 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+        }
+    }
+
+    flavorDimensions += "environment"
+
+    productFlavors {
+        create("dev") {
+            dimension = "environment"
+            resValue("string", "app_environment", "Development")
+        }
+        create("prod") {
+            dimension = "environment"
+            resValue("string", "app_environment", "Production")
         }
     }
 

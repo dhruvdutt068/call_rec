@@ -29,7 +29,7 @@ object DeveloperLogger {
         // Auto-prune old bloated logs in background on app start to prevent CursorWindow overflow
         CoroutineScope(Dispatchers.IO).launch {
             try {
-                dao.trimLogs(300)
+                dao.trimLogs(100)
             } catch (e: Exception) {
                 Log.e("DevLogger", "Failed to auto-trim sync logs on init", e)
             }
@@ -93,9 +93,9 @@ object DeveloperLogger {
                 )
 
                 logCountSinceLastTrim++
-                if (logCountSinceLastTrim >= 50) {
+                if (logCountSinceLastTrim >= 20) {
                     logCountSinceLastTrim = 0
-                    dao.trimLogs(300)
+                    dao.trimLogs(100)
                 }
             } catch (e: Exception) {
                 Log.e("DevLogger", "Failed to write log to local database", e)

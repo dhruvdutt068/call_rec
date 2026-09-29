@@ -29,6 +29,8 @@ Thumbs.db
 
 # Google Services & Sensitive Credentials
 /app/google-services.json
+/app/src/dev/google-services.json
+/app/src/prod/google-services.json
 google-services.json
 
 # Supabase credentials (never commit real keys)
