@@ -170,32 +170,12 @@ class EnvironmentConfigManager @Inject constructor(
     }
 
     companion object {
-        const val DEV_API_KEY = "AIzaSyBtlY7EoO6PgPUCMjNR55K88H2v665qQgQ"
-        const val PROD_API_KEY = "AIzaSyDLqHOgAdLBz9__Un_BI0ZMwz5l2ucJnKo"
+        val DEV_API_KEY: String get() = FirebaseDefaults.DEV_CONFIG.apiKey
+        val PROD_API_KEY: String get() = FirebaseDefaults.PROD_CONFIG.apiKey
     }
 
     private fun defaultFirebaseConfig(env: AppEnvironment): FirebaseConfig {
-        return if (env == AppEnvironment.DEVELOPMENT) {
-            FirebaseConfig(
-                projectId = "allset-491218",
-                apiKey = DEV_API_KEY,
-                appId = "1:799427430422:android:e0f5737f12b8b9cbb20d37",
-                storageBucket = "allset-491218.firebasestorage.app",
-                gcmSenderId = "799427430422",
-                databaseUrl = "https://allset-491218-default-rtdb.asia-southeast1.firebasedatabase.app",
-                databaseId = null
-            )
-        } else {
-            FirebaseConfig(
-                projectId = "allset-244ab",
-                apiKey = PROD_API_KEY,
-                appId = "1:598633676290:android:e264397de748bf0371711b",
-                storageBucket = "allset-244ab.firebasestorage.app",
-                gcmSenderId = "598633676290",
-                databaseUrl = null,
-                databaseId = "call-logs"
-            )
-        }
+        return FirebaseDefaults.forEnvironment(env)
     }
 
     fun getActiveFirebaseConfig(): FirebaseConfig? {

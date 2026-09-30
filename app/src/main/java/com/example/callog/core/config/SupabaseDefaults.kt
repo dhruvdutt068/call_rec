@@ -1,23 +1,24 @@
 package com.example.callog.core.config
 
+import com.example.callog.BuildConfig
+
 /**
- * Single source of truth for hardcoded client / production Supabase credentials.
- * Whenever client credentials need to be updated in the repository, edit this file.
+ * Single source of truth for Supabase credentials and constants.
+ * URLs and Anon Keys are injected at compile time from `secrets.properties` via `BuildConfig`.
  */
 object SupabaseDefaults {
     // Development Supabase (defaults to working client instance)
-    const val DEV_URL = "https://qizrtmvgcwxuycbpkeua.supabase.co"
-    const val DEV_ANON_KEY =
-        "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFpenJ0bXZnY3d4dXljYnBrZXVhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM3NTAzNTMsImV4cCI6MjA5OTMyNjM1M30.wLHCz8zv79ySmPSnI6Z-WSdD7s9qvzCxVxYQOnIh5WU"
+    val DEV_URL: String = BuildConfig.SUPABASE_DEV_URL
+    val DEV_ANON_KEY: String = BuildConfig.SUPABASE_DEV_ANON_KEY
 
     // Production Supabase
-    const val PROD_URL = "https://nmhgdhehsfcootlqwumw.supabase.co"
-    const val PROD_ANON_KEY =
-        "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5taGdkaGVoc2Zjb290bHF3dW13Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODgzMjc1OTEsImV4cCI6MjEwMzkwMzU5MX0.ThJvtEr2kmmaPQIPFBy-bCJIliHVqv2m_2SS-ZR2Gm0"
+    val PROD_URL: String = BuildConfig.SUPABASE_PROD_URL
+    val PROD_ANON_KEY: String = BuildConfig.SUPABASE_PROD_ANON_KEY
 
     // Default points to Production (AllSet CRM)
-    const val DEFAULT_URL = PROD_URL
-    const val DEFAULT_ANON_KEY = PROD_ANON_KEY
+    val DEFAULT_URL: String = PROD_URL
+    val DEFAULT_ANON_KEY: String = PROD_ANON_KEY
+
     const val TABLE_SALES_CALLS = "sales_calls"
     const val TABLE_PEOPLE = "people"
     const val TABLE_PHONE_NUMBERS = "phone_numbers"

@@ -1,6 +1,7 @@
 package com.example.callog.data.repository
 
 import android.util.Log
+import com.example.callog.core.config.FirebaseDefaults
 import com.example.callog.core.config.SupabaseDefaults
 import com.example.callog.data.local.dao.PresetDao
 import com.example.callog.data.local.entity.PresetEntity
@@ -196,12 +197,12 @@ class PresetRepositoryImpl @Inject constructor(
             description = "Default local sandbox with debug tools and test backend",
             configuration = PresetConfiguration(
                 supabaseUrl = SupabaseDefaults.DEV_URL,
-                firebaseProjectId = "allset-491218",
-                firebaseAppId = "1:799427430422:android:e0f5737f12b8b9cbb20d37",
-                storageBucket = "allset-491218.firebasestorage.app",
-                gcmSenderId = "799427430422",
-                databaseUrl = "https://allset-491218-default-rtdb.asia-southeast1.firebasedatabase.app",
-                firebaseDatabaseId = null,
+                firebaseProjectId = FirebaseDefaults.DEV_CONFIG.projectId,
+                firebaseAppId = FirebaseDefaults.DEV_CONFIG.appId,
+                storageBucket = FirebaseDefaults.DEV_CONFIG.storageBucket,
+                gcmSenderId = FirebaseDefaults.DEV_CONFIG.gcmSenderId,
+                databaseUrl = FirebaseDefaults.DEV_CONFIG.databaseUrl,
+                firebaseDatabaseId = FirebaseDefaults.DEV_CONFIG.databaseId,
                 apiBaseUrl = "https://dev-api.callog.internal",
                 features = mapOf(
                     PresetConfiguration.FEATURE_DEV_DIAGNOSTICS to true,
@@ -216,7 +217,7 @@ class PresetRepositoryImpl @Inject constructor(
         )
         val devSecrets = PresetSecrets(
             supabaseAnonKey = SupabaseDefaults.DEV_ANON_KEY,
-            firebaseApiKey = "AIzaSyBtlY7EoO6PgPUCMjNR55K88H2v665qQgQ",
+            firebaseApiKey = FirebaseDefaults.DEV_CONFIG.apiKey,
             apiKey = "dev_api_key_sample"
         )
 
@@ -228,12 +229,12 @@ class PresetRepositoryImpl @Inject constructor(
             description = "Live customer environment with strict security",
             configuration = PresetConfiguration(
                 supabaseUrl = SupabaseDefaults.PROD_URL,
-                firebaseProjectId = "allset-244ab",
-                firebaseAppId = "1:598633676290:android:e264397de748bf0371711b",
-                storageBucket = "allset-244ab.firebasestorage.app",
-                gcmSenderId = "598633676290",
-                databaseUrl = null,
-                firebaseDatabaseId = "call-logs",
+                firebaseProjectId = FirebaseDefaults.PROD_CONFIG.projectId,
+                firebaseAppId = FirebaseDefaults.PROD_CONFIG.appId,
+                storageBucket = FirebaseDefaults.PROD_CONFIG.storageBucket,
+                gcmSenderId = FirebaseDefaults.PROD_CONFIG.gcmSenderId,
+                databaseUrl = FirebaseDefaults.PROD_CONFIG.databaseUrl,
+                firebaseDatabaseId = FirebaseDefaults.PROD_CONFIG.databaseId,
                 apiBaseUrl = "https://api.callog.com",
                 features = mapOf(
                     PresetConfiguration.FEATURE_DEV_DIAGNOSTICS to false,
@@ -248,7 +249,7 @@ class PresetRepositoryImpl @Inject constructor(
         )
         val prodSecrets = PresetSecrets(
             supabaseAnonKey = SupabaseDefaults.PROD_ANON_KEY,
-            firebaseApiKey = "AIzaSyDLqHOgAdLBz9__Un_BI0ZMwz5l2ucJnKo",
+            firebaseApiKey = FirebaseDefaults.PROD_CONFIG.apiKey,
             apiKey = ""
         )
 
@@ -271,7 +272,7 @@ class PresetRepositoryImpl @Inject constructor(
             val existingDevEntity = presetDao.getPresetById(devId)
             if (existingDevEntity != null) {
                 val existingDev = existingDevEntity.toDomain(json)
-                if (existingDev.configuration.firebaseProjectId != "allset-491218" ||
+                if (existingDev.configuration.firebaseProjectId != FirebaseDefaults.DEV_CONFIG.projectId ||
                     existingDev.configuration.supabaseUrl != SupabaseDefaults.DEV_URL) {
                     val updatedDev = devPreset.copy(isActive = existingDev.isActive)
                     presetDao.insertOrUpdate(PresetEntity.fromDomain(updatedDev, json))
@@ -282,9 +283,9 @@ class PresetRepositoryImpl @Inject constructor(
             val existingProdEntity = presetDao.getPresetById(prodId)
             if (existingProdEntity != null) {
                 val existingProd = existingProdEntity.toDomain(json)
-                if (existingProd.configuration.firebaseProjectId != "allset-244ab" ||
+                if (existingProd.configuration.firebaseProjectId != FirebaseDefaults.PROD_CONFIG.projectId ||
                     existingProd.configuration.supabaseUrl != SupabaseDefaults.PROD_URL ||
-                    existingProd.configuration.firebaseDatabaseId != "call-logs") {
+                    existingProd.configuration.firebaseDatabaseId != FirebaseDefaults.PROD_CONFIG.databaseId) {
                     val updatedProd = prodPreset.copy(
                         isActive = existingProd.isActive,
                         configuration = prodPreset.configuration.copy(
