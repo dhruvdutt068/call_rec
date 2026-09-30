@@ -508,37 +508,6 @@ object DatabaseModule {
                 db.execSQL("CREATE INDEX IF NOT EXISTS `index_lead_statuses_sortOrder` ON `lead_statuses` (`sortOrder`)")
 
                 db.execSQL("""
-                    CREATE TABLE IF NOT EXISTS `calls_log` (
-                        `phoneNumber` TEXT NOT NULL,
-                        `leadName` TEXT,
-                        `journeyStage` TEXT,
-                        `botStatus` TEXT,
-                        `pauseReason` TEXT,
-                        `bhk` TEXT,
-                        `locality` TEXT,
-                        `budgetMin` REAL,
-                        `budgetMax` REAL,
-                        `timeline` TEXT,
-                        `purpose` TEXT,
-                        `amenities` TEXT,
-                        `requirementsComplete` INTEGER,
-                        `pdfStatus` TEXT,
-                        `pdfSentAt` TEXT,
-                        `meetingScheduledAt` TEXT,
-                        `campaignName` TEXT,
-                        `brokerName` TEXT,
-                        `lastMessageAt` TEXT,
-                        `lastMessageText` TEXT,
-                        `createdAt` TEXT,
-                        `updatedAt` TEXT,
-                        PRIMARY KEY(`phoneNumber`)
-                    )
-                """.trimIndent())
-                db.execSQL("CREATE INDEX IF NOT EXISTS `index_calls_log_journeyStage` ON `calls_log` (`journeyStage`)")
-                db.execSQL("CREATE INDEX IF NOT EXISTS `index_calls_log_botStatus` ON `calls_log` (`botStatus`)")
-                db.execSQL("CREATE INDEX IF NOT EXISTS `index_calls_log_updatedAt` ON `calls_log` (`updatedAt`)")
-
-                db.execSQL("""
                     CREATE TABLE IF NOT EXISTS `lead_tasks` (
                         `id` INTEGER NOT NULL,
                         `leadId` INTEGER NOT NULL,
@@ -581,6 +550,16 @@ object DatabaseModule {
         }
     }
 
+    private val MIGRATION_24_25 = object : Migration(24, 25) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            try {
+                db.execSQL("DROP TABLE IF EXISTS `calls_log`")
+            } catch (e: Exception) {
+                android.util.Log.e("DatabaseModule", "Failed to migrate database to v25", e)
+            }
+        }
+    }
+
     @Provides
     @Singleton
     fun provideDatabase(
@@ -602,7 +581,8 @@ object DatabaseModule {
             MIGRATION_20_21,
             MIGRATION_21_22,
             MIGRATION_22_23,
-            MIGRATION_23_24
+            MIGRATION_23_24,
+            MIGRATION_24_25
         )
          .fallbackToDestructiveMigration()
          .build()
@@ -676,11 +656,6 @@ object DatabaseModule {
     @Provides
     fun provideLeadStatusDao(db: CallVaultDatabase): com.example.callog.data.local.dao.LeadStatusDao {
         return db.leadStatusDao()
-    }
-
-    @Provides
-    fun provideCallsLogDao(db: CallVaultDatabase): com.example.callog.data.local.dao.CallsLogDao {
-        return db.callsLogDao()
     }
 
     @Provides

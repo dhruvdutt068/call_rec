@@ -48,11 +48,9 @@ class SyncWorker(
         fun personRepository(): com.example.callog.domain.repository.PersonRepository
         fun personDao(): com.example.callog.data.local.dao.PersonDao
         fun leadDao(): com.example.callog.data.local.dao.LeadDao
-        fun crmRepository(): com.example.callog.domain.crm.repository.CrmRepository
         fun leadMasterDao(): com.example.callog.data.local.dao.LeadMasterDao
         fun leadStageDao(): com.example.callog.data.local.dao.LeadStageDao
         fun leadStatusDao(): com.example.callog.data.local.dao.LeadStatusDao
-        fun callsLogDao(): com.example.callog.data.local.dao.CallsLogDao
         fun contactRingtoneSyncManager(): com.example.callog.data.provider.ContactRingtoneSyncManager
     }
 
@@ -77,11 +75,9 @@ class SyncWorker(
         val personRepository = entryPoint.personRepository()
         val personDao = entryPoint.personDao()
         val leadDao = entryPoint.leadDao()
-        val crmRepository = entryPoint.crmRepository()
         val leadMasterDao = entryPoint.leadMasterDao()
         val leadStageDao = entryPoint.leadStageDao()
         val leadStatusDao = entryPoint.leadStatusDao()
-        val callsLogDao = entryPoint.callsLogDao()
         val contactRingtoneSyncManager = entryPoint.contactRingtoneSyncManager()
 
         // Start new logger session
@@ -262,31 +258,6 @@ class SyncWorker(
                     val startTime = System.currentTimeMillis()
                     val syncResult = supabaseService.syncSalesCalls(pendingSalesCalls)
                     val duration = System.currentTimeMillis() - startTime
-                    // Sync to CRM table lead_communications (triggers auto-association to leads_master)
-                    try {
-                        val crmEvents = pendingSalesCalls.map { sc ->
-                            val epochMs = try {
-                                java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", java.util.Locale.US).apply {
-                                    timeZone = java.util.TimeZone.getTimeZone("UTC")
-                                }.parse(sc.createdAt)?.time ?: System.currentTimeMillis()
-                            } catch (_: Exception) {
-                                System.currentTimeMillis()
-                            }
-                            com.example.callog.domain.crm.model.CrmCallEvent(
-                                callId = sc.callId,
-                                rawPhoneNumber = sc.buyerPhone,
-                                contactName = sc.buyerName,
-                                callType = sc.callType,
-                                durationSeconds = sc.duration,
-                                timestampEpochMs = epochMs,
-                                salespersonPhone = sc.salespersonPhone,
-                                salespersonName = sc.salespersonName
-                            )
-                        }
-                        crmRepository.publishBatchCallEvents(crmEvents)
-                    } catch (e: Exception) {
-                        DeveloperLogger.warning("CRM_COMM_SYNC_WARNING", "Failed syncing batch to lead_communications: ${e.message}", network = network)
-                    }
 
                     if (syncResult.isSuccess) {
                         for (salesCall in pendingSalesCalls) {
@@ -331,7 +302,7 @@ class SyncWorker(
                 DeveloperLogger.error("SUPABASE_LEAD_UPLOAD_FAILED", "Exception occurred during Supabase lead sync execution", exception = e, network = network)
             }
 
-            // Step 2e: Pull latest Supabase data into local Room DB (leads_master, lead_stages, lead_statuses, sales_calls, calls_log)
+            // Step 2e: Pull latest Supabase data into local Room DB (leads_master, lead_stages, lead_statuses, sales_calls)
             if (connectivityService.isConnected()) {
                 try {
                     // 1. Sync lead stages & statuses
@@ -386,15 +357,6 @@ class SyncWorker(
                                 )
                             }
                             salesCallDao.insertSalesCalls(entities)
-                        }
-                    }
-
-                    // 4. Pull calls_log from Supabase
-                    val callsLogRes = supabaseService.fetchCallsLog(limit = 200)
-                    if (callsLogRes.isSuccess) {
-                        val remoteCallsLogs = callsLogRes.getOrDefault(emptyList())
-                        if (remoteCallsLogs.isNotEmpty()) {
-                            callsLogDao.insertCallsLogs(remoteCallsLogs.map { com.example.callog.data.local.entity.CallsLogEntity.fromRemote(it) })
                         }
                     }
                 } catch (e: Exception) {

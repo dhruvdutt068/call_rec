@@ -718,26 +718,6 @@ class SupabaseService @Inject constructor(
         }
     }
 
-    suspend fun fetchCallsLog(limit: Long = 500): Result<List<com.example.callog.data.crm.model.ClientCallsLogDto>> = withContext(Dispatchers.IO) {
-        return@withContext try {
-            val logs = getClient().from(SupabaseDefaults.TABLE_CALLS_LOG)
-                .select {
-                    limit(limit)
-                }
-                .decodeList<com.example.callog.data.crm.model.ClientCallsLogDto>()
-            Result.success(logs)
-        } catch (e: Exception) {
-            val msg = e.message.orEmpty()
-            if (msg.contains("PGRST205") || msg.contains("Could not find the table", ignoreCase = true)) {
-                Log.w(TAG, "Table '${SupabaseDefaults.TABLE_CALLS_LOG}' not found in Supabase schema cache; returning empty.")
-                Result.success(emptyList())
-            } else {
-                Log.e(TAG, "Error fetching calls_log from Supabase", e)
-                Result.failure(e)
-            }
-        }
-    }
-
     suspend fun fetchLeadTasks(leadId: Long? = null, limit: Long = 100): Result<List<com.example.callog.data.remote.model.SupabaseLeadTask>> = withContext(Dispatchers.IO) {
         return@withContext try {
             val tasks = getClient().from(SupabaseDefaults.TABLE_LEAD_TASKS)

@@ -28,9 +28,7 @@ object SupabaseDefaults {
     const val TABLE_LEADS_MASTER = "leads_master"
     const val TABLE_LEAD_STAGES = "lead_stages"
     const val TABLE_LEAD_STATUSES = "lead_statuses"
-    const val TABLE_LEAD_COMMUNICATIONS = "lead_communications"
     const val TABLE_LEAD_TASKS = "lead_tasks"
     const val TABLE_LEAD_NOTES = "lead_notes"
     const val TABLE_LEAD_STATE_HISTORY = "lead_state_history"
-    const val TABLE_CALLS_LOG = "calls_log"
 }

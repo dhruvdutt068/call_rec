@@ -1,8 +1,7 @@
 package com.example.callog.domain.crm.model
 
 /**
- * Technical integration event published when a call is logged or synchronized in Callog.
- * The CRM adapter translates this event into external CRM records (e.g. calls_log, lead_communications).
+ * Technical integration event published when a call interaction event occurs in Callog.
  */
 data class CrmCallEvent(
     val callId: Long,

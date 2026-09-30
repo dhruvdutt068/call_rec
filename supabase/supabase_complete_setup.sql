@@ -279,65 +279,7 @@ CREATE INDEX IF NOT EXISTS idx_sales_calls_buyer ON public.sales_calls(buyer_pho
 CREATE INDEX IF NOT EXISTS idx_sales_calls_person_id ON public.sales_calls(person_id);
 CREATE INDEX IF NOT EXISTS idx_sales_calls_created_at ON public.sales_calls(created_at);
 
--- 3.2 LEAD_COMMUNICATIONS TABLE
-DO $$
-BEGIN
-    ALTER TABLE public.lead_communications ALTER COLUMN fk_lead_id DROP NOT NULL;
-EXCEPTION WHEN OTHERS THEN NULL;
-END $$;
-
-DO $$
-BEGIN
-    IF EXISTS (
-        SELECT 1 FROM information_schema.columns 
-        WHERE table_schema = 'public' AND table_name = 'lead_communications' 
-          AND column_name = 'id' AND data_type = 'bigint'
-    ) THEN
-        ALTER TABLE public.lead_communications ALTER COLUMN id TYPE TEXT USING id::TEXT;
-    END IF;
-    ALTER TABLE public.lead_communications ALTER COLUMN id SET DEFAULT gen_random_uuid()::TEXT;
-EXCEPTION WHEN OTHERS THEN NULL;
-END $$;
-
-ALTER TABLE public.lead_communications ADD COLUMN IF NOT EXISTS phone_number TEXT;
-ALTER TABLE public.lead_communications ADD COLUMN IF NOT EXISTS lead_name TEXT;
-ALTER TABLE public.lead_communications ADD COLUMN IF NOT EXISTS communication_type TEXT NOT NULL DEFAULT 'CALL';
-ALTER TABLE public.lead_communications ADD COLUMN IF NOT EXISTS call_type TEXT NOT NULL DEFAULT 'INCOMING';
-ALTER TABLE public.lead_communications ADD COLUMN IF NOT EXISTS duration INTEGER NOT NULL DEFAULT 0;
-ALTER TABLE public.lead_communications ADD COLUMN IF NOT EXISTS agent_phone TEXT;
-ALTER TABLE public.lead_communications ADD COLUMN IF NOT EXISTS agent_name TEXT;
-ALTER TABLE public.lead_communications ADD COLUMN IF NOT EXISTS recording_url TEXT;
-ALTER TABLE public.lead_communications ADD COLUMN IF NOT EXISTS notes TEXT;
-ALTER TABLE public.lead_communications ADD COLUMN IF NOT EXISTS call_id BIGINT;
-
-CREATE INDEX IF NOT EXISTS idx_lead_comm_phone ON public.lead_communications (phone_number);
-CREATE INDEX IF NOT EXISTS idx_lead_comm_call_id ON public.lead_communications (call_id);
-CREATE INDEX IF NOT EXISTS idx_lead_comm_created_at ON public.lead_communications (created_at);
-
--- Trigger: Automatically link lead_communications to leads_master by phone number
-CREATE OR REPLACE FUNCTION public.trg_lead_communications_link_lead()
-RETURNS TRIGGER
-LANGUAGE plpgsql
-AS $$
-BEGIN
-    IF NEW.fk_lead_id IS NULL AND NEW.phone_number IS NOT NULL AND NEW.phone_number <> '' THEN
-        SELECT id INTO NEW.fk_lead_id
-        FROM public.leads_master
-        WHERE lead_mobile::TEXT = public.normalize_phone_number(NEW.phone_number)
-           OR RIGHT(lead_mobile::TEXT, 10) = public.normalize_phone_number(NEW.phone_number)
-        ORDER BY updated_at DESC
-        LIMIT 1;
-    END IF;
-    RETURN NEW;
-END;
-$$;
-
-DROP TRIGGER IF EXISTS trg_lead_comm_link_lead ON public.lead_communications;
-CREATE TRIGGER trg_lead_comm_link_lead
-BEFORE INSERT OR UPDATE ON public.lead_communications
-FOR EACH ROW EXECUTE FUNCTION public.trg_lead_communications_link_lead();
-
--- 3.3 LEADS_MASTER & LEAD_SOURCES TRIGGER
+-- 3.2 LEADS_MASTER & LEAD_SOURCES TRIGGER
 CREATE OR REPLACE FUNCTION public.set_lead_source_fk()
 RETURNS TRIGGER
 LANGUAGE plpgsql
@@ -697,8 +639,6 @@ ALTER TABLE public.people ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.phone_numbers ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.contact_aliases ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.leads ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.calls_log ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.lead_communications ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.conversations ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.conversation_messages ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.lead_statuses ENABLE ROW LEVEL SECURITY;
@@ -726,12 +666,6 @@ CREATE POLICY "Allow anon all on contact_aliases" ON public.contact_aliases FOR 
 
 DROP POLICY IF EXISTS "Allow anon all on leads" ON public.leads;
 CREATE POLICY "Allow anon all on leads" ON public.leads FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
-
-DROP POLICY IF EXISTS "Allow anon all on calls_log" ON public.calls_log;
-CREATE POLICY "Allow anon all on calls_log" ON public.calls_log FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
-
-DROP POLICY IF EXISTS "Allow anon all on lead_communications" ON public.lead_communications;
-CREATE POLICY "Allow anon all on lead_communications" ON public.lead_communications FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
 
 DROP POLICY IF EXISTS "Allow anon all on conversations" ON public.conversations;
 CREATE POLICY "Allow anon all on conversations" ON public.conversations FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
@@ -764,8 +698,6 @@ GRANT ALL ON TABLE public.people TO anon, authenticated, service_role;
 GRANT ALL ON TABLE public.phone_numbers TO anon, authenticated, service_role;
 GRANT ALL ON TABLE public.contact_aliases TO anon, authenticated, service_role;
 GRANT ALL ON TABLE public.leads TO anon, authenticated, service_role;
-GRANT ALL ON TABLE public.calls_log TO anon, authenticated, service_role;
-GRANT ALL ON TABLE public.lead_communications TO anon, authenticated, service_role;
 GRANT ALL ON TABLE public.conversations TO anon, authenticated, service_role;
 GRANT ALL ON TABLE public.conversation_messages TO anon, authenticated, service_role;
 GRANT ALL ON TABLE public.lead_statuses TO anon, authenticated, service_role;

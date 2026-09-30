@@ -26,11 +26,10 @@ import com.example.callog.data.local.entity.*
         LeadMasterEntity::class,
         LeadStageEntity::class,
         LeadStatusEntity::class,
-        CallsLogEntity::class,
         LeadTaskEntity::class,
         LeadNoteEntity::class
     ],
-    version = 24,
+    version = 25,
     exportSchema = false
 )
 @TypeConverters(Converters::class)
@@ -49,7 +48,6 @@ abstract class CallVaultDatabase : RoomDatabase() {
     abstract fun leadMasterDao(): LeadMasterDao
     abstract fun leadStageDao(): LeadStageDao
     abstract fun leadStatusDao(): LeadStatusDao
-    abstract fun callsLogDao(): CallsLogDao
     abstract fun leadTaskDao(): LeadTaskDao
     abstract fun leadNoteDao(): LeadNoteDao
 }

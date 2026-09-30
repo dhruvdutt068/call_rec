@@ -1,6 +1,5 @@
 package com.example.callog.data.local
 
-import com.example.callog.data.crm.model.ClientCallsLogDto
 import com.example.callog.data.local.entity.*
 import com.example.callog.data.remote.model.*
 import kotlinx.serialization.json.Json
@@ -73,31 +72,6 @@ class RoomSupabaseRefactorTest {
         assertFalse(statusEntity.countsAsActive)
     }
 
-    @Test
-    fun testCallsLogEntityMapping() {
-        val dto = ClientCallsLogDto(
-            phoneNumber = "+919876543210",
-            leadName = "Jane Smith",
-            journeyStage = "Site Visit Scheduled",
-            botStatus = "active",
-            bhk = "3 BHK",
-            locality = "Downtown",
-            budgetMin = 85.0,
-            budgetMax = 120.0,
-            requirementsComplete = true
-        )
-        val entity = CallsLogEntity.fromRemote(dto)
-        assertEquals("+919876543210", entity.phoneNumber)
-        assertEquals("Jane Smith", entity.leadName)
-        assertEquals("3 BHK", entity.bhk)
-        assertEquals(85.0, entity.budgetMin)
-        assertEquals(true, entity.requirementsComplete)
-
-        val roundTrip = entity.toRemote()
-        assertEquals(dto.phoneNumber, roundTrip.phoneNumber)
-        assertEquals(dto.leadName, roundTrip.leadName)
-        assertEquals(dto.bhk, roundTrip.bhk)
-    }
 
     @Test
     fun testLeadTaskAndNoteMapping() {
@@ -153,14 +127,6 @@ class RoomSupabaseRefactorTest {
             assertEquals(statuses.size, entities.size)
         }
 
-        // 3. Verify DEV calls_log
-        val callsLogFile = File(dataDir, "dev_calls_log.json")
-        if (callsLogFile.exists()) {
-            val logs = json.decodeFromString<List<ClientCallsLogDto>>(readCleanJson(callsLogFile))
-            assertTrue("Expected calls_log from Supabase", logs.isNotEmpty())
-            val entities = logs.map { CallsLogEntity.fromRemote(it) }
-            assertEquals(logs.size, entities.size)
-        }
 
         // 4. Verify DEV leads_master
         val leadsFile = File(dataDir, "dev_leads_master.json")
