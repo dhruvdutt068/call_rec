@@ -49,6 +49,8 @@ fun DeveloperDashboardScreen(
 
     val pendingCallsCount = allCalls.count { it.syncStatus != "SYNCED" }
     val pendingSalesCallsCount = allSalesCalls.count { it.syncStatus != "SYNCED" }
+    val pendingRecordingsCount = allCalls.count { it.recordingPath != null && it.recordingUploadStatus != "SUCCESS" }
+    val syncProgress by viewModel.syncProgress.collectAsState()
 
     val lastSyncLog = syncLogs.firstOrNull { it.event == "SYNC_COMPLETED" || it.event == "SYNC_FAILED" }
     val lastSyncTime = lastSyncLog?.timestamp?.let {
@@ -124,6 +126,39 @@ fun DeveloperDashboardScreen(
 
             // Section 1: Health & Sync Status Card
             DashboardSectionHeader(title = "Synchronization Health")
+            if (isSyncing) {
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = Teal500.copy(alpha = 0.15f),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, Teal500.copy(alpha = 0.3f)),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier.padding(14.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(20.dp),
+                            color = Teal300,
+                            strokeWidth = 2.5.dp
+                        )
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column {
+                            Text(
+                                text = "Active Synchronization",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = Teal300,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text(
+                                text = syncProgress ?: "Processing pipeline...",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Slate300
+                            )
+                        }
+                    }
+                }
+            }
             GlassyCard(modifier = Modifier.fillMaxWidth()) {
                 Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
                     TelemetryRow(
@@ -202,6 +237,14 @@ fun DeveloperDashboardScreen(
                     )
 
                     TelemetryRow(
+                        icon = Icons.Default.Mic,
+                        iconTint = AllSetLavender,
+                        label = "Recordings Awaiting Upload",
+                        value = "$pendingRecordingsCount files",
+                        valueColor = if (pendingRecordingsCount > 0) AllSetAmber else Slate50
+                    )
+
+                    TelemetryRow(
                         icon = Icons.Default.SnippetFolder,
                         iconTint = AllSetLavender,
                         label = "Local SQLite DB Size",
@@ -259,6 +302,27 @@ fun DeveloperDashboardScreen(
                 Icon(Icons.Default.Mic, contentDescription = null)
                 Spacer(modifier = Modifier.width(8.dp))
                 Text("Open Recording Diagnostics", fontWeight = FontWeight.Bold)
+            }
+
+            Button(
+                onClick = { viewModel.syncLogs() },
+                enabled = !isSyncing,
+                modifier = Modifier.fillMaxWidth().height(48.dp),
+                shape = RoundedCornerShape(8.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    contentColor = MaterialTheme.colorScheme.onPrimary
+                )
+            ) {
+                if (isSyncing) {
+                    CircularProgressIndicator(modifier = Modifier.size(18.dp), color = MaterialTheme.colorScheme.onPrimary, strokeWidth = 2.dp)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Syncing in Progress...", fontWeight = FontWeight.Bold)
+                } else {
+                    Icon(Icons.Default.Sync, contentDescription = null)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Trigger Manual Synchronization", fontWeight = FontWeight.Bold)
+                }
             }
 
             Button(

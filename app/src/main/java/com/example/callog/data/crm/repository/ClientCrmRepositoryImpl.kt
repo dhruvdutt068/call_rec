@@ -7,6 +7,7 @@ import com.example.callog.domain.crm.model.CrmCallEvent
 import com.example.callog.domain.crm.model.CrmLeadSummary
 import com.example.callog.domain.crm.repository.CrmRepository
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
@@ -16,15 +17,40 @@ import javax.inject.Singleton
 
 @Singleton
 class ClientCrmRepositoryImpl @Inject constructor(
-    private val remoteDataSource: ClientCrmRemoteDataSource
+    private val remoteDataSource: ClientCrmRemoteDataSource,
+    private val callsLogDao: com.example.callog.data.local.dao.CallsLogDao
 ) : CrmRepository {
 
     override suspend fun findLeadByPhone(rawPhoneNumber: String): Result<CrmLeadSummary?> = withContext(Dispatchers.IO) {
         if (rawPhoneNumber.isBlank()) return@withContext Result.success(null)
         val crmPhone = CrmPayloadMapper.toCrmPhoneNumber(rawPhoneNumber)
+
+        // 1. Check local Room database cache first
+        val localCached = callsLogDao.getCallsLogByPhone(crmPhone) 
+            ?: callsLogDao.getCallsLogByPhone(rawPhoneNumber.trim())
+        if (localCached != null) {
+            val summary = CrmPayloadMapper.toDomainLeadSummary(localCached.toRemote())
+            // Return cached and refresh in background
+            kotlinx.coroutines.CoroutineScope(Dispatchers.IO).launch {
+                try {
+                    val remote = remoteDataSource.findLeadByPhone(crmPhone).getOrNull()
+                    if (remote != null) {
+                        callsLogDao.insertCallsLog(com.example.callog.data.local.entity.CallsLogEntity.fromRemote(remote))
+                    }
+                } catch (_: Exception) {}
+            }
+            return@withContext Result.success(summary)
+        }
+
+        // 2. Fetch from remote
         val remoteResult = remoteDataSource.findLeadByPhone(crmPhone)
         remoteResult.map { dto ->
-            dto?.let { CrmPayloadMapper.toDomainLeadSummary(it) }
+            if (dto != null) {
+                callsLogDao.insertCallsLog(com.example.callog.data.local.entity.CallsLogEntity.fromRemote(dto))
+                CrmPayloadMapper.toDomainLeadSummary(dto)
+            } else {
+                null
+            }
         }
     }
 

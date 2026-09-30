@@ -49,6 +49,11 @@ class SyncWorker(
         fun personDao(): com.example.callog.data.local.dao.PersonDao
         fun leadDao(): com.example.callog.data.local.dao.LeadDao
         fun crmRepository(): com.example.callog.domain.crm.repository.CrmRepository
+        fun leadMasterDao(): com.example.callog.data.local.dao.LeadMasterDao
+        fun leadStageDao(): com.example.callog.data.local.dao.LeadStageDao
+        fun leadStatusDao(): com.example.callog.data.local.dao.LeadStatusDao
+        fun callsLogDao(): com.example.callog.data.local.dao.CallsLogDao
+        fun contactRingtoneSyncManager(): com.example.callog.data.provider.ContactRingtoneSyncManager
     }
 
     override suspend fun doWork(): Result {
@@ -73,6 +78,11 @@ class SyncWorker(
         val personDao = entryPoint.personDao()
         val leadDao = entryPoint.leadDao()
         val crmRepository = entryPoint.crmRepository()
+        val leadMasterDao = entryPoint.leadMasterDao()
+        val leadStageDao = entryPoint.leadStageDao()
+        val leadStatusDao = entryPoint.leadStatusDao()
+        val callsLogDao = entryPoint.callsLogDao()
+        val contactRingtoneSyncManager = entryPoint.contactRingtoneSyncManager()
 
         // Start new logger session
         val syncId = DeveloperLogger.startNewSession()
@@ -89,11 +99,13 @@ class SyncWorker(
         }
 
         DeveloperLogger.info("SYNC_STARTED", "Background sync run started (Trigger: Auto, Network: $network)", network = network)
+        setProgress(workDataOf("progress" to "Scanning system logs & local recordings...", "stage" to "SCANNING"))
 
         // Step 1: Ensure we are online before initiating sync
         if (!connectivityService.isConnected()) {
             Log.w(TAG, "Device is offline. Suspending sync run.")
             DeveloperLogger.warning("SYNC_STARTED", "Device is offline. Suspending sync run.", network = network)
+            setProgress(workDataOf("progress" to "Device is offline. Waiting for network...", "stage" to "WAITING_FOR_NETWORK"))
             return Result.retry()
         }
 
@@ -106,6 +118,7 @@ class SyncWorker(
             // This ensures People, PhoneNumbers, Devices, Aliases exist and call.personId can be resolved properly
             try {
                 DeveloperLogger.info("IDENTITY_SYNC_STARTED", "Resolving contacts to Person canonical identity and syncing to Supabase", network = network)
+                setProgress(workDataOf("progress" to "Resolving contact identities with Supabase...", "stage" to "RESOLVING_IDENTITIES"))
 
                 // 1. FIRST: Download latest global contacts from Supabase into local Room database
                 // This ensures this device knows all canonical Person IDs and phone numbers registered by other devices
@@ -245,6 +258,7 @@ class SyncWorker(
                 val pendingSalesCalls = salesCallDao.getPendingSalesCalls().take(100)
                 if (pendingSalesCalls.isNotEmpty()) {
                     DeveloperLogger.info("SUPABASE_UPLOAD_STARTED", "Syncing ${pendingSalesCalls.size} pending sales calls to Supabase.", network = network)
+                    setProgress(workDataOf("progress" to "Syncing ${pendingSalesCalls.size} sales calls to Supabase...", "stage" to "SYNCING_SUPABASE"))
                     val startTime = System.currentTimeMillis()
                     val syncResult = supabaseService.syncSalesCalls(pendingSalesCalls)
                     val duration = System.currentTimeMillis() - startTime
@@ -297,6 +311,7 @@ class SyncWorker(
                 val pendingLeads = leadDao.getPendingLeads().take(100)
                 if (pendingLeads.isNotEmpty()) {
                     DeveloperLogger.info("SUPABASE_LEAD_UPLOAD_STARTED", "Syncing ${pendingLeads.size} pending leads to Supabase.", network = network)
+                    setProgress(workDataOf("progress" to "Syncing ${pendingLeads.size} leads to Supabase...", "stage" to "SYNCING_SUPABASE"))
                     val leadStartTime = System.currentTimeMillis()
                     val leadSyncResult = supabaseService.syncLeads(pendingLeads)
                     val leadDuration = System.currentTimeMillis() - leadStartTime
@@ -316,15 +331,88 @@ class SyncWorker(
                 DeveloperLogger.error("SUPABASE_LEAD_UPLOAD_FAILED", "Exception occurred during Supabase lead sync execution", exception = e, network = network)
             }
 
+            // Step 2e: Pull latest Supabase data into local Room DB (leads_master, lead_stages, lead_statuses, sales_calls, calls_log)
+            if (connectivityService.isConnected()) {
+                try {
+                    // 1. Sync lead stages & statuses
+                    val stagesRes = supabaseService.fetchLeadStages()
+                    if (stagesRes.isSuccess) {
+                        val stages = stagesRes.getOrDefault(emptyList())
+                        if (stages.isNotEmpty()) {
+                            leadStageDao.insertLeadStages(stages.map { com.example.callog.data.local.entity.LeadStageEntity.fromRemote(it) })
+                        }
+                    }
+                    val statusesRes = supabaseService.fetchLeadStatuses()
+                    if (statusesRes.isSuccess) {
+                        val statuses = statusesRes.getOrDefault(emptyList())
+                        if (statuses.isNotEmpty()) {
+                            leadStatusDao.insertLeadStatuses(statuses.map { com.example.callog.data.local.entity.LeadStatusEntity.fromRemote(it) })
+                        }
+                    }
+
+                    // 2. Sync leads_master
+                    val leadsRes = supabaseService.fetchLeadsMaster(limit = 200)
+                    if (leadsRes.isSuccess) {
+                        val remoteLeads = leadsRes.getOrDefault(emptyList())
+                        if (remoteLeads.isNotEmpty()) {
+                            val leadEntities = remoteLeads.map { com.example.callog.data.local.entity.LeadMasterEntity.fromRemote(it) }
+                            leadMasterDao.insertLeadsMaster(leadEntities)
+                            DeveloperLogger.success("CRM_PIPELINE_SYNCED", "Synced ${remoteLeads.size} leads_master from Supabase to local Room.", network = network)
+                            try {
+                                contactRingtoneSyncManager.syncAllLeadsToContacts(leadEntities)
+                            } catch (e: Exception) {
+                                Log.w(TAG, "Error syncing contact ringtones: ${e.message}")
+                            }
+                        }
+                    }
+
+                    // 3. Pull recent sales_calls from Supabase
+                    val salesCallsRes = supabaseService.fetchSalesCalls(limit = 200)
+                    if (salesCallsRes.isSuccess) {
+                        val remoteSalesCalls = salesCallsRes.getOrDefault(emptyList())
+                        if (remoteSalesCalls.isNotEmpty()) {
+                            val entities = remoteSalesCalls.map { sc ->
+                                com.example.callog.data.local.entity.SalesCallEntity(
+                                    salespersonPhone = sc.salespersonPhone,
+                                    salespersonName = sc.salespersonName,
+                                    buyerPhone = sc.buyerPhone,
+                                    buyerName = sc.buyerName,
+                                    callType = sc.callType,
+                                    callId = sc.callId,
+                                    duration = sc.duration,
+                                    personId = sc.personId,
+                                    createdAt = sc.createdAt,
+                                    syncStatus = "SYNCED"
+                                )
+                            }
+                            salesCallDao.insertSalesCalls(entities)
+                        }
+                    }
+
+                    // 4. Pull calls_log from Supabase
+                    val callsLogRes = supabaseService.fetchCallsLog(limit = 200)
+                    if (callsLogRes.isSuccess) {
+                        val remoteCallsLogs = callsLogRes.getOrDefault(emptyList())
+                        if (remoteCallsLogs.isNotEmpty()) {
+                            callsLogDao.insertCallsLogs(remoteCallsLogs.map { com.example.callog.data.local.entity.CallsLogEntity.fromRemote(it) })
+                        }
+                    }
+                } catch (e: Exception) {
+                    DeveloperLogger.warning("SUPABASE_DATA_PULL_WARNING", "Warning during Supabase data pull to Room: ${e.message}", network = network)
+                }
+            }
+
             // Step 3: Fetch all pending items from local database for Firestore (limit to last 100)
             val pendingCalls = syncRepository.getPendingCalls().take(100)
             if (pendingCalls.isEmpty()) {
-                DeveloperLogger.success("SYNC_COMPLETED", "No pending Firestore logs found. Sync completed successfully.", network = network)
+                DeveloperLogger.success("SYNC_COMPLETED", "All records up to date. Sync completed successfully.", network = network)
+                setProgress(workDataOf("progress" to "Sync completed. All records up to date.", "stage" to "COMPLETED"))
                 runLogsMaintenance(syncLogDao)
                 return Result.success()
             }
 
             DeveloperLogger.info("FIRESTORE_METADATA_UPLOAD_STARTED", "Found ${pendingCalls.size} pending call logs to sync to Firestore.", network = network)
+            setProgress(workDataOf("progress" to "Syncing ${pendingCalls.size} call records to Firebase Firestore...", "stage" to "SYNCING_FIRESTORE"))
             val currentTime = System.currentTimeMillis()
 
             var successCount = 0
@@ -431,6 +519,8 @@ class SyncWorker(
 
             val totalDuration = System.currentTimeMillis() - startTime
             DeveloperLogger.success("SYNC_COMPLETED", "Background sync completed. Uploaded: $successCount, Failed: $failCount, Duration: ${totalDuration}ms", durationMs = totalDuration, network = network)
+            val completionStage = if (failCount > 0 && successCount > 0) "PARTIALLY_COMPLETED" else if (failCount > 0) "FAILED" else "COMPLETED"
+            setProgress(workDataOf("progress" to "Sync finished: $successCount synced, $failCount failed", "stage" to completionStage))
             runLogsMaintenance(syncLogDao)
             return Result.success()
 

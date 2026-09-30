@@ -56,7 +56,9 @@ class CallViewModel @Inject constructor(
     private val personRepository: com.example.callog.domain.repository.PersonRepository,
     private val conversationRepository: com.example.callog.domain.repository.ConversationRepository,
     private val callSessionManager: com.example.callog.domain.service.CallSessionManager,
-    private val environmentConfigManager: com.example.callog.core.config.EnvironmentConfigManager
+    private val environmentConfigManager: com.example.callog.core.config.EnvironmentConfigManager,
+    private val leadMasterDao: com.example.callog.data.local.dao.LeadMasterDao,
+    private val leadStageDao: com.example.callog.data.local.dao.LeadStageDao
 ) : ViewModel() {
 
     val activeEnvironment: StateFlow<com.example.callog.domain.model.AppEnvironment> = environmentConfigManager.activeEnvironment
@@ -903,11 +905,13 @@ class CallViewModel @Inject constructor(
     }
 
     // --- CRM Pipeline Integration (leads_master & lead_stages) ---
-    private val _leadStages = MutableStateFlow<List<com.example.callog.data.remote.model.SupabaseLeadStage>>(emptyList())
-    val leadStages: StateFlow<List<com.example.callog.data.remote.model.SupabaseLeadStage>> = _leadStages.asStateFlow()
+    val leadStages: StateFlow<List<com.example.callog.data.remote.model.SupabaseLeadStage>> = leadStageDao.getAllLeadStagesFlow()
+        .map { list -> list.map { it.toRemote() } }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    private val _leadsMaster = MutableStateFlow<List<com.example.callog.data.remote.model.SupabaseLeadMaster>>(emptyList())
-    val leadsMaster: StateFlow<List<com.example.callog.data.remote.model.SupabaseLeadMaster>> = _leadsMaster.asStateFlow()
+    val leadsMaster: StateFlow<List<com.example.callog.data.remote.model.SupabaseLeadMaster>> = leadMasterDao.getAllLeadsMasterFlow()
+        .map { list -> list.map { it.toRemote() } }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     private val _isCrmLoading = MutableStateFlow(false)
     val isCrmLoading: StateFlow<Boolean> = _isCrmLoading.asStateFlow()
@@ -918,11 +922,17 @@ class CallViewModel @Inject constructor(
             try {
                 val stagesRes = supabaseService.fetchLeadStages()
                 if (stagesRes.isSuccess) {
-                    _leadStages.value = stagesRes.getOrDefault(emptyList())
+                    val stages = stagesRes.getOrDefault(emptyList())
+                    if (stages.isNotEmpty()) {
+                        leadStageDao.insertLeadStages(stages.map { com.example.callog.data.local.entity.LeadStageEntity.fromRemote(it) })
+                    }
                 }
                 val leadsRes = supabaseService.fetchLeadsMaster()
                 if (leadsRes.isSuccess) {
-                    _leadsMaster.value = leadsRes.getOrDefault(emptyList())
+                    val leads = leadsRes.getOrDefault(emptyList())
+                    if (leads.isNotEmpty()) {
+                        leadMasterDao.insertLeadsMaster(leads.map { com.example.callog.data.local.entity.LeadMasterEntity.fromRemote(it) })
+                    }
                 }
             } catch (e: Exception) {
                 DeveloperLogger.warning("CRM_LOAD_FAILED", "Failed loading CRM pipeline from Supabase: ${e.message}")
@@ -934,14 +944,16 @@ class CallViewModel @Inject constructor(
 
     fun updateLeadStage(leadId: Long, newStageId: Long) {
         viewModelScope.launch {
+            val nowIso = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", java.util.Locale.US).apply {
+                timeZone = java.util.TimeZone.getTimeZone("UTC")
+            }.format(java.util.Date())
+            leadMasterDao.updateLeadStage(leadId, newStageId, nowIso)
+
             val result = supabaseService.updateLeadMasterStage(leadId, newStageId)
             if (result.isSuccess) {
-                _leadsMaster.value = _leadsMaster.value.map {
-                    if (it.id == leadId) it.copy(fkLeadStage = newStageId) else it
-                }
                 DeveloperLogger.success("CRM_STAGE_UPDATED", "Lead $leadId moved to stage $newStageId")
             } else {
-                DeveloperLogger.warning("CRM_STAGE_UPDATE_FAILED", "Failed updating stage for lead $leadId: ${result.exceptionOrNull()?.message}")
+                DeveloperLogger.warning("CRM_STAGE_UPDATE_FAILED", "Failed updating stage for lead $leadId in Supabase: ${result.exceptionOrNull()?.message}")
             }
         }
     }

@@ -684,4 +684,73 @@ class SupabaseService @Inject constructor(
             Result.failure(e)
         }
     }
+
+    suspend fun fetchSalesCalls(limit: Long = 500): Result<List<com.example.callog.data.remote.model.SupabaseSalesCall>> = withContext(Dispatchers.IO) {
+        return@withContext try {
+            val calls = getClient().from(SupabaseDefaults.TABLE_SALES_CALLS)
+                .select {
+                    order(column = "created_at", order = io.github.jan.supabase.postgrest.query.Order.DESCENDING)
+                    limit(limit)
+                }
+                .decodeList<com.example.callog.data.remote.model.SupabaseSalesCall>()
+            Result.success(calls)
+        } catch (e: Exception) {
+            Log.e(TAG, "Error fetching sales_calls from Supabase", e)
+            Result.failure(e)
+        }
+    }
+
+    suspend fun fetchCallsLog(limit: Long = 500): Result<List<com.example.callog.data.crm.model.ClientCallsLogDto>> = withContext(Dispatchers.IO) {
+        return@withContext try {
+            val logs = getClient().from(SupabaseDefaults.TABLE_CALLS_LOG)
+                .select {
+                    limit(limit)
+                }
+                .decodeList<com.example.callog.data.crm.model.ClientCallsLogDto>()
+            Result.success(logs)
+        } catch (e: Exception) {
+            Log.e(TAG, "Error fetching calls_log from Supabase", e)
+            Result.failure(e)
+        }
+    }
+
+    suspend fun fetchLeadTasks(leadId: Long? = null, limit: Long = 100): Result<List<com.example.callog.data.remote.model.SupabaseLeadTask>> = withContext(Dispatchers.IO) {
+        return@withContext try {
+            val tasks = getClient().from(SupabaseDefaults.TABLE_LEAD_TASKS)
+                .select {
+                    if (leadId != null) {
+                        filter {
+                            eq("lead_id", leadId)
+                        }
+                    }
+                    order(column = "due_at", order = io.github.jan.supabase.postgrest.query.Order.ASCENDING)
+                    limit(limit)
+                }
+                .decodeList<com.example.callog.data.remote.model.SupabaseLeadTask>()
+            Result.success(tasks)
+        } catch (e: Exception) {
+            Log.e(TAG, "Error fetching lead_tasks from Supabase", e)
+            Result.failure(e)
+        }
+    }
+
+    suspend fun fetchLeadNotes(leadId: Long? = null, limit: Long = 100): Result<List<com.example.callog.data.remote.model.SupabaseLeadNote>> = withContext(Dispatchers.IO) {
+        return@withContext try {
+            val notes = getClient().from(SupabaseDefaults.TABLE_LEAD_NOTES)
+                .select {
+                    if (leadId != null) {
+                        filter {
+                            eq("lead_id", leadId)
+                        }
+                    }
+                    order(column = "created_at", order = io.github.jan.supabase.postgrest.query.Order.DESCENDING)
+                    limit(limit)
+                }
+                .decodeList<com.example.callog.data.remote.model.SupabaseLeadNote>()
+            Result.success(notes)
+        } catch (e: Exception) {
+            Log.e(TAG, "Error fetching lead_notes from Supabase", e)
+            Result.failure(e)
+        }
+    }
 }

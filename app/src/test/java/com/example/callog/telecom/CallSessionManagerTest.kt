@@ -1026,7 +1026,13 @@ class CallSessionManagerTest {
             insertedSalesCalls.add(salesCall)
         }
 
+        override suspend fun insertSalesCalls(salesCalls: List<com.example.callog.data.local.entity.SalesCallEntity>) {
+            insertedSalesCalls.addAll(salesCalls)
+        }
+
         override fun getAllSalesCalls(): Flow<List<com.example.callog.data.local.entity.SalesCallEntity>> = flowOf(insertedSalesCalls)
+
+        override suspend fun getAllSalesCallsList(): List<com.example.callog.data.local.entity.SalesCallEntity> = insertedSalesCalls.toList()
 
         override suspend fun getSalesCallByCallId(callId: Long): com.example.callog.data.local.entity.SalesCallEntity? =
             insertedSalesCalls.find { it.callId == callId }

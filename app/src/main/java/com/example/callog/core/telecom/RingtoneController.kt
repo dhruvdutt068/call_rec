@@ -49,6 +49,12 @@ open class RingtoneController @Inject constructor(
     private var isPausedForTransientFocus: Boolean = false
 
     private val lock = Any()
+    private val currentGenerationToken = java.util.concurrent.atomic.AtomicLong(0L)
+
+    /**
+     * Issues an updated generation token to invalidate any in-flight asynchronous ringtone requests.
+     */
+    fun nextGenerationToken(): Long = currentGenerationToken.incrementAndGet()
 
     private val vibrator: Vibrator? by lazy {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
@@ -123,18 +129,33 @@ open class RingtoneController @Inject constructor(
      * Starts playing the ringtone associated with a specific [callId].
      * Sets the active [currentCallId] and delegates to [startRingtone].
      */
-    open fun startRingtone(callId: String?, person: Person?, lead: Lead?) {
+    open fun startRingtone(callId: String?, person: Person?, lead: Lead?, expectedToken: Long? = null) {
+        if (expectedToken != null && expectedToken != currentGenerationToken.get()) {
+            DeveloperLogger.info("RINGTONE_TOKEN_STALE", "Discarding stale ringtone start for call $callId (expected=$expectedToken, current=${currentGenerationToken.get()})")
+            return
+        }
         currentCallId = callId
-        startRingtone(person, lead)
+        startRingtone(person, lead, expectedToken)
     }
 
     /**
      * Starts playing the ringtone resolved from [RingtonePolicy] for the incoming caller.
      * Idempotent: Redundant calls with the same resolved ringtone for the active call will not restart audio.
      */
-    open fun startRingtone(person: Person? = null, lead: Lead? = null) {
+    open fun startRingtone(person: Person? = null, lead: Lead? = null, expectedToken: Long? = null) {
         val callId = currentCallId
         synchronized(lock) {
+            if (expectedToken != null && expectedToken != currentGenerationToken.get()) {
+                DeveloperLogger.info("RINGTONE_TOKEN_STALE", "Stale token check inside lock for $callId")
+                return
+            }
+
+            // Hardware kill-switch: If call already answered on Samsung screen
+            if (audioManager?.mode == AudioManager.MODE_IN_CALL || audioManager?.mode == AudioManager.MODE_IN_COMMUNICATION) {
+                Log.i(TAG, "Audio mode is already in communication/call. Aborting ringtone playback.")
+                return
+            }
+
             if (isSilencedByUser && (callId == null || callId == currentCallId)) {
                 Log.i(TAG, "Ringtone was silenced by user for call $callId. Suppressing playback.")
                 return
@@ -262,6 +283,7 @@ open class RingtoneController @Inject constructor(
      * Silences the active ringtone and vibration without hanging up the call.
      */
     open fun silenceRinger() {
+        currentGenerationToken.incrementAndGet()
         synchronized(lock) {
             DeveloperLogger.info("RINGTONE_SILENCED", "Silencing incoming ringer for call $currentCallId.")
             isSilencedByUser = true
@@ -274,6 +296,7 @@ open class RingtoneController @Inject constructor(
      * Stops the ringtone, cancels vibration, and abandons audio focus.
      */
     open fun stopRingtone() {
+        currentGenerationToken.incrementAndGet()
         synchronized(lock) {
             DeveloperLogger.info("RINGTONE_STOPPED", "Stopping ringtone and resetting state for call $currentCallId.")
             currentCallId = null
@@ -335,7 +358,7 @@ open class RingtoneController @Inject constructor(
         if (audioManager == null) return
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                val focusRequest = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT)
+                val focusRequest = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK)
                     .setAudioAttributes(
                         AudioAttributes.Builder()
                             .setUsage(AudioAttributes.USAGE_NOTIFICATION_RINGTONE)

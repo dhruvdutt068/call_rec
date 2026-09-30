@@ -14,6 +14,7 @@ import com.example.callog.domain.repository.FirestoreRepository
 import com.example.callog.domain.service.SyncManager
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import java.util.concurrent.TimeUnit
 import javax.inject.Inject
@@ -32,12 +33,17 @@ class SyncManagerImpl @Inject constructor(
         const val PERIODIC_SYNC_WORK_NAME = "periodic_sync_work"
     }
 
-    override val isSyncing: Flow<Boolean> = workManager.getWorkInfosForUniqueWorkFlow(ONE_TIME_SYNC_WORK_NAME)
+    private val allSyncWorkInfos: Flow<List<WorkInfo>> = workManager.getWorkInfosForUniqueWorkFlow(ONE_TIME_SYNC_WORK_NAME)
+        .combine(workManager.getWorkInfosForUniqueWorkFlow(PERIODIC_SYNC_WORK_NAME)) { oneTime: List<WorkInfo>, periodic: List<WorkInfo> ->
+            oneTime + periodic
+        }
+
+    override val isSyncing: Flow<Boolean> = allSyncWorkInfos
         .map { workInfos ->
             workInfos.any { it.state == WorkInfo.State.RUNNING }
         }
 
-    override val syncProgress: Flow<String?> = workManager.getWorkInfosForUniqueWorkFlow(ONE_TIME_SYNC_WORK_NAME)
+    override val syncProgress: Flow<String?> = allSyncWorkInfos
         .map { workInfos ->
             val runningWork = workInfos.firstOrNull { it.state == WorkInfo.State.RUNNING }
             runningWork?.progress?.getString("progress")

@@ -267,7 +267,13 @@ class CallSimulatorManagerTest {
             insertedSalesCalls.add(salesCall)
         }
 
+        override suspend fun insertSalesCalls(salesCalls: List<SalesCallEntity>) {
+            insertedSalesCalls.addAll(salesCalls)
+        }
+
         override fun getAllSalesCalls(): Flow<List<SalesCallEntity>> = flowOf(insertedSalesCalls)
+
+        override suspend fun getAllSalesCallsList(): List<SalesCallEntity> = insertedSalesCalls.toList()
 
         override suspend fun getSalesCallByCallId(callId: Long): SalesCallEntity? =
             insertedSalesCalls.find { it.callId == callId }

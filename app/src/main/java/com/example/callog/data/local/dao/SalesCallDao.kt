@@ -14,9 +14,17 @@ interface SalesCallDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertSalesCall(salesCall: SalesCallEntity)
 
+    /** Insert or replace multiple sales call records. */
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertSalesCalls(salesCalls: List<SalesCallEntity>)
+
     /** All sales call records, newest first. */
     @Query("SELECT * FROM sales_calls ORDER BY createdAt DESC")
     fun getAllSalesCalls(): Flow<List<SalesCallEntity>>
+
+    /** All sales call records synchronously, newest first. */
+    @Query("SELECT * FROM sales_calls ORDER BY createdAt DESC")
+    suspend fun getAllSalesCallsList(): List<SalesCallEntity>
 
     /** Look up the record tied to a specific call log entry. */
     @Query("SELECT * FROM sales_calls WHERE callId = :callId LIMIT 1")

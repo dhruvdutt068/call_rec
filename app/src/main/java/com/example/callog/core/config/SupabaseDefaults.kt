@@ -16,9 +16,9 @@ object SupabaseDefaults {
     const val PROD_ANON_KEY =
         "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5taGdkaGVoc2Zjb290bHF3dW13Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODgzMjc1OTEsImV4cCI6MjEwMzkwMzU5MX0.ThJvtEr2kmmaPQIPFBy-bCJIliHVqv2m_2SS-ZR2Gm0"
 
-    // Default points to Development
-    const val DEFAULT_URL = DEV_URL
-    const val DEFAULT_ANON_KEY = DEV_ANON_KEY
+    // Default points to Production (AllSet CRM)
+    const val DEFAULT_URL = PROD_URL
+    const val DEFAULT_ANON_KEY = PROD_ANON_KEY
     const val TABLE_SALES_CALLS = "sales_calls"
     const val TABLE_PEOPLE = "people"
     const val TABLE_PHONE_NUMBERS = "phone_numbers"

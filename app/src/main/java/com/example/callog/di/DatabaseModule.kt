@@ -443,6 +443,144 @@ object DatabaseModule {
         }
     }
 
+    private val MIGRATION_23_24 = object : Migration(23, 24) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            try {
+                db.execSQL("""
+                    CREATE TABLE IF NOT EXISTS `leads_master` (
+                        `id` INTEGER NOT NULL,
+                        `fkHashKey` TEXT,
+                        `leadName` TEXT,
+                        `leadMobile` REAL,
+                        `fkLeadStatus` INTEGER,
+                        `fkLeadStage` INTEGER,
+                        `fkPresalesOwner` INTEGER,
+                        `fkSalesOwner` INTEGER,
+                        `fkNextAction` INTEGER,
+                        `nextActionAt` TEXT,
+                        `lastWaContactedAt` TEXT,
+                        `lastCallContactedAt` TEXT,
+                        `requirementCaptured` INTEGER,
+                        `requirementCapturedAt` TEXT,
+                        `optionsShared` INTEGER,
+                        `optionsSharedAt` TEXT,
+                        `visitScheduledAt` TEXT,
+                        `visitStatus` INTEGER,
+                        `leadSource` TEXT,
+                        `fkLeadSource` INTEGER,
+                        `fkLeadCommunicationId` INTEGER,
+                        `adId` TEXT,
+                        `createdAt` TEXT,
+                        `updatedAt` TEXT,
+                        `syncStatus` TEXT NOT NULL DEFAULT 'SYNCED',
+                        PRIMARY KEY(`id`)
+                    )
+                """.trimIndent())
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_leads_master_fkLeadStage` ON `leads_master` (`fkLeadStage`)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_leads_master_fkLeadStatus` ON `leads_master` (`fkLeadStatus`)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_leads_master_leadMobile` ON `leads_master` (`leadMobile`)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_leads_master_updatedAt` ON `leads_master` (`updatedAt`)")
+
+                db.execSQL("""
+                    CREATE TABLE IF NOT EXISTS `lead_stages` (
+                        `id` INTEGER NOT NULL,
+                        `name` TEXT NOT NULL,
+                        `sortOrder` INTEGER NOT NULL DEFAULT 0,
+                        `isActive` INTEGER NOT NULL DEFAULT 1,
+                        `kind` TEXT NOT NULL DEFAULT 'pipeline',
+                        `createdAt` TEXT,
+                        PRIMARY KEY(`id`)
+                    )
+                """.trimIndent())
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_lead_stages_sortOrder` ON `lead_stages` (`sortOrder`)")
+
+                db.execSQL("""
+                    CREATE TABLE IF NOT EXISTS `lead_statuses` (
+                        `id` INTEGER NOT NULL,
+                        `name` TEXT NOT NULL,
+                        `sortOrder` INTEGER NOT NULL DEFAULT 0,
+                        `isActive` INTEGER NOT NULL DEFAULT 1,
+                        `countsAsActive` INTEGER NOT NULL DEFAULT 0,
+                        `createdAt` TEXT,
+                        PRIMARY KEY(`id`)
+                    )
+                """.trimIndent())
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_lead_statuses_sortOrder` ON `lead_statuses` (`sortOrder`)")
+
+                db.execSQL("""
+                    CREATE TABLE IF NOT EXISTS `calls_log` (
+                        `phoneNumber` TEXT NOT NULL,
+                        `leadName` TEXT,
+                        `journeyStage` TEXT,
+                        `botStatus` TEXT,
+                        `pauseReason` TEXT,
+                        `bhk` TEXT,
+                        `locality` TEXT,
+                        `budgetMin` REAL,
+                        `budgetMax` REAL,
+                        `timeline` TEXT,
+                        `purpose` TEXT,
+                        `amenities` TEXT,
+                        `requirementsComplete` INTEGER,
+                        `pdfStatus` TEXT,
+                        `pdfSentAt` TEXT,
+                        `meetingScheduledAt` TEXT,
+                        `campaignName` TEXT,
+                        `brokerName` TEXT,
+                        `lastMessageAt` TEXT,
+                        `lastMessageText` TEXT,
+                        `createdAt` TEXT,
+                        `updatedAt` TEXT,
+                        PRIMARY KEY(`phoneNumber`)
+                    )
+                """.trimIndent())
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_calls_log_journeyStage` ON `calls_log` (`journeyStage`)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_calls_log_botStatus` ON `calls_log` (`botStatus`)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_calls_log_updatedAt` ON `calls_log` (`updatedAt`)")
+
+                db.execSQL("""
+                    CREATE TABLE IF NOT EXISTS `lead_tasks` (
+                        `id` INTEGER NOT NULL,
+                        `leadId` INTEGER NOT NULL,
+                        `taskType` TEXT NOT NULL DEFAULT 'call',
+                        `title` TEXT NOT NULL DEFAULT '',
+                        `fkAssignee` INTEGER,
+                        `dueAt` TEXT NOT NULL,
+                        `status` TEXT NOT NULL DEFAULT 'pending',
+                        `outcome` TEXT NOT NULL DEFAULT '',
+                        `source` TEXT NOT NULL DEFAULT 'auto',
+                        `completedAt` TEXT,
+                        `completedByName` TEXT NOT NULL DEFAULT '',
+                        `completedByRole` TEXT NOT NULL DEFAULT '',
+                        `createdAt` TEXT,
+                        `updatedAt` TEXT,
+                        PRIMARY KEY(`id`)
+                    )
+                """.trimIndent())
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_lead_tasks_leadId` ON `lead_tasks` (`leadId`)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_lead_tasks_status` ON `lead_tasks` (`status`)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_lead_tasks_dueAt` ON `lead_tasks` (`dueAt`)")
+
+                db.execSQL("""
+                    CREATE TABLE IF NOT EXISTS `lead_notes` (
+                        `id` INTEGER NOT NULL,
+                        `leadId` INTEGER NOT NULL,
+                        `noteText` TEXT NOT NULL,
+                        `authorName` TEXT NOT NULL,
+                        `authorRole` TEXT NOT NULL DEFAULT 'rep',
+                        `createdAt` TEXT,
+                        `updatedAt` TEXT,
+                        PRIMARY KEY(`id`)
+                    )
+                """.trimIndent())
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_lead_notes_leadId` ON `lead_notes` (`leadId`)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_lead_notes_createdAt` ON `lead_notes` (`createdAt`)")
+            } catch (e: Exception) {
+                android.util.Log.e("DatabaseModule", "Failed to migrate database to v24", e)
+            }
+        }
+    }
+
     @Provides
     @Singleton
     fun provideDatabase(
@@ -452,7 +590,20 @@ object DatabaseModule {
             context,
             CallVaultDatabase::class.java,
             Constants.DATABASE_NAME
-        ).addMigrations(MIGRATION_5_6, MIGRATION_13_14, MIGRATION_14_15, MIGRATION_15_16, MIGRATION_16_17, MIGRATION_17_18, MIGRATION_18_19, MIGRATION_19_20, MIGRATION_20_21, MIGRATION_21_22, MIGRATION_22_23)
+        ).addMigrations(
+            MIGRATION_5_6,
+            MIGRATION_13_14,
+            MIGRATION_14_15,
+            MIGRATION_15_16,
+            MIGRATION_16_17,
+            MIGRATION_17_18,
+            MIGRATION_18_19,
+            MIGRATION_19_20,
+            MIGRATION_20_21,
+            MIGRATION_21_22,
+            MIGRATION_22_23,
+            MIGRATION_23_24
+        )
          .fallbackToDestructiveMigration()
          .build()
      }
@@ -510,5 +661,35 @@ object DatabaseModule {
     @Provides
     fun providePresetDao(db: CallVaultDatabase): com.example.callog.data.local.dao.PresetDao {
         return db.presetDao()
+    }
+
+    @Provides
+    fun provideLeadMasterDao(db: CallVaultDatabase): com.example.callog.data.local.dao.LeadMasterDao {
+        return db.leadMasterDao()
+    }
+
+    @Provides
+    fun provideLeadStageDao(db: CallVaultDatabase): com.example.callog.data.local.dao.LeadStageDao {
+        return db.leadStageDao()
+    }
+
+    @Provides
+    fun provideLeadStatusDao(db: CallVaultDatabase): com.example.callog.data.local.dao.LeadStatusDao {
+        return db.leadStatusDao()
+    }
+
+    @Provides
+    fun provideCallsLogDao(db: CallVaultDatabase): com.example.callog.data.local.dao.CallsLogDao {
+        return db.callsLogDao()
+    }
+
+    @Provides
+    fun provideLeadTaskDao(db: CallVaultDatabase): com.example.callog.data.local.dao.LeadTaskDao {
+        return db.leadTaskDao()
+    }
+
+    @Provides
+    fun provideLeadNoteDao(db: CallVaultDatabase): com.example.callog.data.local.dao.LeadNoteDao {
+        return db.leadNoteDao()
     }
 }
