@@ -106,11 +106,11 @@ class ActivePresetProviderImpl @Inject constructor(
             description = "Default fallback development profile",
             configuration = PresetConfiguration(
                 supabaseUrl = SupabaseDefaults.DEV_URL,
-                firebaseProjectId = "allset-491218",
-                firebaseAppId = "1:799427430422:android:e0f5737f12b8b9cbb20d37",
-                storageBucket = "allset-491218.firebasestorage.app",
-                gcmSenderId = "799427430422",
-                databaseUrl = "https://allset-491218-default-rtdb.asia-southeast1.firebasedatabase.app",
+                firebaseProjectId = com.example.callog.core.config.FirebaseDefaults.DEV_CONFIG.projectId,
+                firebaseAppId = com.example.callog.core.config.FirebaseDefaults.DEV_CONFIG.appId,
+                storageBucket = com.example.callog.core.config.FirebaseDefaults.DEV_CONFIG.storageBucket,
+                gcmSenderId = com.example.callog.core.config.FirebaseDefaults.DEV_CONFIG.gcmSenderId,
+                databaseUrl = com.example.callog.core.config.FirebaseDefaults.DEV_CONFIG.databaseUrl,
                 apiBaseUrl = "https://dev-api.callog.internal"
             ),
             isActive = true

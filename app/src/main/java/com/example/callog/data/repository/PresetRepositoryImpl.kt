@@ -213,7 +213,7 @@ class PresetRepositoryImpl @Inject constructor(
                     PresetConfiguration.FEATURE_NETWORK_INSPECTOR to true
                 )
             ),
-            isActive = false
+            isActive = true
         )
         val devSecrets = PresetSecrets(
             supabaseAnonKey = SupabaseDefaults.DEV_ANON_KEY,
@@ -245,7 +245,7 @@ class PresetRepositoryImpl @Inject constructor(
                     PresetConfiguration.FEATURE_NETWORK_INSPECTOR to false
                 )
             ),
-            isActive = true
+            isActive = false
         )
         val prodSecrets = PresetSecrets(
             supabaseAnonKey = SupabaseDefaults.PROD_ANON_KEY,
@@ -310,11 +310,11 @@ class PresetRepositoryImpl @Inject constructor(
                 Log.i(TAG, "Restored default secrets for preset_dev_default.")
             }
 
-            // Ensure Production is the active preset if no preset is active or if dev was active pointing to obsolete host
+            // Ensure Development is the active preset if no preset is active or if dev was active pointing to obsolete host
             val currentActive = presetDao.getActivePreset()
             if (currentActive == null || (currentActive.id == devId && currentActive.supabaseUrl?.contains("qizrtmvgcwxuycbpkeua") == true)) {
-                presetDao.setActivePreset(prodId)
-                Log.i(TAG, "Defaulted active preset to Production (preset_prod_default).")
+                presetDao.setActivePreset(devId)
+                Log.i(TAG, "Defaulted active preset to Development (preset_dev_default).")
             }
         }
     }

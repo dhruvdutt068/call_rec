@@ -15,9 +15,9 @@ object SupabaseDefaults {
     val PROD_URL: String = BuildConfig.SUPABASE_PROD_URL
     val PROD_ANON_KEY: String = BuildConfig.SUPABASE_PROD_ANON_KEY
 
-    // Default points to Production (AllSet CRM)
-    val DEFAULT_URL: String = PROD_URL
-    val DEFAULT_ANON_KEY: String = PROD_ANON_KEY
+    // Default points to Development
+    val DEFAULT_URL: String = DEV_URL
+    val DEFAULT_ANON_KEY: String = DEV_ANON_KEY
 
     const val TABLE_SALES_CALLS = "sales_calls"
     const val TABLE_PEOPLE = "people"
