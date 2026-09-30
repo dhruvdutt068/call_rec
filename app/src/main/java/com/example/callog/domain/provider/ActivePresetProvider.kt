@@ -8,6 +8,7 @@ interface ActivePresetProvider {
     val activePresetFlow: StateFlow<AppPreset?>
     suspend fun getActivePreset(): AppPreset
     suspend fun getActiveSecrets(): PresetSecrets?
+    fun getActiveSecretsSync(): PresetSecrets?
     suspend fun isFeatureEnabled(featureKey: String): Boolean
     fun addOnActivePresetChangeListener(listener: () -> Unit)
     fun removeOnActivePresetChangeListener(listener: () -> Unit)

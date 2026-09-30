@@ -21,6 +21,7 @@ import com.example.callog.data.telecom.TelecomCallController
 import com.example.callog.domain.call.*
 import com.example.callog.domain.model.Lead
 import com.example.callog.domain.model.LeadPriority
+import com.example.callog.domain.model.LeadSource
 import com.example.callog.domain.model.LeadStatus
 import com.example.callog.domain.model.Person
 import com.example.callog.domain.repository.CallRepository
@@ -51,7 +52,10 @@ class CallSessionManager @Inject constructor(
     private val contactsProvider: com.example.callog.data.provider.ContactsProvider,
     private val dialerRoleManager: DialerRoleManager,
     private val callRecordingController: com.example.callog.domain.call.CallRecordingController,
-    private val recordingRepository: com.example.callog.domain.repository.RecordingRepository
+    private val recordingRepository: com.example.callog.domain.repository.RecordingRepository,
+    private val contactRingtoneSyncManager: com.example.callog.data.provider.ContactRingtoneSyncManager? = null,
+    private val leadMasterDao: com.example.callog.data.local.dao.LeadMasterDao? = null,
+    private val crmRepository: com.example.callog.domain.crm.repository.CrmRepository? = null
 ) {
     companion object {
         private const val TAG = "CallSessionManager"
@@ -322,21 +326,96 @@ class CallSessionManager @Inject constructor(
                     ))
                 }
 
-                // If currently ringing, update ringtone and notification with resolved CRM metadata
+                val isDeviceHandlingRingtone = contactRingtoneSyncManager?.isContactAlreadyInDevice(rawNumber) ?: false
                 val currentSession = _sessionsMap.value[callId]
                 if (currentSession?.state == CallState.RINGING) {
-                    ringtoneController.startRingtone(callId, person, lead)
+                    if (!isDeviceHandlingRingtone) {
+                        ringtoneController.startRingtone(callId, person, lead)
+                    } else {
+                        DeveloperLogger.info("RINGTONE_NATIVE_DELEGATED", "Contact already exists in device contacts. Native Samsung dialer handling ringer.")
+                    }
                     notificationManager.showIncomingCallNotification(currentSession)
                 } else if (currentSession?.state == CallState.ACTIVE) {
                     notificationManager.showActiveCallNotification(currentSession)
                 }
             } else {
-                // If ringing and lookup timed out or returned no person, immediately start fallback tone so call isn't silent
-                if (isRinging) {
+                val isDeviceHandlingRingtone = contactRingtoneSyncManager?.isContactAlreadyInDevice(rawNumber) ?: false
+                var leadMasterEntity: com.example.callog.data.local.entity.LeadMasterEntity? = null
+                val digits = rawNumber.filter { it.isDigit() }
+                val mobileDouble = digits.toDoubleOrNull()
+                val last10Double = if (digits.length >= 10) digits.takeLast(10).toDoubleOrNull() else null
+                if (leadMasterDao != null) {
+                    try {
+                        if (last10Double != null) {
+                            leadMasterEntity = leadMasterDao.getLeadMasterByMobile(last10Double)
+                        }
+                        if (leadMasterEntity == null && mobileDouble != null) {
+                            leadMasterEntity = leadMasterDao.getLeadMasterByMobile(mobileDouble)
+                        }
+                    } catch (_: Exception) {}
+                }
+
+                if (leadMasterEntity != null) {
+                    DeveloperLogger.info("CRM_LEAD_MASTER_RESOLVED", "Resolved LeadMasterEntity for unknown number $rawNumber: ${leadMasterEntity.leadName}")
+                    val status = contactRingtoneSyncManager?.resolveLeadStatus(leadMasterEntity.fkLeadStatus, leadMasterEntity.fkLeadStage) ?: LeadStatus.NEW
+                    val syntheticLead = Lead(
+                        id = "lead_${leadMasterEntity.id}",
+                        personId = "person_${leadMasterEntity.id}",
+                        status = status,
+                        priority = LeadPriority.MEDIUM,
+                        source = LeadSource.CALL
+                    )
+                    val syntheticPerson = Person(
+                        id = "person_${leadMasterEntity.id}",
+                        displayName = leadMasterEntity.leadName?.ifBlank { null } ?: "Lead #${leadMasterEntity.id}",
+                        companyName = leadMasterEntity.leadSource ?: "",
+                        phoneNumbers = listOf(
+                            com.example.callog.domain.model.PhoneNumber(
+                                id = "pn_${leadMasterEntity.id}",
+                                personId = "person_${leadMasterEntity.id}",
+                                phoneNumber = rawNumber,
+                                normalizedNumber = rawNumber
+                            )
+                        )
+                    )
+
+                    updateSessionsMap { current ->
+                        val existing = current[callId] ?: return@updateSessionsMap current
+                        current + (callId to existing.copy(
+                            personId = syntheticPerson.id,
+                            callerDisplayName = syntheticPerson.displayName,
+                            companyName = syntheticPerson.companyName,
+                            crmStatus = status,
+                            priority = syntheticLead.priority,
+                            initials = computeInitials(syntheticPerson.displayName),
+                            crmResolutionState = CrmResolutionState.RESOLVED
+                        ))
+                    }
+
                     val currentSession = _sessionsMap.value[callId]
                     if (currentSession?.state == CallState.RINGING) {
-                        ringtoneController.startRingtone(callId, null, null)
+                        if (!isDeviceHandlingRingtone) {
+                            val token = ringtoneController.nextGenerationToken()
+                            ringtoneController.startRingtone(callId, syntheticPerson, syntheticLead, expectedToken = token)
+                        } else {
+                            DeveloperLogger.info("RINGTONE_NATIVE_DELEGATED", "CRM contact already in device contacts. Native Samsung dialer handling ringer.")
+                        }
+                        notificationManager.showIncomingCallNotification(currentSession)
                     }
+
+                    // Asynchronously insert/sync this lead into device contacts so future calls ring natively
+                    scope.launch {
+                        contactRingtoneSyncManager?.insertOrUpdateSingleLead(leadMasterEntity)
+                    }
+                } else if (contactRingtoneSyncManager == null) {
+                    if (isRinging) {
+                        val currentSession = _sessionsMap.value[callId]
+                        if (currentSession?.state == CallState.RINGING) {
+                            ringtoneController.startRingtone(callId, null, null)
+                        }
+                    }
+                } else {
+                    DeveloperLogger.info("UNKNOWN_CALLER_NON_CRM", "Caller $rawNumber is not a CRM lead. Native Samsung dialer playing default tone.")
                 }
 
                 // Query Android Contacts for system caller name
@@ -444,12 +523,17 @@ class CallSessionManager @Inject constructor(
                 if (session != null) {
                     notificationManager.showIncomingCallNotification(session)
                 }
+                val inDevice = contactRingtoneSyncManager?.isContactAlreadyInDevice(session?.phoneNumber ?: "") ?: false
                 if (session?.personId != null) {
                     scope.launch {
                         val person = personRepository.getPersonById(session.personId)
                         val lead = person?.let { leadRepository.getLeadForPerson(it.id) }
                         if (_sessionsMap.value[callId]?.state == CallState.RINGING) {
-                            ringtoneController.startRingtone(callId, person, lead)
+                            if (!inDevice) {
+                                ringtoneController.startRingtone(callId, person, lead)
+                            } else {
+                                DeveloperLogger.info("RINGTONE_NATIVE_DELEGATED", "Contact already in device contacts. Delegating ring to Samsung dialer.")
+                            }
                         }
                     }
                 } else if (!crmResolutionJobs.containsKey(callId)) {

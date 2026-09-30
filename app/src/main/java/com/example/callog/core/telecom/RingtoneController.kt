@@ -129,26 +129,29 @@ open class RingtoneController @Inject constructor(
      * Starts playing the ringtone associated with a specific [callId].
      * Sets the active [currentCallId] and delegates to [startRingtone].
      */
-    open fun startRingtone(callId: String?, person: Person?, lead: Lead?, expectedToken: Long? = null) {
+    open fun startRingtone(callId: String?, person: Person?, lead: Lead?) {
+        startRingtone(callId, person, lead, null)
+    }
+
+    /**
+     * Starts playing the ringtone associated with a specific [callId] and generation token validation.
+     */
+    open fun startRingtone(callId: String?, person: Person?, lead: Lead?, expectedToken: Long?) {
         if (expectedToken != null && expectedToken != currentGenerationToken.get()) {
             DeveloperLogger.info("RINGTONE_TOKEN_STALE", "Discarding stale ringtone start for call $callId (expected=$expectedToken, current=${currentGenerationToken.get()})")
             return
         }
         currentCallId = callId
-        startRingtone(person, lead, expectedToken)
+        startRingtone(person, lead)
     }
 
     /**
      * Starts playing the ringtone resolved from [RingtonePolicy] for the incoming caller.
      * Idempotent: Redundant calls with the same resolved ringtone for the active call will not restart audio.
      */
-    open fun startRingtone(person: Person? = null, lead: Lead? = null, expectedToken: Long? = null) {
+    open fun startRingtone(person: Person? = null, lead: Lead? = null) {
         val callId = currentCallId
         synchronized(lock) {
-            if (expectedToken != null && expectedToken != currentGenerationToken.get()) {
-                DeveloperLogger.info("RINGTONE_TOKEN_STALE", "Stale token check inside lock for $callId")
-                return
-            }
 
             // Hardware kill-switch: If call already answered on Samsung screen
             if (audioManager?.mode == AudioManager.MODE_IN_CALL || audioManager?.mode == AudioManager.MODE_IN_COMMUNICATION) {

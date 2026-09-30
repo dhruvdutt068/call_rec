@@ -5,8 +5,7 @@ package com.example.callog.core.config
  * Whenever client credentials need to be updated in the repository, edit this file.
  */
 object SupabaseDefaults {
-    // Development Supabase
-    //https://qizrtmvgcwxuycbpkeua.supabase.co
+    // Development Supabase (defaults to working client instance)
     const val DEV_URL = "https://qizrtmvgcwxuycbpkeua.supabase.co"
     const val DEV_ANON_KEY =
         "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFpenJ0bXZnY3d4dXljYnBrZXVhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM3NTAzNTMsImV4cCI6MjA5OTMyNjM1M30.wLHCz8zv79ySmPSnI6Z-WSdD7s9qvzCxVxYQOnIh5WU"

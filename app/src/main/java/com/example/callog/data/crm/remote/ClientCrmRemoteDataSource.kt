@@ -21,6 +21,11 @@ class ClientCrmRemoteDataSource @Inject constructor(
         const val TABLE_LEAD_COMMUNICATIONS = "lead_communications"
     }
 
+    private fun isTableMissing(e: Exception): Boolean {
+        val msg = e.message.orEmpty()
+        return msg.contains("PGRST205") || msg.contains("Could not find the table", ignoreCase = true)
+    }
+
     suspend fun findLeadByPhone(crmPhoneNumber: String): Result<ClientCallsLogDto?> = withContext(Dispatchers.IO) {
         return@withContext try {
             val results = supabaseService.getClient().from(TABLE_CALLS_LOG)
@@ -34,8 +39,13 @@ class ClientCrmRemoteDataSource @Inject constructor(
 
             Result.success(results.firstOrNull())
         } catch (e: Exception) {
-            Log.w(TAG, "External CRM lookup for $crmPhoneNumber returned error: ${e.message}")
-            Result.failure(e)
+            if (isTableMissing(e)) {
+                Log.w(TAG, "Table '$TABLE_CALLS_LOG' not found in Supabase schema cache; skipping lookup.")
+                Result.success(null)
+            } else {
+                Log.w(TAG, "External CRM lookup for $crmPhoneNumber returned error: ${e.message}")
+                Result.failure(e)
+            }
         }
     }
 
@@ -46,9 +56,14 @@ class ClientCrmRemoteDataSource @Inject constructor(
             }
             Result.success(Unit)
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to upsert client calls_log for ${dto.phoneNumber}", e)
-            DeveloperLogger.warning("CRM_UPSERT_FAILED", "Failed upserting client calls_log: ${e.message}")
-            Result.failure(e)
+            if (isTableMissing(e)) {
+                Log.w(TAG, "Table '$TABLE_CALLS_LOG' not found in Supabase schema cache; skipping upsert.")
+                Result.success(Unit)
+            } else {
+                Log.e(TAG, "Failed to upsert client calls_log for ${dto.phoneNumber}", e)
+                DeveloperLogger.warning("CRM_UPSERT_FAILED", "Failed upserting client calls_log: ${e.message}")
+                Result.failure(e)
+            }
         }
     }
 
@@ -57,9 +72,14 @@ class ClientCrmRemoteDataSource @Inject constructor(
             supabaseService.getClient().from(TABLE_LEAD_COMMUNICATIONS).upsert(dto)
             Result.success(Unit)
         } catch (e: Exception) {
-            Log.e(TAG, "Failed inserting client lead_communication for ${dto.phoneNumber}", e)
-            DeveloperLogger.warning("CRM_COMM_FAILED", "Failed inserting client lead_communication: ${e.message}")
-            Result.failure(e)
+            if (isTableMissing(e)) {
+                Log.w(TAG, "Table '$TABLE_LEAD_COMMUNICATIONS' not found in Supabase schema cache; skipping insert.")
+                Result.success(Unit)
+            } else {
+                Log.e(TAG, "Failed inserting client lead_communication for ${dto.phoneNumber}", e)
+                DeveloperLogger.warning("CRM_COMM_FAILED", "Failed inserting client lead_communication: ${e.message}")
+                Result.failure(e)
+            }
         }
     }
 
@@ -69,9 +89,14 @@ class ClientCrmRemoteDataSource @Inject constructor(
             supabaseService.getClient().from(TABLE_LEAD_COMMUNICATIONS).upsert(dtos)
             Result.success(Unit)
         } catch (e: Exception) {
-            Log.e(TAG, "Failed batch inserting ${dtos.size} client lead_communications", e)
-            DeveloperLogger.warning("CRM_COMM_BATCH_FAILED", "Failed batch inserting lead_communications: ${e.message}")
-            Result.failure(e)
+            if (isTableMissing(e)) {
+                Log.w(TAG, "Table '$TABLE_LEAD_COMMUNICATIONS' not found in Supabase schema cache; skipping batch insert.")
+                Result.success(Unit)
+            } else {
+                Log.e(TAG, "Failed batch inserting ${dtos.size} client lead_communications", e)
+                DeveloperLogger.warning("CRM_COMM_BATCH_FAILED", "Failed batch inserting lead_communications: ${e.message}")
+                Result.failure(e)
+            }
         }
     }
 }

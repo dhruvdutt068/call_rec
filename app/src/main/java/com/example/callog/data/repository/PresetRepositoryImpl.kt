@@ -59,7 +59,9 @@ class PresetRepositoryImpl @Inject constructor(
 
     override suspend fun getSecrets(presetId: String): PresetSecrets? = withContext(Dispatchers.IO) {
         val stored = secretStore.getSecrets(presetId)
-        if (stored != null && !stored.supabaseAnonKey.isNullOrBlank()) {
+        if (stored != null && !stored.supabaseAnonKey.isNullOrBlank() &&
+            (presetId != "preset_dev_default" || stored.supabaseAnonKey == SupabaseDefaults.DEV_ANON_KEY) &&
+            (presetId != "preset_prod_default" || stored.supabaseAnonKey == SupabaseDefaults.PROD_ANON_KEY)) {
             stored
         } else {
             if (presetId == "preset_prod_default") {
@@ -302,7 +304,7 @@ class PresetRepositoryImpl @Inject constructor(
                 Log.i(TAG, "Restored default secrets for preset_prod_default.")
             }
             val devSec = secretStore.getSecrets(devId)
-            if (devSec == null || devSec.supabaseAnonKey.isNullOrBlank()) {
+            if (devSec == null || devSec.supabaseAnonKey.isNullOrBlank() || devSec.supabaseAnonKey != SupabaseDefaults.DEV_ANON_KEY) {
                 secretStore.saveSecrets(devId, devSecrets)
                 Log.i(TAG, "Restored default secrets for preset_dev_default.")
             }

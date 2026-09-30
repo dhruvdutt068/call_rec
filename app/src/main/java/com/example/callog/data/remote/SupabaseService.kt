@@ -62,13 +62,7 @@ class SupabaseService @Inject constructor(
     fun getActiveConfig(): SupabaseConfig {
         val activePreset = activePresetProvider.activePresetFlow.value
         if (activePreset != null && !activePreset.configuration.supabaseUrl.isNullOrBlank()) {
-            val secrets = runBlocking {
-                try {
-                    activePresetProvider.getActiveSecrets()
-                } catch (e: Exception) {
-                    null
-                }
-            }
+            val secrets = activePresetProvider.getActiveSecretsSync()
             val defaultKey = if (activePreset.environment == com.example.callog.domain.model.preset.PresetEnvironment.PRODUCTION || 
                 activePreset.configuration.supabaseUrl == SupabaseDefaults.PROD_URL) {
                 SupabaseDefaults.PROD_ANON_KEY
@@ -355,8 +349,14 @@ class SupabaseService @Inject constructor(
             }
             Result.success(Unit)
         } catch (e: Exception) {
-            Log.e(TAG, "Error syncing leads to Supabase", e)
-            Result.failure(e)
+            val msg = e.message.orEmpty()
+            if (msg.contains("PGRST205") || msg.contains("Could not find the table", ignoreCase = true)) {
+                Log.w(TAG, "Table '${SupabaseDefaults.TABLE_LEADS}' not found in Supabase schema cache; skipping lead sync.")
+                Result.success(Unit)
+            } else {
+                Log.e(TAG, "Error syncing leads to Supabase", e)
+                Result.failure(e)
+            }
         }
     }
 
@@ -374,8 +374,14 @@ class SupabaseService @Inject constructor(
             }
             Result.success(Unit)
         } catch (e: Exception) {
-            Log.e(TAG, "Error updating lead status in Supabase for $leadId", e)
-            Result.failure(e)
+            val msg = e.message.orEmpty()
+            if (msg.contains("PGRST205") || msg.contains("Could not find the table", ignoreCase = true)) {
+                Log.w(TAG, "Table '${SupabaseDefaults.TABLE_LEADS}' not found in Supabase schema cache; skipping status update.")
+                Result.success(Unit)
+            } else {
+                Log.e(TAG, "Error updating lead status in Supabase for $leadId", e)
+                Result.failure(e)
+            }
         }
     }
 
@@ -434,8 +440,14 @@ class SupabaseService @Inject constructor(
                 .decodeList<com.example.callog.data.remote.model.SupabaseLead>()
             Result.success(leads)
         } catch (e: Exception) {
-            Log.e(TAG, "Error fetching global leads from Supabase", e)
-            Result.failure(e)
+            val msg = e.message.orEmpty()
+            if (msg.contains("PGRST205") || msg.contains("Could not find the table", ignoreCase = true)) {
+                Log.w(TAG, "Table '${SupabaseDefaults.TABLE_LEADS}' not found in Supabase schema cache; skipping.")
+                Result.success(emptyList())
+            } else {
+                Log.e(TAG, "Error fetching global leads from Supabase", e)
+                Result.failure(e)
+            }
         }
     }
 
@@ -451,8 +463,14 @@ class SupabaseService @Inject constructor(
                 .decodeList<com.example.callog.data.remote.model.SupabaseLead>()
             Result.success(leads.firstOrNull())
         } catch (e: Exception) {
-            Log.e(TAG, "Error fetching lead by personId from Supabase", e)
-            Result.failure(e)
+            val msg = e.message.orEmpty()
+            if (msg.contains("PGRST205") || msg.contains("Could not find the table", ignoreCase = true)) {
+                Log.w(TAG, "Table '${SupabaseDefaults.TABLE_LEADS}' not found in Supabase schema cache; returning null.")
+                Result.success(null)
+            } else {
+                Log.e(TAG, "Error fetching lead by personId from Supabase", e)
+                Result.failure(e)
+            }
         }
     }
 
@@ -709,8 +727,14 @@ class SupabaseService @Inject constructor(
                 .decodeList<com.example.callog.data.crm.model.ClientCallsLogDto>()
             Result.success(logs)
         } catch (e: Exception) {
-            Log.e(TAG, "Error fetching calls_log from Supabase", e)
-            Result.failure(e)
+            val msg = e.message.orEmpty()
+            if (msg.contains("PGRST205") || msg.contains("Could not find the table", ignoreCase = true)) {
+                Log.w(TAG, "Table '${SupabaseDefaults.TABLE_CALLS_LOG}' not found in Supabase schema cache; returning empty.")
+                Result.success(emptyList())
+            } else {
+                Log.e(TAG, "Error fetching calls_log from Supabase", e)
+                Result.failure(e)
+            }
         }
     }
 

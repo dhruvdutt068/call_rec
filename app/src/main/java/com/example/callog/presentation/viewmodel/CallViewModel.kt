@@ -58,15 +58,23 @@ class CallViewModel @Inject constructor(
     private val callSessionManager: com.example.callog.domain.service.CallSessionManager,
     private val environmentConfigManager: com.example.callog.core.config.EnvironmentConfigManager,
     private val leadMasterDao: com.example.callog.data.local.dao.LeadMasterDao,
-    private val leadStageDao: com.example.callog.data.local.dao.LeadStageDao
+    private val leadStageDao: com.example.callog.data.local.dao.LeadStageDao,
+    private val presetRepository: com.example.callog.domain.repository.PresetRepository
 ) : ViewModel() {
 
     val activeEnvironment: StateFlow<com.example.callog.domain.model.AppEnvironment> = environmentConfigManager.activeEnvironment
 
     fun setEnvironment(env: com.example.callog.domain.model.AppEnvironment) {
         environmentConfigManager.setActiveEnvironment(env)
-        // FirestoreService and SupabaseService react automatically via their
-        // registered EnvironmentConfigManager listeners — no manual reload needed.
+        viewModelScope.launch {
+            val presetId = if (env == com.example.callog.domain.model.AppEnvironment.PRODUCTION) "preset_prod_default" else "preset_dev_default"
+            try {
+                presetRepository.setActivePreset(presetId)
+                supabaseService.invalidateClient()
+            } catch (e: Exception) {
+                android.util.Log.w("CallViewModel", "Failed to activate preset $presetId: ${e.message}")
+            }
+        }
         DeveloperLogger.info("CallViewModel", "Active environment switched to: ${env.label}")
     }
 

@@ -29,6 +29,9 @@ class ActivePresetProviderImpl @Inject constructor(
     private val _activePresetFlow = MutableStateFlow<AppPreset?>(null)
     override val activePresetFlow: StateFlow<AppPreset?> = _activePresetFlow.asStateFlow()
 
+    @Volatile
+    private var cachedSecrets: PresetSecrets? = null
+
     private val listeners = mutableListOf<() -> Unit>()
 
     init {
@@ -37,6 +40,7 @@ class ActivePresetProviderImpl @Inject constructor(
             presetRepository.getActivePresetFlow().collect { preset ->
                 val previous = _activePresetFlow.value
                 _activePresetFlow.value = preset
+                cachedSecrets = preset?.let { presetRepository.getSecrets(it.id) }
                 if (previous != null && preset != null && (previous.id != preset.id || previous.updatedAt != preset.updatedAt)) {
                     Log.d(TAG, "Active preset updated: ${preset.name} (${preset.id})")
                     notifyListeners()
@@ -54,7 +58,13 @@ class ActivePresetProviderImpl @Inject constructor(
 
     override suspend fun getActiveSecrets(): PresetSecrets? {
         val current = getActivePreset()
-        return presetRepository.getSecrets(current.id)
+        val secrets = presetRepository.getSecrets(current.id)
+        cachedSecrets = secrets
+        return secrets
+    }
+
+    override fun getActiveSecretsSync(): PresetSecrets? {
+        return cachedSecrets
     }
 
     override suspend fun isFeatureEnabled(featureKey: String): Boolean {
