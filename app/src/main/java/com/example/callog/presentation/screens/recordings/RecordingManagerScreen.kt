@@ -485,6 +485,8 @@ fun RecordingDetailDialog(
                     playProgress = 0f
                     mediaPlayer?.seekTo(0)
                 }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
             } catch (e: Exception) {
                 android.util.Log.e("RecordingDetailDialog", "Playback failed", e)
                 Toast.makeText(context, "Playback failed: ${e.message}", Toast.LENGTH_SHORT).show()

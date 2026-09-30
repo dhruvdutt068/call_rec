@@ -297,7 +297,7 @@ class PresetRepositoryImpl @Inject constructor(
 
             // Always ensure default presets have valid non-blank secrets in secretStore
             val prodSec = secretStore.getSecrets(prodId)
-            if (prodSec == null || prodSec.supabaseAnonKey.isNullOrBlank()) {
+            if (prodSec == null || prodSec.supabaseAnonKey.isNullOrBlank() || prodSec.supabaseAnonKey != SupabaseDefaults.PROD_ANON_KEY) {
                 secretStore.saveSecrets(prodId, prodSecrets)
                 Log.i(TAG, "Restored default secrets for preset_prod_default.")
             }

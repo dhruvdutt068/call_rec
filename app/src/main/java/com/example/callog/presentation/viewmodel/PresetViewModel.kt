@@ -87,9 +87,9 @@ class PresetViewModel @Inject constructor(
                 val targetPreset = presets.value.firstOrNull { it.id == presetId }
                 if (targetPreset != null) {
                     val targetEnv = if (targetPreset.environment == PresetEnvironment.PRODUCTION) {
-                        com.example.callog.core.config.AppEnvironment.PRODUCTION
+                        AppEnvironment.PRODUCTION
                     } else {
-                        com.example.callog.core.config.AppEnvironment.DEVELOPMENT
+                        AppEnvironment.DEVELOPMENT
                     }
                     environmentConfigManager.setActiveEnvironment(targetEnv)
                 }

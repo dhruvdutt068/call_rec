@@ -32,7 +32,9 @@ import com.example.callog.core.extensions.toDurationString
 import com.example.callog.presentation.components.*
 import com.example.callog.presentation.theme.*
 import com.example.callog.presentation.viewmodel.CallViewModel
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
@@ -67,12 +69,16 @@ fun CallDetailsScreen(
         val mediaPlayer = remember(call.recordingPath) {
             if (call.recordingPath != null) {
                 try {
-                    android.media.MediaPlayer().apply {
-                        val file = java.io.File(call.recordingPath)
-                        val fis = java.io.FileInputStream(file)
-                        setDataSource(fis.fd)
-                        prepare()
-                        fis.close()
+                    val file = java.io.File(call.recordingPath)
+                    if (file.exists() && file.canRead()) {
+                        android.media.MediaPlayer().apply {
+                            val fis = java.io.FileInputStream(file)
+                            setDataSource(fis.fd)
+                            prepare()
+                            fis.close()
+                        }
+                    } else {
+                        null
                     }
                 } catch (e: Exception) {
                     android.util.Log.e("CallDetailsScreen", "Error preparing MediaPlayer for path ${call.recordingPath}", e)
@@ -90,7 +96,16 @@ fun CallDetailsScreen(
 
         // Release player when screen is disposed or path changes
         DisposableEffect(mediaPlayer) {
+            mediaPlayer?.setOnCompletionListener {
+                isPlaying = false
+                playProgress = 0f
+            }
             onDispose {
+                try {
+                    if (mediaPlayer?.isPlaying == true) {
+                        mediaPlayer.stop()
+                    }
+                } catch (_: Exception) {}
                 mediaPlayer?.release()
             }
         }
@@ -99,26 +114,35 @@ fun CallDetailsScreen(
         LaunchedEffect(isPlaying, mediaPlayer) {
             if (isPlaying && mediaPlayer != null) {
                 try {
-                    mediaPlayer.start()
-                    while (isPlaying && mediaPlayer.isPlaying) {
-                        val currentPos = mediaPlayer.currentPosition.toFloat() / mediaPlayer.duration.toFloat()
-                        playProgress = currentPos.coerceIn(0f, 1f)
+                    if (!mediaPlayer.isPlaying) {
+                        mediaPlayer.start()
+                    }
+                    while (isActive && isPlaying && mediaPlayer.isPlaying) {
+                        val totalDuration = mediaPlayer.duration.toFloat().coerceAtLeast(1f)
+                        val currentPos = mediaPlayer.currentPosition.toFloat()
+                        playProgress = (currentPos / totalDuration).coerceIn(0f, 1f)
                         delay(100)
                     }
                     if (!mediaPlayer.isPlaying && playProgress >= 0.95f) {
                         isPlaying = false
                         playProgress = 0f
-                        mediaPlayer.seekTo(0)
+                        try {
+                            mediaPlayer.seekTo(0)
+                        } catch (_: Exception) {}
                     }
+                } catch (e: CancellationException) {
+                    // Normal coroutine cancellation when paused, navigated away, or left composition
+                    throw e
                 } catch (e: Exception) {
                     android.util.Log.e("CallDetailsScreen", "Error playing recording", e)
+                    isPlaying = false
                 }
             } else {
                 try {
                     if (mediaPlayer?.isPlaying == true) {
                         mediaPlayer.pause()
                     }
-                } catch (e: Exception) {
+                } catch (_: Exception) {
                     // Ignore state errors
                 }
             }

@@ -84,6 +84,11 @@ class EnvironmentConfigManager @Inject constructor(
         val url = prefs.getString("${prefix}_supabase_url", null)
         val key = prefs.getString("${prefix}_supabase_key", null)
 
+        if (env == AppEnvironment.PRODUCTION && url?.contains("vxineppqpqslqjqvnlzv") == true) {
+            prefs.edit().remove("${prefix}_supabase_url").remove("${prefix}_supabase_key").apply()
+            return SupabaseConfig(SupabaseDefaults.PROD_URL, SupabaseDefaults.PROD_ANON_KEY)
+        }
+
         return if (!url.isNullOrBlank() && !key.isNullOrBlank()) {
             SupabaseConfig(url.trim(), key.trim())
         } else {

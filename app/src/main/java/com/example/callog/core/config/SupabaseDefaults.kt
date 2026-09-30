@@ -12,9 +12,9 @@ object SupabaseDefaults {
         "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFpenJ0bXZnY3d4dXljYnBrZXVhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM3NTAzNTMsImV4cCI6MjA5OTMyNjM1M30.wLHCz8zv79ySmPSnI6Z-WSdD7s9qvzCxVxYQOnIh5WU"
 
     // Production Supabase
-    const val PROD_URL = "https://vxineppqpqslqjqvnlzv.supabase.co"
+    const val PROD_URL = "https://nmhgdhehsfcootlqwumw.supabase.co"
     const val PROD_ANON_KEY =
-        "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZ4aW5lcHBxcHFzbHFqcXZubHp2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODg0MTI1MjYsImV4cCI6MjEwMzk4ODUyNn0.OZ-LoP2u3a80_Z6HZ5zk2rhCokag1nniBYuTsNRFIpI"
+        "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5taGdkaGVoc2Zjb290bHF3dW13Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODgzMjc1OTEsImV4cCI6MjEwMzkwMzU5MX0.ThJvtEr2kmmaPQIPFBy-bCJIliHVqv2m_2SS-ZR2Gm0"
 
     // Default points to Development
     const val DEFAULT_URL = DEV_URL

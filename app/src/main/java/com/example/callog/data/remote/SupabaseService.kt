@@ -114,7 +114,9 @@ class SupabaseService @Inject constructor(
     suspend fun testSupabaseConnection(url: String, key: String): Result<Unit> = withContext(Dispatchers.IO) {
         try {
             val resolvedUrl = url.trim()
-            val defaultKey = if (resolvedUrl == SupabaseDefaults.PROD_URL || resolvedUrl.contains("vxineppqpqslqjqvnlzv", ignoreCase = true)) {
+            val defaultKey = if (resolvedUrl == SupabaseDefaults.PROD_URL ||
+                resolvedUrl.contains("nmhgdhehsfcootlqwumw", ignoreCase = true) ||
+                resolvedUrl.contains("vxineppqpqslqjqvnlzv", ignoreCase = true)) {
                 SupabaseDefaults.PROD_ANON_KEY
             } else {
                 SupabaseDefaults.DEV_ANON_KEY
