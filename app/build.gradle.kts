@@ -52,6 +52,7 @@ android {
         buildConfigField("String", "FIREBASE_DEV_STORAGE_BUCKET", "\"${getSecret("firebase.dev.storage_bucket", "allset-491218.firebasestorage.app")}\"")
         buildConfigField("String", "FIREBASE_DEV_GCM_SENDER_ID", "\"${getSecret("firebase.dev.gcm_sender_id", "799427430422")}\"")
         buildConfigField("String", "FIREBASE_DEV_DATABASE_URL", "\"${getSecret("firebase.dev.database_url", "https://allset-491218-default-rtdb.asia-southeast1.firebasedatabase.app")}\"")
+        buildConfigField("String", "FIREBASE_DEV_DATABASE_ID", "\"${getSecret("firebase.dev.database_id", "call-logs")}\"")
 
         // Firebase Prod
         buildConfigField("String", "FIREBASE_PROD_PROJECT_ID", "\"${getSecret("firebase.prod.project_id", "allset-244ab")}\"")

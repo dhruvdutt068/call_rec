@@ -82,7 +82,11 @@ class FirestoreService @Inject constructor(
             }
             val apiKey = secrets?.firebaseApiKey?.ifBlank { null } ?: defaultApiKey
             val dbId = activePreset.configuration.firebaseDatabaseId?.ifBlank { null }
-                ?: if (activePreset.environment == com.example.callog.domain.model.preset.PresetEnvironment.PRODUCTION) "call-logs" else null
+                ?: if (activePreset.environment == com.example.callog.domain.model.preset.PresetEnvironment.PRODUCTION) {
+                    com.example.callog.core.config.FirebaseDefaults.PROD_CONFIG.databaseId ?: "call-logs"
+                } else {
+                    com.example.callog.core.config.FirebaseDefaults.DEV_CONFIG.databaseId
+                }
 
             return FirebaseConfig(
                 projectId = activePreset.configuration.firebaseProjectId.trim(),
@@ -250,7 +254,12 @@ class FirestoreService @Inject constructor(
                     if (environmentConfigManager.getActiveEnvironment() == AppEnvironment.PRODUCTION) {
                         FirebaseFirestore.getInstance(defaultApp, "call-logs")
                     } else {
-                        FirebaseFirestore.getInstance(defaultApp)
+                        val devDbId = com.example.callog.core.config.FirebaseDefaults.DEV_CONFIG.databaseId
+                        if (devDbId != null && devDbId != "(default)") {
+                            FirebaseFirestore.getInstance(defaultApp, devDbId)
+                        } else {
+                            FirebaseFirestore.getInstance(defaultApp)
+                        }
                     }
                 }
             } catch (e: Exception) {
@@ -286,7 +295,12 @@ class FirestoreService @Inject constructor(
                 val fs = if (environmentConfigManager.getActiveEnvironment() == AppEnvironment.PRODUCTION) {
                     FirebaseFirestore.getInstance(defaultApp, "call-logs")
                 } else {
-                    FirebaseFirestore.getInstance(defaultApp)
+                    val devDbId = com.example.callog.core.config.FirebaseDefaults.DEV_CONFIG.databaseId
+                    if (devDbId != null && devDbId != "(default)") {
+                        FirebaseFirestore.getInstance(defaultApp, devDbId)
+                    } else {
+                        FirebaseFirestore.getInstance(defaultApp)
+                    }
                 }
                 Pair(fs, FirebaseStorage.getInstance(defaultApp))
             }

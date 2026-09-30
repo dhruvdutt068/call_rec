@@ -17,7 +17,7 @@ object FirebaseDefaults {
         storageBucket = BuildConfig.FIREBASE_DEV_STORAGE_BUCKET.ifBlank { null },
         gcmSenderId = BuildConfig.FIREBASE_DEV_GCM_SENDER_ID.ifBlank { null },
         databaseUrl = BuildConfig.FIREBASE_DEV_DATABASE_URL.ifBlank { null },
-        databaseId = null
+        databaseId = BuildConfig.FIREBASE_DEV_DATABASE_ID.ifBlank { null }
     )
 
     val PROD_CONFIG = FirebaseConfig(

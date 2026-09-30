@@ -111,6 +111,7 @@ class ActivePresetProviderImpl @Inject constructor(
                 storageBucket = com.example.callog.core.config.FirebaseDefaults.DEV_CONFIG.storageBucket,
                 gcmSenderId = com.example.callog.core.config.FirebaseDefaults.DEV_CONFIG.gcmSenderId,
                 databaseUrl = com.example.callog.core.config.FirebaseDefaults.DEV_CONFIG.databaseUrl,
+                firebaseDatabaseId = com.example.callog.core.config.FirebaseDefaults.DEV_CONFIG.databaseId,
                 apiBaseUrl = "https://dev-api.callog.internal"
             ),
             isActive = true

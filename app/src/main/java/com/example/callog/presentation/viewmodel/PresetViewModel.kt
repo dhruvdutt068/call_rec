@@ -306,10 +306,10 @@ class PresetViewModel @Inject constructor(
                 supabaseUrl = if (env == PresetEnvironment.DEVELOPMENT) com.example.callog.core.config.SupabaseDefaults.DEV_URL else com.example.callog.core.config.SupabaseDefaults.PROD_URL,
                 firebaseProjectId = if (env == PresetEnvironment.DEVELOPMENT) "allset-491218" else "allset-244ab",
                 firebaseAppId = if (env == PresetEnvironment.DEVELOPMENT) "1:799427430422:android:e0f5737f12b8b9cbb20d37" else "1:598633676290:android:e264397de748bf0371711b",
-                storageBucket = if (env == PresetEnvironment.DEVELOPMENT) "allset-491218.firebasestorage.app" else "allset-244ab.firebasestorage.app",
+                storageBucket = if (env == PresetEnvironment.DEVELOPMENT) com.example.callog.core.config.FirebaseDefaults.DEV_CONFIG.storageBucket else "allset-244ab.firebasestorage.app",
                 gcmSenderId = if (env == PresetEnvironment.DEVELOPMENT) "799427430422" else "598633676290",
                 databaseUrl = if (env == PresetEnvironment.DEVELOPMENT) "https://allset-491218-default-rtdb.asia-southeast1.firebasedatabase.app" else null,
-                firebaseDatabaseId = if (env == PresetEnvironment.DEVELOPMENT) null else "call-logs",
+                firebaseDatabaseId = if (env == PresetEnvironment.DEVELOPMENT) com.example.callog.core.config.FirebaseDefaults.DEV_CONFIG.databaseId else "call-logs",
                 apiBaseUrl = if (env == PresetEnvironment.DEVELOPMENT) "https://dev-api.callog.internal" else "https://api.callog.com",
                 features = defaultFeatures
             ),

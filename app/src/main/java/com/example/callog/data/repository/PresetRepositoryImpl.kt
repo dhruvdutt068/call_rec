@@ -273,11 +273,18 @@ class PresetRepositoryImpl @Inject constructor(
             if (existingDevEntity != null) {
                 val existingDev = existingDevEntity.toDomain(json)
                 if (existingDev.configuration.firebaseProjectId != FirebaseDefaults.DEV_CONFIG.projectId ||
-                    existingDev.configuration.supabaseUrl != SupabaseDefaults.DEV_URL) {
-                    val updatedDev = devPreset.copy(isActive = existingDev.isActive)
+                    existingDev.configuration.supabaseUrl != SupabaseDefaults.DEV_URL ||
+                    existingDev.configuration.storageBucket != FirebaseDefaults.DEV_CONFIG.storageBucket ||
+                    existingDev.configuration.firebaseDatabaseId != FirebaseDefaults.DEV_CONFIG.databaseId) {
+                    val updatedDev = devPreset.copy(
+                        isActive = existingDev.isActive,
+                        configuration = devPreset.configuration.copy(
+                            features = existingDev.configuration.features
+                        )
+                    )
                     presetDao.insertOrUpdate(PresetEntity.fromDomain(updatedDev, json))
                     secretStore.saveSecrets(devId, devSecrets)
-                    Log.i(TAG, "Self-healed preset_dev_default to verified credentials.")
+                    Log.i(TAG, "Self-healed preset_dev_default to verified credentials (bucket: ${FirebaseDefaults.DEV_CONFIG.storageBucket}, db: ${FirebaseDefaults.DEV_CONFIG.databaseId}).")
                 }
             }
             val existingProdEntity = presetDao.getPresetById(prodId)
