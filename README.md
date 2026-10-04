@@ -17,6 +17,8 @@ A high-performance Android application built using Kotlin and Jetpack Compose de
 * **Background Sync Service**: Employs Android `WorkManager` with exponential backoff retries to automatically sync pending data and upload recordings in the background when connected to the internet.
 * **Local Database Caching (Room v17)**: Offline-first Room SQLite DB caching call records, canonical CRM people, phone numbers, device aliases, favorites, notes, tags, and sync status with `personId` indexing.
 * **SIM & Dual SIM Management**: Tracks and handles call routing and identification across multi-SIM hardware through dedicated SIM managers.
+* **CRM Custom Ringtone & Haptics Engine**: Dynamic ringtone resolution and distinctive tactile vibration profiles (double-pulse for HOT, standard for WARM, subtle chime for COLD) based on a 5-tier priority hierarchy (Person-specific > CRM Priority > Lead Status > Customer > Default).
+* **OEM Dual-Ringing Prevention & MediaStore Contact Sync**: Injects MediaStore-exported ringtone URIs into Android's `ContactsContract.Contacts.CUSTOM_RINGTONE` so Samsung/OEM dialers ring natively without audio collisions or dual-ringing races.
 * **Deep Linking**: Full support for `allset://` and `callog://` URIs for contacts (`allset://contact/{id}`), logs (`allset://logs`), search (`allset://contacts/search?q={query}`), tasks, and meetings.
 
 ---
@@ -28,6 +30,7 @@ A high-performance Android application built using Kotlin and Jetpack Compose de
 * **Navigation**: Jetpack Navigation 3 (State-first, Type-safe keys, Multi-backstack)
 * **Dependency Injection**: Dagger Hilt 2.51.1
 * **Database**: Room ORM 2.6.1 (SQLite Version 17 with non-destructive migrations)
+* **Telecom & In-Call**: Android `InCallService` (`IN_CALL_SERVICE_RINGING`), `RingtoneController`, `AudioManager` Audio Focus, `VibratorManager`
 * **Background Processing**: WorkManager
 * **Network & Remote Services**:
   * **Firebase**: Firestore (Metadata) & Cloud Storage (Audio assets)
@@ -89,6 +92,9 @@ callog/
 | `core/extensions/Extensions.kt` | **Kotlin Utility Extensions**: Formatting epoch timestamps to readable dates, phone number normalization, and duration formatting (`MM:SS`). |
 | `core/utils/PhoneNumberNormalizer.kt` | **Canonical Phone Normalizer**: Strips formatting, country codes, and non-numeric characters down to consistent 10-digit subscriber numbers for cross-device identity resolution. |
 | `core/utils/ConnectivityService.kt` | **Network Monitor**: Uses `ConnectivityManager.NetworkCallback` to emit reactive `Flow<Boolean>` network status for offline-first sync triggering. |
+| `core/telecom/CallService.kt` | **Android Telecom InCallService**: Authoritative telecom service implementing `IN_CALL_SERVICE_RINGING`, managing native call sessions, callbacks, audio routing, and ringer silence events. |
+| `core/telecom/CallRingtoneManager.kt` | **Telecom Ringtone Coordinator**: High-level manager coordinating CRM-driven dynamic ringtone playback, lead status haptic feedback, and audio focus lifecycle. |
+| `core/telecom/RingtoneController.kt` | **Authoritative Ringtone Controller**: Plays CRM ringtones via `MediaPlayer`, requests audio focus (`AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK`), observes ringer modes (`SILENT`, `VIBRATE`, `NORMAL`), handles transient ducking, and generates lead-aware vibration waveforms. |
 
 ---
 
@@ -125,6 +131,7 @@ callog/
 |---|---|
 | `provider/CallLogProvider.kt` | **Call Log Scanner**: Queries Android's `CallLog.Calls` content provider to extract raw call metadata across single and dual-SIM slots. |
 | `provider/ContactsProvider.kt` | **Android Contacts Scanner**: Queries Android's `ContactsContract` content provider to match caller IDs with local contact names and photos. |
+| `provider/ContactRingtoneSyncManager.kt` | **Contact Ringtone Sync & OEM Delegator**: Synchronizes CRM leads and custom ringtones directly into `ContactsContract.Contacts.CUSTOM_RINGTONE`. Evaluates `PhoneLookup` to delegate ringing to Samsung/OEM dialers, preventing double-ringing collisions. |
 | `provider/RecordingScanner.kt` | **Audio Media Scanner**: Scans internal storage directories for audio recording files and uses fuzzy string matching and timestamp heuristics to associate recordings with call logs. |
 | `receiver/CallReceiver.kt` | **Telephony Broadcast Receiver**: Listens for phone state changes (`EXTRA_STATE_RINGING`, `EXTRA_STATE_OFFHOOK`, `EXTRA_STATE_IDLE`) to trigger automatic post-call recording rescanning. |
 | `remote/FirestoreService.kt` | **Firebase Firestore Client**: Uploads structured call metadata, creates date-partitioned collections, and manages document updates. |
@@ -134,7 +141,10 @@ callog/
 | `repository/CallRepositoryImpl.kt` | **Call Repository Implementation**: Implements `CallRepository` interface, coordinating between local Room DB, Android system providers, and `PersonDao` identity resolution. |
 | `repository/FirestoreRepositoryImpl.kt` | **Firestore Repository Implementation**: Implements `FirestoreRepository`, managing remote metadata synchronization and offline queuing. |
 | `repository/RecordingRepositoryImpl.kt` | **Recording Repository Implementation**: Coordinates audio file discovery, local database caching, and playback source preparation. |
+| `repository/RingtoneRepositoryImpl.kt` | **Ringtone Repository Implementation**: Atomically copies and imports audio files into app-private storage (`filesDir/ringtones/`), validates audio metadata, manages SharedPreferences caching, and self-heals corrupted files. |
 | `service/UploadServiceImpl.kt` | **Recording Upload Coordinator**: Streams audio files to Firebase Cloud Storage with progress updates. |
+| `telecom/DefaultRingtonePolicy.kt` | **CRM Ringtone Policy Engine**: Evaluates 5-tier resolution priority (Person override &rarr; CRM priority &rarr; Lead status &rarr; Customer &rarr; System default). |
+| `telecom/MediaStoreRingtoneExporter.kt` | **Public MediaStore Exporter**: Copies private audio tracks to public `MediaStore.Audio.Media` so Samsung InCallUI (separate UID) can access contact ringtones without Scoped Storage `SecurityException`. |
 | `worker/SyncWorker.kt` | **Background Sync Worker**: Scheduled periodic WorkManager task that resolves contacts to canonical people, syncs call logs, and pushes pending records to Firebase and Supabase. |
 | `worker/UploadRecordingWorker.kt` | **Recording Upload Worker**: Dedicated WorkManager worker executing sequential background uploads of audio files to Firebase Cloud Storage. |
 
@@ -147,6 +157,7 @@ callog/
 | `di/AppModule.kt` | **Application Module**: Provides application context, singletons, `SimManager`, and binds repository implementations (`CallRepository`, `PersonRepository`, `RecordingRepository`, `FirestoreRepository`). |
 | `di/DatabaseModule.kt` | **Database Module**: Builds `CallVaultDatabase` singleton with `MIGRATION_5_6`, `MIGRATION_13_14`, `MIGRATION_14_15`, `MIGRATION_15_16`, and `MIGRATION_16_17`, providing all DAOs (`PersonDao`, `CallDao`, `SalesCallDao`, `RecordingDao`, `SyncLogDao`, `TracebackDao`, `ReminderDao`). |
 | `di/NetworkModule.kt` | **Network Module**: Provides `SupabaseService`, `FirestoreService`, and network-related singletons. |
+| `di/TelecomModule.kt` | **Telecom Dependency Module**: Binds `RingtoneRepository` to `RingtoneRepositoryImpl`, `RingtonePolicy` to `DefaultRingtonePolicy`, `CallOrchestrator`, and exposes `TelecomEntryPoint`. |
 
 ---
 
@@ -163,7 +174,10 @@ callog/
 | `repository/CallRepository.kt` | **Call Repository Interface**: Defines contracts for fetching, filtering, syncing, and modifying call logs. |
 | `repository/FirestoreRepository.kt` | **Firestore Repository Interface**: Defines contracts for remote cloud synchronization. |
 | `repository/RecordingRepository.kt` | **Recording Repository Interface**: Defines contracts for audio file scanning and matching. |
+| `repository/RingtoneRepository.kt` | **Ringtone Repository Contract**: Interface defining getters and atomic import routines for HOT, WARM, COLD, NEW, CUSTOMER, and person-specific ringtones. |
+| `repository/RingtonePolicy.kt` | **Ringtone Policy Contract**: Interface defining `ringtoneFor(person: Person?, lead: Lead?): Uri`. |
 | `service/SyncManager.kt` | **Sync Coordination Service**: Domain manager scheduling periodic background sync runs, monitoring network states, and triggering immediate sync requests. |
+| `service/CallSessionManager.kt` | **Active Telecom Call Coordinator**: Manages reactive call sessions, coordinates bounded CRM lookup (800ms timeout), evaluates contact existence to delegate ringing or trigger `RingtoneController`, and drives in-call state. |
 | `usecase/ResolveAndAttachContactUseCase.kt` | **Identity Resolution Use Case**: Resolves device contacts by normalized phone number, creating canonical people and linking multi-device aliases without duplication. |
 | `usecase/SyncCallLogsUseCase.kt` | **Call Log Sync Use Case**: Orchestrates scanning system call logs and updating the local Room database. |
 | `usecase/SyncPendingCallsUseCase.kt` | **Cloud Sync Use Case**: Pushes pending local changes to remote Firebase and Supabase backends. |
@@ -210,6 +224,7 @@ callog/
 | `analytics/AnalyticsScreen.kt` | **Call Analytics**: Visual charts for call volume, duration metrics, talk-time per SIM, and peak interaction hours. |
 | `favorites/FavoritesScreen.kt` | **Favorites Screen**: Filtered feed of starred calls and key client interactions. |
 | `settings/SettingsScreen.kt` | **Settings Screen**: Cloud backend credentials configuration (Firebase/Supabase), auto-sync toggles, and business SIM selection. |
+| `settings/CrmRingtoneSettingsScreen.kt` | **CRM Ringtone Policy Screen**: Interactive configuration and audio preview for status-based ringtones (Hot, Warm, Cold, Customer, and Default) with system ringtone picker integration. |
 | `developer/DeveloperDashboardScreen.kt`, `RecordingDiagnosticsScreen.kt`, `SyncLogsScreen.kt` | **Developer Diagnostic Suite**: Real-time diagnostic monitors for audio scanning heuristics, background sync attempts, and live system tracebacks. |
 | `permission/PermissionScreen.kt`, `onboarding/OnboardingScreen.kt`, `splash/SplashScreen.kt` | **Onboarding & Permissions**: Runtime permission rationale dialogs, introductory walkthroughs, and animated splash screen. |
 
@@ -255,6 +270,9 @@ callog/
 | `AllSetContactNavigationTest.kt` | **Canonical ContactId Tests**: Tests contact navigation using canonical IDs and sub-screen transitions. |
 | `AllSetMultiBackStackTest.kt` | **Multi-Backstack Isolation Tests**: Tests state preservation across tab switches (Contacts &rarr; Meetings &rarr; Tasks &rarr; Contacts). |
 | `AllSetResultPassingTest.kt` | **Result Passing Tests**: Tests `AllSetResultManager` result propagation for `EditContact`, `AddFeedback`, and `CreateTask`. |
+| `RingtonePersistenceAndLifecycleTest.kt` | **Ringtone Persistence & Lifecycle Tests**: Verifies atomic audio copying into app-private storage, corrupt 0-byte file handling without data loss, disk file deletion self-healing, and `RingtoneController` idempotency. |
+| `CallRingtoneManagerTest.kt` | **CRM Ringtone Priority Tests**: Verifies 5-tier resolution hierarchy (Person override &rarr; CRM priority &rarr; Lead status &rarr; Customer match &rarr; System default fallback) and audio focus teardown. |
+| `ContactRingtoneSyncTest.kt` | **Contact Ringtone Sync & OEM Tests**: Verifies foreign key lead status resolution, MediaStore export fallback, unknown caller lead resolution, and non-CRM unknown caller in-app suppression to prevent Samsung dual-ringing collisions. |
 
 ---
 
@@ -344,6 +362,64 @@ The Contacts Directory enforces a strict two-source model with zero cross-contam
 
 ---
 
+## 12. 🔔 CRM Custom Ringtone & Audio Policy Architecture
+
+Callog implements an enterprise-grade custom ringtone and haptic feedback subsystem designed to give sales professionals immediate auditory and tactile awareness of caller importance, while overcoming notorious Android OEM pitfalls (such as **Samsung dual-ringing** and **Scoped Storage IPC permission denials**).
+
+### The Real-World Android Dilemma
+1. **Audio Collision / Dual-Ringing**: In Android Telecom, registering `<meta-data android:name="android.telecom.IN_CALL_SERVICE_RINGING" android:value="true" />` allows the app's `InCallService` to handle ringtones. However, OEM dialers (particularly Samsung InCallUI) often ring simultaneously via system telephony broadcasts. If an app plays audio via `MediaPlayer` while Samsung also rings, two ringtones play at once.
+2. **Scoped Storage IPC Boundary**: Samsung InCallUI runs in a separate system UID process (`com.samsung.android.incallui`). Storing ringtones in private app files (`context.filesDir`) causes a `SecurityException: Permission Denial` when Samsung attempts to resolve `ContactsContract.Contacts.CUSTOM_RINGTONE`.
+
+### Two-Pronged Hybrid Solution
+Callog solves this via two coordinated strategies:
+
+```text
+                           Incoming Call Event
+                                    │
+                    Is caller in Device Contacts?
+                                   / \
+                             YES  /   \  NO
+                                 /     \
+                                ▼       ▼
+     STRATEGY A (Native OEM Sync)       STRATEGY B (In-App Telecom)
+     • In-app audio SUPPRESSED          • RingtonePolicy resolves URI
+     • ContactsContract.CUSTOM_RINGTONE • Audio focus requested
+       points to public MediaStore URI  • Lead-aware haptic pattern loops
+     • Samsung rings natively           • In-app MediaPlayer plays tone
+     • ZERO dual-ringing collision      • Suppresses if non-CRM unknown
+```
+
+1. **Strategy A (Native OEM Sync via MediaStore Export)**:
+   - [`MediaStoreRingtoneExporter`](file:///D:/repo/app/src/main/java/com/example/callog/data/telecom/MediaStoreRingtoneExporter.kt) exports private `.audio` files to public `MediaStore.Audio.Media.EXTERNAL_CONTENT_URI` under `Ringtones/Callog/` with `IS_RINGTONE = 1`.
+   - [`ContactRingtoneSyncManager`](file:///D:/repo/app/src/main/java/com/example/callog/data/provider/ContactRingtoneSyncManager.kt) writes this public URI into `ContactsContract.Contacts.CUSTOM_RINGTONE` during CRM sync.
+   - When a call arrives, if `isContactAlreadyInDevice()` returns `true`, the app **suppresses in-app audio**, allowing Samsung/OEM dialers to ring natively without dual-ring collisions.
+
+2. **Strategy B (Dynamic In-App Telecom Ringing)**:
+   - For unsynced CRM leads, [`CallSessionManager`](file:///D:/repo/app/src/main/java/com/example/callog/domain/service/CallSessionManager.kt) performs a bounded 800ms CRM lookup.
+   - If the caller is a CRM lead, [`RingtoneController`](file:///D:/repo/app/src/main/java/com/example/callog/core/telecom/RingtoneController.kt) requests audio focus (`AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK`), loops `MediaPlayer`, and initiates lead-aware haptics.
+   - If the caller is an unknown non-CRM number, in-app audio is suppressed to let the system default ringer play alone.
+   - Unsynced leads are asynchronously synced to device contacts in the background so future calls use Strategy A.
+
+### 5-Tier Priority Hierarchy
+Enforced by [`DefaultRingtonePolicy`](file:///D:/repo/app/src/main/java/com/example/callog/data/telecom/DefaultRingtonePolicy.kt):
+1. **Person-Specific**: Direct contact override (`ringtone_person_<personId>`).
+2. **CRM Priority**: Leads marked `URGENT` or `HIGH` (`ringtone_crm_priority`).
+3. **Lead Status**: Explicit stage tones (`ringtone_lead_hot`, `ringtone_lead_warm`, `ringtone_lead_cold`, `ringtone_lead_new`).
+4. **Customer / VIP**: Active customers identified by notes/feedback tag, `CUSTOMER` status, or company name (`ringtone_customer_type`).
+5. **System Default**: Fallback to `RingtoneManager.TYPE_RINGTONE`.
+
+### Lead-Aware Haptic Vibration Engine
+- **HOT Lead**: Aggressive double-pulse (`longArrayOf(0, 250, 150, 250, 1000)`).
+- **WARM Lead**: Standard 1-second cadence (`longArrayOf(0, 1000, 1000)`).
+- **COLD Lead**: Subtle minimal chime pulse (`longArrayOf(0, 150, 2500)`).
+- **Hardware Silence**: Pressing volume down or power triggers `InCallService.onSilenceRinger()` &rarr; `silenceRinger()`, immediately cutting audio and haptics without dropping the call.
+
+> 📖 **Deep Technical Documentation**:
+> - [Custom Ringtone Technical Architecture Specification](file:///D:/repo/documents/CUSTOM_RINGTONE_ARCHITECTURE.md)
+> - [Custom Ringtone Developer & Integration Guide](file:///D:/repo/documents/CUSTOM_RINGTONE_GUIDE.md)
+
+---
+
 ## ⚙️ Setup & Configuration
 
 ### 1. Permissions Required
@@ -426,7 +502,7 @@ Always keep a **secure private backup** of your `google-services.json` files (e.
    ```
 2. **Run All Unit Tests**:
    ```bash
-   ./gradlew testDebugUnitTest
+   ./gradlew testDevDebugUnitTest
    ```
 3. **Install on a Connected Device**:
    ```bash

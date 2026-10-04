@@ -13,7 +13,9 @@ sealed interface CallRecordingState {
     data class Saved(
         val recordingId: String,
         val filePath: String,
-        val durationMillis: Long
+        val durationMillis: Long,
+        val audioSource: Int? = null,
+        val audioSourceName: String? = null
     ) : CallRecordingState
     data class Error(
         val message: String
@@ -34,7 +36,9 @@ data class RecordingSession(
     val startedAt: Long,
     val endedAt: Long? = null,
     val durationMillis: Long = 0L,
-    val mimeType: String = "audio/mp4"
+    val mimeType: String = "audio/mp4",
+    val audioSource: Int? = null,
+    val audioSourceName: String? = null
 )
 
 interface CallRecordingController {
