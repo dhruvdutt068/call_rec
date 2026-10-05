@@ -108,6 +108,22 @@ fun RecordingManagerContent(
     // Detail Dialog state
     var selectedRecordingForDetail by remember { mutableStateOf<RecordingEntity?>(null) }
 
+    val context = LocalContext.current
+    var activePlayingPath by remember { mutableStateOf<String?>(null) }
+    var inlinePlayer by remember { mutableStateOf<MediaPlayer?>(null) }
+
+    DisposableEffect(Unit) {
+        onDispose {
+            try {
+                inlinePlayer?.stop()
+                inlinePlayer?.release()
+                inlinePlayer = null
+            } catch (e: Exception) {
+                // Ignore cleanup errors
+            }
+        }
+    }
+
     val scrollBehavior = TopAppBarDefaults.enterAlwaysScrollBehavior()
 
     Scaffold(
@@ -214,10 +230,43 @@ fun RecordingManagerContent(
                         // 2. Expanded Group Items
                         if (isExpanded) {
                             items(groupList, key = { "rec_${it.recording.id}" }) { item ->
+                                val isPlaying = activePlayingPath != null && activePlayingPath == item.recording.filePath
                                 RecordingChildItem(
                                     recording = item.recording,
                                     matchedCall = item.call,
                                     onCardClick = { selectedRecordingForDetail = item.recording },
+                                    isPlaying = isPlaying,
+                                    onPlayPauseClick = {
+                                        try {
+                                            if (isPlaying) {
+                                                inlinePlayer?.pause()
+                                                activePlayingPath = null
+                                            } else {
+                                                val file = File(item.recording.filePath)
+                                                if (file.exists() && file.canRead()) {
+                                                    inlinePlayer?.release()
+                                                    val newPlayer = MediaPlayer().apply {
+                                                        val fis = java.io.FileInputStream(file)
+                                                        setDataSource(fis.fd)
+                                                        prepare()
+                                                        fis.close()
+                                                        setOnCompletionListener {
+                                                            activePlayingPath = null
+                                                        }
+                                                        start()
+                                                    }
+                                                    inlinePlayer = newPlayer
+                                                    activePlayingPath = item.recording.filePath
+                                                } else {
+                                                    Toast.makeText(context, "Recording file not found on device", Toast.LENGTH_SHORT).show()
+                                                }
+                                            }
+                                        } catch (e: Exception) {
+                                            android.util.Log.e("RecordingManagerScreen", "Error playing recording", e)
+                                            Toast.makeText(context, "Playback error: ${e.message}", Toast.LENGTH_SHORT).show()
+                                            activePlayingPath = null
+                                        }
+                                    },
                                     modifier = Modifier.padding(start = 16.dp)
                                 )
                             }
@@ -326,6 +375,8 @@ fun RecordingChildItem(
     recording: RecordingEntity,
     matchedCall: CallLogEntry?,
     onCardClick: () -> Unit,
+    isPlaying: Boolean = false,
+    onPlayPauseClick: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val fileExists = remember(recording.filePath) { File(recording.filePath).exists() }
@@ -356,8 +407,8 @@ fun RecordingChildItem(
             ) {
                 Icon(
                     imageVector = Icons.Default.Mic,
-                    contentDescription = null,
-                    tint = micTint,
+                    contentDescription = if (isPlaying) "Playing Recording" else null,
+                    tint = if (isPlaying) CallogSemanticColors.SyncInProgress else micTint,
                     modifier = Modifier.size(20.dp)
                 )
             }
@@ -419,6 +470,21 @@ fun RecordingChildItem(
                             contentColor = CallogSemanticColors.RecordingColors.Corrupted
                         )
                     }
+                }
+            }
+
+            if (fileExists && onPlayPauseClick != null) {
+                Spacer(modifier = Modifier.width(8.dp))
+                IconButton(
+                    onClick = onPlayPauseClick,
+                    modifier = Modifier.size(36.dp)
+                ) {
+                    Icon(
+                        imageVector = if (isPlaying) Icons.Default.PauseCircle else Icons.Default.PlayCircle,
+                        contentDescription = if (isPlaying) "Pause Recording" else "Play Recording",
+                        tint = if (isPlaying) CallogSemanticColors.SyncInProgress else AllSetTeal,
+                        modifier = Modifier.size(26.dp)
+                    )
                 }
             }
         }

@@ -4,6 +4,7 @@ import com.example.callog.data.local.entity.CallEntity
 import com.example.callog.data.local.entity.MatchStatus
 import com.example.callog.data.local.entity.RecordingEntity
 import com.example.callog.data.local.entity.UploadStatus
+import com.example.callog.data.service.UploadServiceImpl
 import com.example.callog.domain.service.StorageErrorCategory
 import com.example.callog.domain.service.StorageUploadException
 import com.google.firebase.storage.StorageException
@@ -189,5 +190,75 @@ class StorageUploadTest {
         assertEquals(localFilePath, call.recordingLocalPath)
         // Local recording path must remain populated and not deleted
         assertTrue("Local path must be preserved for offline-first resilience", recording.filePath.isNotEmpty())
+    }
+
+    @Test
+    fun testGenerateRemoteRecordingPath_includesCallerNameAndNumber() {
+        val call = CallEntity(
+            id = 17010L,
+            name = "John Doe",
+            number = "+91 98765 43210",
+            duration = 60,
+            timestamp = 1760000000000L,
+            callType = "INCOMING",
+            recordingPath = "/sdcard/rec.m4a"
+        )
+        val path = UploadServiceImpl.generateRemoteRecordingPath(
+            normalizedDevicePhone = "919876543210",
+            call = call,
+            extension = "m4a"
+        )
+
+        assertTrue("Path should contain caller name", path.contains("John_Doe"))
+        assertTrue("Path should contain normalized number", path.contains("919876543210"))
+        assertTrue("Path should contain call id", path.contains("call_17010_"))
+        assertTrue("Path should end with extension", path.endsWith(".m4a"))
+        assertTrue("Path should follow date hierarchy", path.startsWith("users/919876543210/recordings/"))
+    }
+
+    @Test
+    fun testGenerateRemoteRecordingPath_sanitizesSpecialCharactersInCallerName() {
+        val call = CallEntity(
+            id = 20500L,
+            name = "Alice / Office (Client #1)!",
+            number = "+1 (555) 123-4567",
+            duration = 120,
+            timestamp = 1760000000000L,
+            callType = "OUTGOING",
+            recordingPath = "/sdcard/rec.mp3"
+        )
+        val path = UploadServiceImpl.generateRemoteRecordingPath(
+            normalizedDevicePhone = "15551234567",
+            call = call,
+            extension = "mp3"
+        )
+
+        assertFalse("Should not contain spaces", path.contains(" "))
+        assertFalse("Should not contain slashes in filename component", path.substringAfterLast("/").contains("/"))
+        assertFalse("Should not contain parens", path.contains("(") || path.contains(")"))
+        assertTrue("Should clean name with underscores", path.contains("Alice_Office_Client_1"))
+        assertTrue("Path should end with mp3", path.endsWith(".mp3"))
+    }
+
+    @Test
+    fun testGenerateRemoteRecordingPath_handlesNullOrBlankCallerName() {
+        val call = CallEntity(
+            id = 30000L,
+            name = null,
+            number = "+44 7911 123456",
+            duration = 30,
+            timestamp = 1760000000000L,
+            callType = "MISSED",
+            recordingPath = "/sdcard/rec.wav"
+        )
+        val path = UploadServiceImpl.generateRemoteRecordingPath(
+            normalizedDevicePhone = "447911123456",
+            call = call,
+            extension = "wav"
+        )
+
+        assertTrue("Should fallback to Unknown for null caller name", path.contains("Unknown"))
+        assertTrue("Should contain call id", path.contains("call_30000_Unknown_"))
+        assertTrue("Should end with wav", path.endsWith(".wav"))
     }
 }

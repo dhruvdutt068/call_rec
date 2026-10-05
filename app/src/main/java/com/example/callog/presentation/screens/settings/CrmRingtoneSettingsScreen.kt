@@ -76,6 +76,15 @@ fun CrmRingtoneSettingsScreen(
     var mediaPlayer by remember { mutableStateOf<MediaPlayer?>(null) }
 
     fun stopAudio() {
+        try {
+            val vibrator = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+                (context.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as? android.os.VibratorManager)?.defaultVibrator
+            } else {
+                @Suppress("DEPRECATION")
+                context.getSystemService(Context.VIBRATOR_SERVICE) as? android.os.Vibrator
+            }
+            vibrator?.cancel()
+        } catch (_: Exception) {}
         mediaPlayer?.let {
             if (it.isPlaying) it.stop()
             it.release()
@@ -110,6 +119,28 @@ fun CrmRingtoneSettingsScreen(
             }
             mediaPlayer = player
             playingTarget = target
+
+            // Trigger authentic lead status vibration profile for test audition
+            try {
+                val vibrator = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+                    (context.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as? android.os.VibratorManager)?.defaultVibrator
+                } else {
+                    @Suppress("DEPRECATION")
+                    context.getSystemService(Context.VIBRATOR_SERVICE) as? android.os.Vibrator
+                }
+                val pattern = when (target) {
+                    RingtoneTarget.HOT -> longArrayOf(0, 250, 150, 250, 1000)
+                    RingtoneTarget.WARM -> longArrayOf(0, 1000, 1000)
+                    RingtoneTarget.COLD -> longArrayOf(0, 150, 2500)
+                    else -> longArrayOf(0, 800, 800)
+                }
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                    vibrator?.vibrate(android.os.VibrationEffect.createWaveform(pattern, 0))
+                } else {
+                    @Suppress("DEPRECATION")
+                    vibrator?.vibrate(pattern, 0)
+                }
+            } catch (_: Exception) {}
         } catch (e: Exception) {
             stopAudio()
         }

@@ -483,7 +483,8 @@ fun RecordingStatusCard(
                         session.durationSeconds > 0
 
                 val (badgeText, badgeColor) = if (session.recordingState is com.example.callog.domain.call.CallRecordingState.Saved) {
-                    "Attached" to Green500
+                    val src = session.recordingState.audioSourceName?.substringBefore(" (") ?: "Attached"
+                    "2-Way Audio ($src)" to Green500
                 } else if (session.durationSeconds > 0) {
                     "Discovery Active" to Teal400
                 } else {

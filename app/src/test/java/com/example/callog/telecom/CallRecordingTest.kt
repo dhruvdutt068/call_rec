@@ -366,4 +366,50 @@ class CallRecordingTest {
         assertNotNull(meta.timestamp)
         assertEquals("CallogRecordingParser", meta.parserName)
     }
+
+    @Test
+    fun testTwoWayVoiceCallAudioSourceMetadataCapturedInSession() {
+        val session = RecordingSession(
+            recordingId = "rec_test_2way_01",
+            callId = "call_999",
+            phoneNumber = "+1234567890",
+            contactName = "Alice Doe",
+            filePath = "/fake/storage/Callog_Alice_Doe.m4a",
+            startedAt = 1727218530000L,
+            audioSource = android.media.MediaRecorder.AudioSource.VOICE_CALL,
+            audioSourceName = "VOICE_CALL (Direct 2-Way)"
+        )
+
+        assertEquals(android.media.MediaRecorder.AudioSource.VOICE_CALL, session.audioSource)
+        assertEquals("VOICE_CALL (Direct 2-Way)", session.audioSourceName)
+
+        val savedState = CallRecordingState.Saved(
+            recordingId = session.recordingId,
+            filePath = session.filePath,
+            durationMillis = 35000L,
+            audioSource = session.audioSource,
+            audioSourceName = session.audioSourceName
+        )
+
+        assertEquals(android.media.MediaRecorder.AudioSource.VOICE_CALL, savedState.audioSource)
+        assertEquals("VOICE_CALL (Direct 2-Way)", savedState.audioSourceName)
+        assertEquals(35000L, savedState.durationMillis)
+    }
+
+    @Test
+    fun testTwoWayAudioFallbackSourcesPreserved() {
+        // Verify fallback audio source VOICE_COMMUNICATION (VoIP / Echo Cancelled Full Duplex)
+        val voipSession = RecordingSession(
+            recordingId = "rec_test_voip_02",
+            callId = "call_1000",
+            phoneNumber = "+1987654321",
+            filePath = "/fake/storage/Callog_VoIP.m4a",
+            startedAt = 1727218530000L,
+            audioSource = android.media.MediaRecorder.AudioSource.VOICE_COMMUNICATION,
+            audioSourceName = "VOICE_COMMUNICATION (VoIP / Echo-Cancelled Full Duplex)"
+        )
+
+        assertEquals(android.media.MediaRecorder.AudioSource.VOICE_COMMUNICATION, voipSession.audioSource)
+        assertTrue(voipSession.audioSourceName?.contains("VOICE_COMMUNICATION") == true)
+    }
 }

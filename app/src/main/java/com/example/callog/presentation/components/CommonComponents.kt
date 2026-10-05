@@ -304,6 +304,8 @@ fun CallCard(
     onClick: () -> Unit,
     onFavoriteToggle: () -> Unit,
     onCallClick: (() -> Unit)? = null,
+    isPlaying: Boolean = false,
+    onPlayPauseClick: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val timeString = call.timestamp.toRelativeTimeSpan()
@@ -346,8 +348,8 @@ fun CallCard(
                         Spacer(modifier = Modifier.width(6.dp))
                         Icon(
                             imageVector = Icons.Default.Mic,
-                            contentDescription = "Has Recording",
-                            tint = AllSetTeal,
+                            contentDescription = if (isPlaying) "Playing Recording" else "Has Recording",
+                            tint = if (isPlaying) CallogSemanticColors.SyncInProgress else AllSetTeal,
                             modifier = Modifier.size(15.dp)
                         )
                     }
@@ -413,6 +415,20 @@ fun CallCard(
                     .size(18.dp)
                     .padding(end = 4.dp)
             )
+
+            if (call.recordingPath != null && onPlayPauseClick != null) {
+                IconButton(
+                    onClick = onPlayPauseClick,
+                    modifier = Modifier.size(36.dp)
+                ) {
+                    Icon(
+                        imageVector = if (isPlaying) Icons.Default.PauseCircle else Icons.Default.PlayCircle,
+                        contentDescription = if (isPlaying) "Pause Recording" else "Play Recording",
+                        tint = if (isPlaying) CallogSemanticColors.SyncInProgress else AllSetTeal,
+                        modifier = Modifier.size(24.dp)
+                    )
+                }
+            }
 
             if (onCallClick != null) {
                 IconButton(

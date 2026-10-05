@@ -101,6 +101,22 @@ fun CallLogsContent(
         "SHORTEST" to "Shortest Duration"
     )
 
+    var activePlayingPath by remember { mutableStateOf<String?>(null) }
+    val localContext = androidx.compose.ui.platform.LocalContext.current
+    var mediaPlayer by remember { mutableStateOf<android.media.MediaPlayer?>(null) }
+
+    DisposableEffect(Unit) {
+        onDispose {
+            try {
+                mediaPlayer?.stop()
+                mediaPlayer?.release()
+                mediaPlayer = null
+            } catch (e: Exception) {
+                // Ignore cleanup errors
+            }
+        }
+    }
+
     ElasticPullRefreshLayout(
         isRefreshing = isSyncing,
         onRefresh = onSyncClick,
@@ -285,11 +301,46 @@ fun CallLogsContent(
                         items = callLogs,
                         key = { it.id }
                     ) { call ->
+                        val isPlaying = activePlayingPath != null && activePlayingPath == call.recordingPath
                         CallCard(
                             call = call,
                             onClick = { onCallClick(call.id) },
                             onFavoriteToggle = { onFavoriteToggle(call.id) },
-                            onCallClick = onDirectCallClick?.let { action -> { action(call.number) } }
+                            onCallClick = onDirectCallClick?.let { action -> { action(call.number) } },
+                            isPlaying = isPlaying,
+                            onPlayPauseClick = call.recordingPath?.let { path ->
+                                {
+                                    try {
+                                        if (isPlaying) {
+                                            mediaPlayer?.pause()
+                                            activePlayingPath = null
+                                        } else {
+                                            val file = java.io.File(path)
+                                            if (file.exists() && file.canRead()) {
+                                                mediaPlayer?.release()
+                                                val newPlayer = android.media.MediaPlayer().apply {
+                                                    val fis = java.io.FileInputStream(file)
+                                                    setDataSource(fis.fd)
+                                                    prepare()
+                                                    fis.close()
+                                                    setOnCompletionListener {
+                                                        activePlayingPath = null
+                                                    }
+                                                    start()
+                                                }
+                                                mediaPlayer = newPlayer
+                                                activePlayingPath = path
+                                            } else {
+                                                android.widget.Toast.makeText(localContext, "Recording file not found on device", android.widget.Toast.LENGTH_SHORT).show()
+                                            }
+                                        }
+                                    } catch (e: Exception) {
+                                        android.util.Log.e("CallLogsScreen", "Error playing recording $path", e)
+                                        android.widget.Toast.makeText(localContext, "Playback error: ${e.message}", android.widget.Toast.LENGTH_SHORT).show()
+                                        activePlayingPath = null
+                                    }
+                                }
+                            }
                         )
                     }
                 }

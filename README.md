@@ -257,7 +257,7 @@ callog/
 
 ## 8. 🧪 Unit Test Suites (`app/src/test/`)
 
-51 total unit tests passing with 0 failures:
+228 total unit tests passing with 0 failures:
 
 | Test Suite | Focus & Verified Behavior |
 |---|---|
@@ -273,6 +273,9 @@ callog/
 | `RingtonePersistenceAndLifecycleTest.kt` | **Ringtone Persistence & Lifecycle Tests**: Verifies atomic audio copying into app-private storage, corrupt 0-byte file handling without data loss, disk file deletion self-healing, and `RingtoneController` idempotency. |
 | `CallRingtoneManagerTest.kt` | **CRM Ringtone Priority Tests**: Verifies 5-tier resolution hierarchy (Person override &rarr; CRM priority &rarr; Lead status &rarr; Customer match &rarr; System default fallback) and audio focus teardown. |
 | `ContactRingtoneSyncTest.kt` | **Contact Ringtone Sync & OEM Tests**: Verifies foreign key lead status resolution, MediaStore export fallback, unknown caller lead resolution, and non-CRM unknown caller in-app suppression to prevent Samsung dual-ringing collisions. |
+| `StorageUploadTest.kt` | **Cloud Storage Upload & Path Formatting Tests**: Verifies error categorization, retryable backoff vs non-retryable handling, offline-first local file retention on 403, and `generateRemoteRecordingPath` formatting caller name, phone number, and callId with sanitization. |
+| `CallRecordingTest.kt` & `RecordingStorageManagerTest.kt` | **Recording Controller & Storage Tests**: Verifies in-app recorder minimum 800ms duration protection, `-1007` hardware stop crash prevention, and MediaStore indexing. |
+| `RecordingCorrelationMatcherTest.kt` | **Heuristic Matcher Tests**: Verifies weighted correlation scoring (phone normalization, timestamp falloff, duration tolerance, and ordering). |
 
 ---
 
@@ -417,6 +420,56 @@ Enforced by [`DefaultRingtonePolicy`](file:///D:/repo/app/src/main/java/com/exam
 > 📖 **Deep Technical Documentation**:
 > - [Custom Ringtone Technical Architecture Specification](file:///D:/repo/documents/CUSTOM_RINGTONE_ARCHITECTURE.md)
 > - [Custom Ringtone Developer & Integration Guide](file:///D:/repo/documents/CUSTOM_RINGTONE_GUIDE.md)
+
+---
+
+## 13. 🎙️ Enterprise Post-Call Audio Recording Pipeline
+
+Callog / AllSet CRM incorporates a multi-stage, fault-tolerant post-call audio pipeline engineered to capture and synchronize both **in-app native recordings** and **external OEM call recordings (Samsung One UI, Xiaomi HyperOS/MIUI, Google Pixel, OnePlus)** with zero data loss, high-confidence heuristic correlation, formatted cloud storage naming, and immediate in-app audio playback.
+
+### Pipeline Overview
+
+```text
+  Call Disconnect ──► Staggered 3-Pass Scans (+1.5s, +3.5s, +6.5s)
+                  ──► MediaStore ContentObserver (1200ms debounce)
+                  ──► Storage Scanning & Multi-OEM Regex Parsing
+                  ──► Multi-Factor Heuristic Matcher (Phone 0.40, Time 0.30, Duration 0.20, Order 0.10)
+                  ──► Room DB Persistence & CallEntity Linking
+                  ──► WorkManager Background Upload (Network Connected)
+                  ──► Formatted Cloud Storage: call_{id}_{name}_{number}.ext
+                  ──► Inline Play/Pause Audio Controls on Call Cards & Vault
+```
+
+### The 6 Core Stages
+1. **Multi-Channel Disconnect Triggers**:
+   - **Staggered 3-Pass Telecom Scans** ([`CallSessionManager.kt`](file:///D:/repo/app/src/main/java/com/example/callog/domain/service/CallSessionManager.kt#L1100)): Fires passes at $+1.5\text{s}$, $+3.5\text{s}$, and $+6.5\text{s}$ to capture asynchronous OEM audio flushes.
+   - **MediaStore ContentObserver** ([`RecordingMediaObserver.kt`](file:///D:/repo/app/src/main/java/com/example/callog/data/provider/RecordingMediaObserver.kt)): Real-time debounced listener for external recorder disk flushes.
+   - **Telephony IDLE Fallback** ([`CallReceiver.kt`](file:///D:/repo/app/src/main/java/com/example/callog/data/receiver/CallReceiver.kt)): BroadcastReceiver worker fallback.
+   - **In-App Recorder Finalizer** ([`AndroidCallRecordingController.kt`](file:///D:/repo/app/src/main/java/com/example/callog/data/telecom/AndroidCallRecordingController.kt)): Enforces $\ge 800\text{ms}$ duration before `MediaRecorder.stop()` to eliminate `-1007` hardware stop crashes.
+2. **Multi-OEM Storage Scanning & Parsing** ([`RecordingScanner.kt`](file:///D:/repo/app/src/main/java/com/example/callog/data/provider/RecordingScanner.kt) & [`RecordingParser.kt`](file:///D:/repo/app/src/main/java/com/example/callog/data/provider/RecordingParser.kt)):
+   - Scans `/Recordings/Callog/`, `/Recordings/Call/` (Samsung), `/MIUI/sound_recorder/call_rec/` (Xiaomi), `/Recordings/Call Recordings/` (OnePlus), and MediaStore.
+   - Regex parser chain extracts normalized phone, contact name, timestamp, and duration.
+3. **Multi-Factor Heuristic Correlation** ([`RecordingCorrelationMatcher.kt`](file:///D:/repo/app/src/main/java/com/example/callog/domain/service/RecordingCorrelationMatcher.kt)):
+   - Weighted scoring: Phone Match ($+0.40$), Disconnect Time Proximity ($+0.30$), Duration Tolerance ($+0.20$), and Temporal Order ($+0.10$).
+   - Score $\ge 0.70$ results in automatic linking (`MATCHED`). Ambiguous scores are routed to the review queue.
+4. **Local Database Linking**:
+   - Links Room `recordings` entry to `calls_research` (`CallEntity.recordingPath`), preserving the original local path for offline-first durability.
+5. **Formatted WorkManager Cloud Storage Upload** ([`UploadRecordingWorker.kt`](file:///D:/repo/app/src/main/java/com/example/callog/data/worker/UploadRecordingWorker.kt) & [`UploadServiceImpl.kt`](file:///D:/repo/app/src/main/java/com/example/callog/data/service/UploadServiceImpl.kt)):
+   - Formats remote object key with caller name and contact number:
+     ```
+     users/{normalizedDevicePhone}/recordings/{year}/{month}/{day}/call_{callId}_{cleanCallerName}_{cleanNumber}.{extension}
+     ```
+   - Sanitizes special characters and slashes to prevent Cloud Storage URL encoding breakage.
+   - Streams audio file to Firebase Cloud Storage, updates `recordingUrl` in Firestore/Room, and handles retries with exponential backoff.
+6. **In-App Playback & Friction-Free UX** ([`CommonComponents.kt`](file:///D:/repo/app/src/main/java/com/example/callog/presentation/components/CommonComponents.kt) & [`RecordingManagerScreen.kt`](file:///D:/repo/app/src/main/java/com/example/callog/presentation/screens/recordings/RecordingManagerScreen.kt)):
+   - **Inline Play/Pause on `CallCard`**: Users can tap Play/Pause directly on call cards in the Call Logs screen and Dashboard without opening sub-screens.
+   - **Inline Play/Pause in Recordings Vault**: `RecordingChildItem` supports one-tap audio preview.
+   - **Active Stream State**: Starting any recording automatically pauses previously active playback and updates the visual playing indicator.
+   - **Full Scrubbing in `CallDetailsScreen`**: Includes waveform scrubbing, playback speed toggles (1.0x, 1.5x, 2.0x), and export/sharing.
+
+> 📖 **Deep Technical Documentation**:
+> - [Post-Call Audio Recording Architecture Specification](file:///D:/repo/documents/POST_CALL_RECORDING_ARCHITECTURE.md)
+> - [Post-Call Audio Recording Developer Guide](file:///D:/repo/documents/POST_CALL_RECORDING_GUIDE.md)
 
 ---
 

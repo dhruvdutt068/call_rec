@@ -47,7 +47,39 @@ class UploadServiceImpl @Inject constructor(
     private val tracebackDao: TracebackDao
 ) : UploadService {
 
-    private val TAG = "UploadServiceImpl"
+    companion object {
+        private const val TAG = "UploadServiceImpl"
+
+        /**
+         * Formats the remote cloud storage path for a call recording:
+         * users/{normalizedDevicePhone}/recordings/{year}/{month}/{day}/call_{callId}_{cleanCallerName}_{cleanNumber}.{extension}
+         */
+        fun generateRemoteRecordingPath(
+            normalizedDevicePhone: String,
+            call: CallEntity,
+            extension: String
+        ): String {
+            val date = Date(call.timestamp)
+            val year = SimpleDateFormat("yyyy", Locale.US).format(date)
+            val month = SimpleDateFormat("MM", Locale.US).format(date)
+            val day = SimpleDateFormat("dd", Locale.US).format(date)
+
+            val rawCallerName = call.name?.trim()?.takeIf { it.isNotEmpty() } ?: "Unknown"
+            val cleanCallerName = rawCallerName
+                .replace(Regex("[^a-zA-Z0-9_-]"), "_")
+                .replace(Regex("_+"), "_")
+                .trim { it == '_' || it == '-' }
+                .ifEmpty { "Unknown" }
+
+            val rawNumber = FirestoreRepositoryImpl.normalizePhoneNumber(call.number)
+            val cleanNumber = rawNumber.replace(Regex("[^0-9+]"), "").ifEmpty { "UnknownNumber" }
+
+            val cleanExt = extension.ifEmpty { "mp3" }
+            val remoteFileName = "call_${call.id}_${cleanCallerName}_${cleanNumber}.$cleanExt"
+            return "users/$normalizedDevicePhone/recordings/$year/$month/$day/$remoteFileName"
+        }
+    }
+
     private val activeTasks = ConcurrentHashMap<Long, UploadTask>()
 
     private fun getStorage(): FirebaseStorage? {
@@ -168,13 +200,8 @@ class UploadServiceImpl @Inject constructor(
             Log.e(TAG, "Error checking remote metadata in uploadRecording", e)
         }
 
-        val date = Date(call.timestamp)
-        val year = SimpleDateFormat("yyyy", Locale.US).format(date)
-        val month = SimpleDateFormat("MM", Locale.US).format(date)
-        val day = SimpleDateFormat("dd", Locale.US).format(date)
-
         val extension = file.extension.ifEmpty { "mp3" }
-        val remotePath = "users/$normalizedDevicePhone/recordings/$year/$month/$day/call_${call.id}.$extension"
+        val remotePath = generateRemoteRecordingPath(normalizedDevicePhone, call, extension)
 
         // Inspect and ensure Firebase Authentication state before upload
         var hasAuth = false
@@ -292,16 +319,12 @@ class UploadServiceImpl @Inject constructor(
             }
 
             if (hasRec) {
-                val date = Date(call.timestamp)
-                val year = SimpleDateFormat("yyyy", Locale.US).format(date)
-                val month = SimpleDateFormat("MM", Locale.US).format(date)
-                val day = SimpleDateFormat("dd", Locale.US).format(date)
                 val devicePhone = firestoreService.getDevicePhoneNumber().ifEmpty { "unknown_device" }
                 val normalizedDevicePhone = FirestoreRepositoryImpl.normalizePhoneNumber(devicePhone)
                 
                 val localPath = call.recordingLocalPath ?: call.recordingPath ?: ""
                 val extension = if (localPath.isNotEmpty()) File(localPath).extension.ifEmpty { "mp3" } else "mp3"
-                val remotePath = "users/$normalizedDevicePhone/recordings/$year/$month/$day/call_${call.id}.$extension"
+                val remotePath = generateRemoteRecordingPath(normalizedDevicePhone, call, extension)
                 
                 metadata["recordingPath"] = remotePath
                 metadata["uploadedAt"] = nowIso

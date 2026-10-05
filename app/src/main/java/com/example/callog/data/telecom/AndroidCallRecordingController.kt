@@ -121,7 +121,8 @@ class AndroidCallRecordingController @Inject constructor(
                     try { tempFile.delete() } catch (_: Exception) {}
                 }
 
-                val recorder = startMediaRecorderWithFallback(tempFile)
+                val (recorder, activeSource) = startMediaRecorderWithFallback(tempFile)
+                val sourceName = getAudioSourceName(activeSource)
                 mediaRecorder = recorder
                 currentTempFile = tempFile
                 currentTargetFileName = targetFileName
@@ -136,12 +137,14 @@ class AndroidCallRecordingController @Inject constructor(
                     simSlot = simSlot,
                     filePath = tempFile.absolutePath,
                     startedAt = startedAt,
-                    mimeType = "audio/mp4"
+                    mimeType = "audio/mp4",
+                    audioSource = activeSource,
+                    audioSourceName = sourceName
                 )
                 currentSession = session
                 _recordingState.value = CallRecordingState.Recording(0L, session)
 
-                DeveloperLogger.info(TAG, "Recording started successfully: tempPath=${tempFile.absolutePath}, targetName=$targetFileName, session=$recordingId")
+                DeveloperLogger.info(TAG, "Recording started successfully with audio source $sourceName ($activeSource): tempPath=${tempFile.absolutePath}, targetName=$targetFileName, session=$recordingId")
                 startTicker(session)
 
                 Result.success(session)
@@ -232,7 +235,9 @@ class AndroidCallRecordingController @Inject constructor(
                     _recordingState.value = CallRecordingState.Saved(
                         recordingId = finalizedSession.recordingId,
                         filePath = finalizedSession.filePath,
-                        durationMillis = finalizedSession.durationMillis
+                        durationMillis = finalizedSession.durationMillis,
+                        audioSource = finalizedSession.audioSource,
+                        audioSourceName = finalizedSession.audioSourceName
                     )
 
                     DeveloperLogger.info(
@@ -311,26 +316,38 @@ class AndroidCallRecordingController @Inject constructor(
         }
     }
 
+    fun getAudioSourceName(source: Int): String = when (source) {
+        MediaRecorder.AudioSource.VOICE_CALL -> "VOICE_CALL (Direct 2-Way)"
+        MediaRecorder.AudioSource.VOICE_COMMUNICATION -> "VOICE_COMMUNICATION (VoIP / Echo-Cancelled Full Duplex)"
+        MediaRecorder.AudioSource.MIC -> "MIC (Acoustic Near-End / Speakerphone)"
+        MediaRecorder.AudioSource.VOICE_RECOGNITION -> "VOICE_RECOGNITION"
+        MediaRecorder.AudioSource.DEFAULT -> "DEFAULT"
+        else -> "Source #$source"
+    }
+
     /**
-     * Tries starting MediaRecorder with candidate audio sources in order of compatibility:
-     * 1. MIC (Most reliable during cellular phone calls across all Android OEMs)
-     * 2. VOICE_COMMUNICATION (AEC VoIP audio route)
-     * 3. VOICE_RECOGNITION
-     * 4. DEFAULT
+     * Tries starting MediaRecorder with candidate audio sources in order of 2-way recording fidelity and OEM compatibility:
+     * 1. VOICE_CALL (Direct 2-way telephony uplink + downlink stream)
+     * 2. VOICE_COMMUNICATION (VoIP full-duplex with AEC acoustic coupling)
+     * 3. MIC (Near-end microphone, speakerphone-coupled)
+     * 4. VOICE_RECOGNITION
+     * 5. DEFAULT
      */
-    private fun startMediaRecorderWithFallback(tempFile: File): MediaRecorder {
+    private fun startMediaRecorderWithFallback(tempFile: File): Pair<MediaRecorder, Int> {
         val candidateSources = listOf(
-            MediaRecorder.AudioSource.MIC,
+            MediaRecorder.AudioSource.VOICE_CALL,
             MediaRecorder.AudioSource.VOICE_COMMUNICATION,
+            MediaRecorder.AudioSource.MIC,
             MediaRecorder.AudioSource.VOICE_RECOGNITION,
             MediaRecorder.AudioSource.DEFAULT
         )
 
         var lastException: Exception? = null
         for (source in candidateSources) {
+            val sourceName = getAudioSourceName(source)
             var recorder: MediaRecorder? = null
             try {
-                DeveloperLogger.info(TAG, "Attempting to initialize MediaRecorder with audio source: $source")
+                DeveloperLogger.info(TAG, "Attempting to initialize MediaRecorder with audio source: $sourceName ($source)")
                 recorder = createMediaRecorder()
                 recorder.setAudioSource(source)
                 recorder.setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
@@ -342,10 +359,10 @@ class AndroidCallRecordingController @Inject constructor(
 
                 recorder.prepare()
                 recorder.start()
-                DeveloperLogger.info(TAG, "MediaRecorder successfully started with audio source: $source")
-                return recorder
+                DeveloperLogger.info(TAG, "MediaRecorder successfully started with audio source: $sourceName ($source)")
+                return Pair(recorder, source)
             } catch (e: Exception) {
-                DeveloperLogger.warning(TAG, "AudioSource $source failed to start: ${e.message}")
+                DeveloperLogger.warning(TAG, "AudioSource $sourceName ($source) failed to start: ${e.message}")
                 lastException = e
                 try {
                     recorder?.reset()
